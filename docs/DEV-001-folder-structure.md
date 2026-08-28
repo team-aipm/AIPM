@@ -1,0 +1,319 @@
+# DEV-001 · 폴더 구조 및 PM 소유 경로
+
+> **Version:** 1.0 · **Updated:** 2026-08-28 · **Owner:** 운영 및 백오피스 PM\
+> **Status:** 확정\
+> **Changelog:** 문서 최하단 참조
+
+> **문서 역할:** `COM-005 §7 프로젝트 기본 폴더 구조`의 **상세화 문서**\
+> **우선순위:** 본 문서와 COM-005가 충돌하면 **COM-005가 우선**한다.
+> 본 문서는 COM-005 §7이 정한 상위 폴더(`docs` / `src` / `supabase` / `public`)를
+> 변경하지 않으며, 그 하위 구조만 정의한다.\
+> **선행 문서:** `COM-002-data-model.md`, `COM-003-screen-ui.md`, `COM-005-development-environment.md`\
+> **범위 밖:** ADM(운영/백오피스) 영역은 본 문서에서 다루지 않는다.
+> (사유: COM-007 미작성 / 오너: 운영 및 백오피스 PM)
+
+---
+
+## 1. 전체 구조
+
+```text
+/
+├─ CLAUDE.md                      # Claude Code 진입점
+├─ README.md
+├─ .env.example                   # 변수명만. 실제 값 금지 (COM-005 §8)
+├─ .gitignore                     # .env.local 반드시 포함
+├─ next.config.ts
+├─ tailwind.config.ts
+├─ tsconfig.json                  # paths: "@/*" → "src/*"
+├─ package.json                   # npm 전용. yarn/pnpm lock 금지
+│
+├─ docs/                          # Source of Truth. docs/README.md 참조
+│  └─ prompts/                    # AI Prompt 원문 (AI 코어 PM)
+│
+├─ public/
+│  └─ personas/                   # friend / villain 캐릭터 에셋
+│
+├─ scripts/
+│  └─ ops/                        # 운영 스크립트 (운영 PM)
+│
+├─ supabase/
+│  ├─ migrations/                 # DB 변경 이력. 추가만, 기존 파일 수정 금지
+│  ├─ policies/                   # RLS 정책
+│  └─ seed.sql
+│
+└─ src/
+   ├─ middleware.ts               # 세션 검증 + 부모 영역 PIN 게이트
+   ├─ app/                        # §2
+   ├─ components/                 # §3
+   ├─ lib/                        # §4
+   ├─ types/                      # §5
+   └─ styles/
+```
+
+### 폴더는 필요할 때 만든다
+
+빈 폴더를 미리 만들지 않는다. git은 빈 디렉터리를 추적하지 못하므로 `.gitkeep`
+남발로 이어진다. **본 문서가 규약이고, 실제 폴더는 코드를 넣을 때 생성한다.**
+
+---
+
+## 2. `src/app` — Route Group을 사용자 축으로 자름
+
+학생 영역과 부모 영역은 용어 정책(COM-003 §7), Navigation(§11), 접근 통제가
+모두 다르다. 그래서 Area별이 아니라 **사용자별 3개 Route Group**으로 나누고
+Area는 그 안의 폴더로 둔다.
+
+```text
+src/app/
+├─ layout.tsx
+├─ globals.css
+│
+├─ (auth)/                        # AUTH · 부모 · 미인증
+│  ├─ login/
+│  ├─ signup/
+│  │  ├─ terms/
+│  │  └─ verify/
+│  └─ password/
+│
+├─ (student)/                     # STU + MIS · 하단 Nav 없음 · 학생 어휘
+│  ├─ layout.tsx
+│  ├─ onboarding/
+│  │  ├─ student/
+│  │  └─ persona/
+│  ├─ students/
+│  ├─ home/
+│  │  └─ today/
+│  └─ mission/
+│     ├─ _components/
+│     ├─ _actions.ts
+│     └─ create/
+│        └─ photo/
+│
+├─ (parent)/                      # PAR + RPT + BIL + MY · 하단 Nav 4탭
+│  ├─ layout.tsx
+│  ├─ pin/
+│  │  └─ settings/
+│  ├─ reports/
+│  │  ├─ [reportId]/
+│  │  └─ history/
+│  ├─ billing/
+│  │  ├─ subscribe/  checkout/  manage/  methods/  history/
+│  └─ my/
+│     ├─ students/
+│     │  ├─ new/
+│     │  └─ [studentId]/
+│     ├─ profile/  marketing/  notifications/
+│     └─ account/
+│        └─ withdraw/
+│           └─ confirm/
+│
+└─ api/                           # Server Action으로 안 되는 것만
+   ├─ ai/chat/                    # 스트리밍 필요
+   ├─ ai/verify/                  # Answer Verification
+   ├─ ai/ocr/                     # 사진 문제 인식
+   ├─ webhooks/payment/           # PG 콜백 (외부 진입)
+   └─ cron/weekly-report/         # 주간 리포트 배치
+```
+
+각 폴더에 대응하는 Screen ID는 `DEV-002-routes.md`를 따른다.
+
+### 규칙
+
+1. **Route 수는 35개.** COM-003 §12의 Screen Inventory와 1:1로 맞춘다.
+2. **State / Modal은 절대 Route로 만들지 않는다.** (COM-003 §13-3)
+   예: `MIS-001`의 `AI 생각 중`, `힌트`, `중간 종료 확인`은 전부
+   `mission/page.tsx` 내부 상태다.
+3. **화면 전용 코드는 그 화면 옆에 둔다.** `_components/`, `_actions.ts` 등
+   언더스코어 폴더는 Route로 잡히지 않는다. 이 규칙이 PM 간 merge conflict를
+   가장 크게 줄인다.
+4. **`_actions.ts`에 비즈니스 로직을 쓰지 않는다.** `lib/services`를 호출만
+   하는 얇은 래퍼로 유지한다.
+5. **`api/`는 최소로 둔다.** 스트리밍, 외부 콜백, 배치처럼 Server Action으로
+   불가능한 경우만 Route Handler를 만든다.
+
+---
+
+## 3. `src/components` — 공유되는 것만
+
+```text
+src/components/
+├─ ui/          # COM-003 §6 · PrimaryButton, SecondaryButton, ConfirmModal,
+│               #   Toast, Loading, EmptyState
+├─ system/      # COM-003 §6 · AILoading, NetworkError, APIError,
+│               #   RetryAction, OfflineState
+├─ student/     # 2개 이상의 학생 화면이 쓰는 것만
+└─ parent/      # ParentBottomNav, StudentCard, SubscriptionBadge, ReportSection
+```
+
+**한 화면에서만 쓰는 컴포넌트는 `components/`가 아니라 그 route의
+`_components/`에 둔다.** 이 규칙이 없으면 `components/`가 5명의 공용 충돌
+지점이 된다.
+
+`ui/`와 `system/`을 합치면 COM-003 §6의 공통 Component 11개가 된다.
+
+---
+
+## 4. `src/lib` — COM-002 엔티티와 서비스 파일을 1:1로
+
+```text
+src/lib/
+├─ supabase/
+│  ├─ client.ts          # 브라우저. anon key
+│  ├─ server.ts          # RSC / Server Action
+│  └─ admin.ts           # service_role. 서버 전용
+│
+├─ gemini/
+│  ├─ client.ts
+│  └─ models.ts          # 모델 라우팅 (COM-005 §13 · 미확정)
+│
+├─ ai/
+│  ├─ prompts/           # docs/prompts와 1:1. 실행 템플릿
+│  ├─ answer-verification.ts   # Answer Lock 생성 / 검증 실패 처리
+│  ├─ drilldown.ts             # 판단·근거·규칙·전이·성찰, 최대 5회
+│  ├─ evaluation.ts
+│  ├─ persona.ts               # 말투만. 정답/평가/난이도 미개입
+│  ├─ problem-select.ts        # 취약 4 : 현재 4 : 복습 2
+│  └─ student-memory.ts
+│
+├─ services/             # 파일명 = COM-002 엔티티명
+│  ├─ account.ts              ├─ student.ts
+│  ├─ learning-session.ts     ├─ problem.ts
+│  ├─ message.ts              ├─ evaluation.ts
+│  ├─ logic-gap.ts            ├─ student-memory.ts
+│  ├─ subscription.ts         ├─ payment.ts
+│  ├─ learning-report.ts      └─ event.ts
+│
+├─ auth/
+│  ├─ session.ts
+│  └─ parent-pin.ts      # PAR-001 게이트
+│
+├─ analytics/
+│  └─ events.ts          # COM-002 §14의 이벤트명 16개 상수화
+│
+├─ errors/
+│  ├─ codes.ts
+│  ├─ retry.ts           # AI/API 자동 재시도 (COM-001 §17)
+│  └─ recovery.ts        # 턴 단위 자동저장 복구 (COM-001 §12)
+│
+├─ constants/
+│  ├─ screens.ts         # Screen ID 상수
+│  ├─ enums.ts           # problem_status, subscription_status 등
+│  └─ copy.ts            # 학생 어휘 / 부모 어휘 매핑
+│
+└─ utils/                # date, format, cn
+```
+
+### `lib/constants/copy.ts`를 따로 두는 이유
+
+COM-003 §7의 어휘 변환(`학습 → 미션`, `needs_review → 한 번 더 도전`)이 화면마다
+하드코딩되면 반드시 어긋난다. **DB 상태값 → 학생 문구 / 부모 문구** 매핑을 한
+곳에 고정한다.
+
+### `lib/services`의 책임
+
+- DB 접근과 도메인 규칙은 여기서만 한다.
+- 다른 PM의 데이터를 바꿔야 하면 그 PM의 서비스 파일을 **호출**한다.
+  직접 테이블을 UPDATE하지 않는다. (COM-002 §17)
+
+---
+
+## 5. `src/types`
+
+```text
+src/types/
+├─ database.ts    # Supabase 자동 생성. 손으로 수정 금지
+├─ domain/        # account.ts, student.ts, problem.ts … (엔티티별)
+├─ ai.ts          # AI 출력 JSON 스키마. 키는 COM-002 필드명과 일치 (§17)
+└─ ui.ts          # ScreenId, AreaId, State 타입
+```
+
+---
+
+## 6. PM별 소유 경로
+
+`COM-005 §6`의 브랜치와 대응한다. **자기 소유 경로 밖을 수정하는 PR은 해당
+오너의 리뷰를 받는다.**
+
+| PM / Branch | 소유 경로 |
+|---|---|
+| 회원·유입 `pm-account` | `app/(auth)/**`<br>`app/(student)/onboarding/**`, `app/(student)/students/**`<br>`app/(parent)/my/**` (marketing 제외)<br>`lib/services/{account,student}.ts`<br>`lib/auth/**` |
+| AI 코어 `pm-ai` | `app/(student)/home/**`, `app/(student)/mission/**`<br>`app/api/ai/**`<br>`lib/ai/**`, `lib/gemini/**`<br>`lib/services/{learning-session,problem,message,evaluation,logic-gap,student-memory}.ts`<br>`components/student/**`<br>`docs/prompts/**` |
+| 과금 `pm-billing` | `app/(parent)/billing/**`<br>`app/api/webhooks/payment/**`<br>`lib/services/{subscription,payment}.ts` |
+| 운영·백오피스 `pm-admin` | `components/system/**`<br>`lib/errors/**`<br>`src/middleware.ts`<br>`scripts/ops/**`<br>`docs/DEV-*.md` |
+| 그로스 `pm-growth` | `app/(parent)/reports/**`, `app/(parent)/my/marketing/**`<br>`app/api/cron/**`<br>`lib/analytics/**`<br>`lib/services/{learning-report,event}.ts` |
+
+### 공통 영역 — 변경 시 합의 필요
+
+```text
+docs/COM-*.md
+src/types/database.ts
+src/lib/constants/**
+src/components/ui/**
+supabase/migrations/**
+.env.example  ·  package.json  ·  tsconfig.json  ·  next.config.ts
+```
+
+이 목록이 COM-002 §17("다른 PM의 테이블/필드명 임의 변경 금지")과 COM-005
+§10("문서 → DB → 코드")을 폴더 차원에서 강제하는 장치다.
+
+### 미배정
+
+- `app/(parent)/pin/**` (PAR-001, PAR-003) — 회원·유입 PM과 운영 PM 중
+  결정 필요
+- ADM 영역 — COM-007 확정 후 결정 (오너는 운영 및 백오피스 PM)
+
+---
+
+## 7. 명명 규칙
+
+| 대상 | 규칙 | 예 |
+|---|---|---|
+| 폴더 · route | kebab-case | `mission/create/photo` |
+| Component 파일 | PascalCase | `PersonaAvatar.tsx` |
+| lib · util 파일 | kebab-case | `student-memory.ts` |
+| Server Action 파일 | `_actions.ts` | `mission/_actions.ts` |
+| DB 컬럼 · 변수 | snake_case (COM-002 §2) | `student_id`, `trial_ends_at` |
+| TypeScript 타입 | PascalCase | `StudentMemory` |
+| 상수 | UPPER_SNAKE (값은 소문자) | `PROBLEM_COMPLETED = 'problem_completed'` |
+| Migration | `NNNN_동사_대상.sql` | `0003_create_learning_session.sql` |
+
+### Migration 규칙
+
+- 번호는 4자리 연번. 한번 merge된 파일은 **수정하지 않고 새 파일을 추가**한다.
+- 스키마 변경 전 COM-002를 먼저 고친다. (COM-005 §10)
+
+---
+
+## 8. Import 규칙
+
+```text
+app/       →  components, lib, types   (가능)
+components →  lib, types               (가능)
+lib/services → lib/supabase, lib/gemini, types  (가능)
+lib        →  components               (금지)
+lib        →  app                      (금지)
+```
+
+- `lib/supabase/admin.ts`(service_role)는 **서버 전용**이다. `'use client'`
+  파일에서 import 금지.
+- 절대경로 `@/`를 사용한다. 상대경로 `../../`는 같은 폴더 밖으로 나가지 않는다.
+
+---
+
+## 9. 금지사항
+
+- COM-005 §7의 상위 폴더 4개를 임의 변경하지 않는다.
+- 빈 폴더를 미리 만들지 않는다.
+- 다른 PM의 소유 경로를 리뷰 없이 수정하지 않는다.
+- `_actions.ts`에 DB 쿼리를 직접 쓰지 않는다.
+- 화면 하나에서만 쓰는 컴포넌트를 `src/components/`에 올리지 않는다.
+- State/Modal을 별도 Route로 만들지 않는다.
+- `src/app/(admin)/`을 COM-007 확정 전에 생성하지 않는다.
+
+---
+
+## Changelog
+
+| Version | Date | 변경 내용 | 작성 |
+|---|---|---|---|
+| 1.0 | 2026-08-28 | 최초 작성. COM-005 §7 하위 구조 상세화 | — |
