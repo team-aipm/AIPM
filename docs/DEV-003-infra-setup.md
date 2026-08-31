@@ -1,6 +1,6 @@
 # DEV-003 · 인프라 설정 및 연동 (GitHub · Vercel · Supabase)
 
-> **Version:** 1.0 · **Updated:** 2026-08-31 · **Owner:** 운영 및 백오피스 PM\
+> **Version:** 1.1 · **Updated:** 2026-08-31 · **Owner:** 운영 및 백오피스 PM\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -19,14 +19,26 @@
 |---|---|---|
 | GitHub Organization `team-aipm` | 팀 | 운영 PM + **인프라 담당 PM** |
 | GitHub Repository `team-aipm/AIPM` | 조직 (private) | 조직 Owner |
-| Vercel Project | **인프라 담당 PM 개인 계정** | 인프라 담당 PM |
+| Vercel Project `aipm` | **운영 PM의 Vercel Pro 팀** | 운영 PM |
 | Supabase Project | **인프라 담당 PM 개인 계정** | 인프라 담당 PM + 운영 PM |
 
 ### 원칙 — 모든 자산에 Owner를 2명 이상 둔다
 
-인프라가 개인 계정에 있으므로, 그 사람이 이탈하면 서비스가 멈춘다.
+Supabase가 개인 계정에 있으므로, 그 사람이 이탈하면 DB에 접근할 수 없다.
 **Supabase Organization과 GitHub Organization에는 반드시 Owner를 2명 이상**
-등록한다. Vercel은 플랜에 따라 좌석 비용이 발생하므로 팀 결정에 따른다.
+등록한다.
+
+### Vercel이 운영 PM 계정에 있는 이유
+
+Vercel **Hobby(무료) 플랜은 GitHub Organization이 소유한 private 저장소를
+배포할 수 없다.** Pro가 필요하다. 저장소를 public으로 바꾸면 무료로 가능하지만
+`docs/`의 기획 산출물 전체가 공개되므로 택하지 않았다.
+
+운영 PM의 Vercel 팀이 이미 Pro이므로 **추가 지출 없이** private을 유지한다.
+대신 배포 운영은 운영 PM이 맡고, 인프라 담당 PM은 Supabase를 맡는다.
+
+> Vercel Pro는 멤버당 과금이다. 팀원을 Vercel 팀에 초대하면 좌석 비용이
+> 늘어난다. 팀원은 Vercel 계정 없이 GitHub PR과 Preview URL로 확인한다.
 
 ---
 
@@ -45,6 +57,15 @@ Team                  pm  (Write 권한)
 조직 멤버는 **`pm` 팀에 속해야만** private 저장소에 접근할 수 있다.
 초대만 하고 팀에 넣지 않으면 "저장소가 보이지 않는다"가 된다.
 
+### 담당 분담
+
+| 영역 | 담당 |
+|---|---|
+| GitHub 조직 · 저장소 · 문서 | 운영 PM |
+| **Vercel 배포 · 환경변수** | **운영 PM** |
+| **Supabase 프로젝트 · 스키마 · Storage** | **인프라 담당 PM** |
+| Migration 반영 · `types/database.ts` 생성 | 운영 PM (DEV-001 §6) |
+
 ---
 
 ## 3. 핵심 제약 — GitHub App 설치 권한
@@ -60,6 +81,9 @@ GitHub App은 **저장소를 소유한 계정(=조직)에만 설치**할 수 있
 
 > **그래서 인프라 담당 PM은 조직 Owner여야 한다.** 이것이 개인 저장소를
 > Organization으로 옮긴 이유다.
+
+**Vercel App은 이미 `team-aipm` 조직에 설치되어 있다.** Supabase의 GitHub
+Integration을 나중에 켤 때 같은 절차가 다시 필요하다. (§11)
 
 ---
 
@@ -115,28 +139,38 @@ Dashboard의 Security Advisor로 주기적으로 점검한다.
 
 ---
 
-## 5. Vercel 설정 절차
+## 5. Vercel
 
-### 5-1. 프로젝트 Import
+### 5-1. 현재 상태 — 이미 구성 완료
 
-1. Vercel → Add New… → Project → Import Git Repository
-2. GitHub 연결 (인프라 담당 PM 본인 계정)
-3. 목록에 `team-aipm/AIPM`이 **안 보이는 것이 정상이다.** 아직 App이
-   설치되지 않았다. 하단 **"Adjust GitHub App Permissions"**를 눌러
-   `team-aipm` 조직에 Vercel App을 설치하고 `AIPM`을 선택한다
-4. Framework는 Next.js 자동 감지. Root Directory는 기본값
+운영 PM의 Vercel Pro 팀에 프로젝트가 생성되어 있고, `main` 브랜치가
+프로덕션으로 배포된다. **인프라 담당 PM이 따로 할 일은 없다.**
 
-### 5-2. Production Branch 변경 — 가장 먼저 확인할 것
-
-저장소 **기본 브랜치는 `develop`**이다. Vercel은 기본 브랜치를 Production
-Branch로 잡으므로, 그대로 두면 **`develop` push가 곧바로 프로덕션 배포**가
-된다.
+| 항목 | 값 |
+|---|---|
+| Team | `neoseya-navercom's projects` (Pro) |
+| Project | `aipm` |
+| 연결 저장소 | `team-aipm/AIPM` (private) |
+| Production Branch | **`main`** |
+| Framework | Next.js (자동 감지) |
 
 ```text
-Project Settings → Git → Production Branch → main 으로 변경
+Production   https://aipm-six.vercel.app
+Dashboard    https://vercel.com/neoseya-navercoms-projects/aipm
 ```
 
-### 5-3. 환경변수 등록
+### 5-2. 배포 트리거
+
+| 대상 | 결과 |
+|---|---|
+| `main`에 push / merge | **Production 배포** |
+| `develop` 및 작업 브랜치 push | Preview 배포 |
+| `develop`로 향하는 PR | PR별 Preview URL 생성 |
+
+저장소 기본 브랜치는 `develop`이지만 Production Branch는 `main`이다.
+`develop`에 merge해도 서비스는 나가지 않는다. (COM-005 §6)
+
+### 5-3. 환경변수 등록 — 운영 PM 수행
 
 Settings → Environment Variables. **세 스코프를 분리해서 입력한다.**
 
@@ -148,15 +182,21 @@ prod 분리 시점에 **Production 스코프만** 교체하면 되도록 처음�
 > 환경변수를 바꾸면 **재배포해야 반영된다.** 값만 바꾸고 왜 안 되냐는
 > 상황이 반드시 한 번은 나온다.
 
-### 5-4. Preview 배포
+### 5-4. 팀원의 Preview 확인
 
-`develop`으로 향하는 PR마다 Preview URL이 생성된다. 기획 확인과 리뷰의
-주된 수단이다. (COM-005 §11)
+Vercel Pro는 **멤버당 과금**이므로 팀원을 Vercel 팀에 초대하지 않는다.
+팀원은 GitHub PR에 붙는 Preview URL로 확인한다.
 
-Vercel 계정이 없는 팀원에게 Preview를 보여주려면
-Settings → Deployment Protection 조정이 필요하다.
+Vercel 계정이 없는 팀원에게 Preview가 보이지 않으면
+Settings → Deployment Protection을 조정한다.
 
-### 5-5. Vercel ↔ Supabase 연동은 수동으로
+### 5-5. 실행 리전
+
+현재 기본값은 `iad1`(미국 워싱턴)이다. 사용자가 국내이므로
+Settings → Functions에서 **`icn1`(서울)**로 변경하는 것을 검토한다.
+정적 페이지에는 영향이 없고 Server Action·API Route의 응답 속도에 영향을 준다.
+
+### 5-6. Vercel ↔ Supabase 연동은 수동으로
 
 Vercel Marketplace의 Supabase Integration은 `POSTGRES_*` 등
 **약속하지 않은 환경변수를 여러 개 자동 생성**한다. COM-005 §8
@@ -281,8 +321,9 @@ git remote set-url origin https://github.com/team-aipm/AIPM.git
 
 | 리스크 | 대비 |
 |---|---|
-| 인프라 담당 PM 이탈 | Supabase Organization에 운영 PM을 **Owner**로 등록. DB 비밀번호·service_role 키를 2명 이상 보관 |
+| 인프라 담당 PM 이탈 | Supabase Organization에 운영 PM을 **Owner**로 등록. DB 비밀번호·service_role 키를 2명 이상 보관. Vercel은 운영 PM 계정이라 영향 없음 |
 | GitHub App 접근 해제 시 배포 중단 | 조직 Owner 2명 체제 유지 |
+| 운영 PM의 Vercel Pro 해지 | Hobby로 내려가면 조직 private 저장소를 배포할 수 없다. 해지 전 대안(저장소 공개 / 담당자 Pro)을 먼저 정한다 |
 | `main` 직접 push | `vercel.json`으로 자동 배포 차단 (§8) |
 | 개발 데이터와 학생 실데이터 혼재 | 실사용자 유입 **전에** prod 프로젝트 분리 (§11) |
 | Preview URL 외부 유출 | Deployment Protection 유지 |
@@ -306,3 +347,4 @@ git remote set-url origin https://github.com/team-aipm/AIPM.git
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
 | 1.0 | 2026-08-31 | 최초 작성. GitHub Organization 전환 및 Vercel·Supabase가 별도 계정에 위치하는 구성 반영 | — |
+| 1.1 | 2026-08-31 | **Vercel을 운영 PM의 기존 Pro 팀으로 확정.** Hobby는 조직 private 저장소를 배포할 수 없어 저장소 공개 대신 Pro 활용을 택함. 프로젝트 생성 완료 상태 및 담당 분담 반영 | — |
