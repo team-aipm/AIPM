@@ -15,9 +15,12 @@ PM 5명이 하나의 저장소에서 각자 담당 폴더를 맡아 개발한다
 git clone https://github.com/team-aipm/AIPM.git
 cd AIPM
 npm install
-cp .env.example .env.local     # 값은 운영 PM에게 개별로 받는다
+npm run setup     # 환경 점검 · .env.local 생성 · 다음 할 일 안내
 npm run dev
 ```
+
+`npm run setup`이 Node 버전, 저장소 주소, 환경변수를 점검하고 빠진 것을
+알려준다. 값은 운영 PM에게 개별로 받는다.
 
 **2. 문서 읽기** — 순서대로 3개면 시작할 수 있다
 
@@ -126,6 +129,7 @@ merge되면 전원 `git pull`, `package.json`이 바뀌었으면 `npm install`�
 ## 명령어
 
 ```bash
+npm run setup      # 세팅 점검. 언제든 다시 실행할 수 있다
 npm run dev        # 개발 서버
 npm run build      # 프로덕션 빌드 — PR 전 필수
 npm run lint       # ESLint — PR 전 필수

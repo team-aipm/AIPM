@@ -31,7 +31,12 @@
 git clone https://github.com/team-aipm/AIPM.git
 cd AIPM
 npm install
+npm run setup
 ```
+
+`npm run setup`은 점검과 안내만 한다. 파일을 고치는 것은 `.env.local`
+생성 하나뿐이며 이미 있으면 건드리지 않는다. 무엇이 빠졌는지와 어떻게
+해결하는지를 출력하므로, 막히면 그 출력을 그대로 팀에 공유하면 된다.
 
 ### 환경변수
 
@@ -59,6 +64,9 @@ cp .env.example .env.local
 ```bash
 npm run dev     # http://localhost:3000
 ```
+
+세팅이 끝난 뒤에도 `npm run setup`은 언제든 다시 실행할 수 있다.
+공통 코드를 pull한 뒤 무엇이 어긋났는지 확인할 때 쓴다.
 
 ---
 
