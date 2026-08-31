@@ -111,7 +111,20 @@ src/lib/constants/copy  학생 어휘 ↔ 부모 어휘 매핑
 - Component 파일: PascalCase
 - lib 파일: kebab-case
 - DB 컬럼·변수: snake_case (COM-002 §2)
-- Migration: `NNNN_동사_대상.sql`, 기존 파일 수정 금지 · 추가만
+- Migration: `YYYYMMDDHHMMSS_동사_대상.sql` (timestamp 접두어). 연번 금지.
+  기존 파일 수정 금지 · 추가만
+
+## 브랜치 (COM-005 §6)
+
+```text
+main        배포용
+└─ develop  통합 지점. 작업은 여기서 브랜치를 따고 여기로 merge
+```
+
+- PM별 고정 브랜치는 없다. 담당은 `DEV-001 §6`의 소유 경로가 정한다.
+- 공통 코드(`package.json`, `types/database.ts`, `lib/constants/**`,
+  `components/ui/**`, `supabase/migrations/**`)는 기능 작업에 섞지 않고
+  단독으로 먼저 merge한다.
 
 ---
 

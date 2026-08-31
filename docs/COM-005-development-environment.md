@@ -1,7 +1,7 @@
 # COM-005 · 개발환경 정의서
 
-> **Version:** 1.0 · **Updated:** 2026-08-28 · **Owner:** (미지정)\
-> **Status:** 확정\
+> **Version:** 2.0 · **Updated:** 2026-08-28 · **Owner:** (미지정)\
+> **Status:** 확정 — **§6 브랜치 구조는 팀 추인 대기**\
 > **Changelog:** 문서 최하단 참조
 
 > **문서 목적:** 5명의 PM이 동일한 기술 스택과 실행 환경에서 Claude
@@ -148,17 +148,40 @@ MVP에서는 별도 OCR 서비스를 우선 도입하지 않는다.
 
 Repository는 1개를 사용한다.
 
-  PM                    Branch
-  --------------------- --------------
-  회원 및 유입 PM       `pm-account`
-  AI 코어 경험 PM       `pm-ai`
-  과금 및 수익화 PM     `pm-billing`
-  운영 및 백오피스 PM   `pm-admin`
-  그로스 및 마케팅 PM   `pm-growth`
+### 브랜치 구조
 
-원칙: - `main`에서 직접 바이브코딩하지 않는다. - 각 PM은 자신의
-Branch에서 작업한다. - 테스트 완료 후 PR을 통해 `main`에 Merge한다. -
-세부 협업 규칙은 `COM-004-ai-coding-rules.md` 및 팀 가이드를 따른다.
+| Branch | 역할 | 수명 |
+|---|---|---|
+| `main` | 배포용. Vercel Production | 영구 |
+| `develop` | 통합 지점. 모든 작업이 여기로 모임 | 영구 |
+| 작업 브랜치 | 화면·기능 단위 작업 | **1~2일. merge 후 삭제** |
+
+```text
+main                    ← develop이 안정되면 merge
+└─ develop              ← 모든 작업의 통합 지점
+   ├─ mission-drilldown     ← 짧게 살고 사라짐
+   ├─ billing-checkout
+   └─ auth-signup
+```
+
+### 원칙
+
+-   `main`에서 직접 바이브코딩하지 않는다.
+-   PM별 고정 Branch를 두지 않는다. **담당은 Branch가 아니라
+    담당 폴더(`DEV-001 §6` PM별 소유 경로)로 정한다.**
+-   작업 브랜치는 오래 유지하지 않는다. 장수 Branch는 통합 비용을 키운다.
+-   작업 브랜치는 `develop`에서 따고 `develop`으로 Merge한다.
+-   `develop` → `main` Merge는 안정 시점에만 수행한다.
+-   공통 코드(`package.json`, `src/types/database.ts`,
+    `src/lib/constants/**`, `src/components/ui/**`,
+    `supabase/migrations/**`)의 변경은 기능 작업에 섞지 않고
+    **단독으로 먼저 Merge**한 뒤 전원이 Pull한다.
+-   세부 협업 규칙은 `COM-004-ai-coding-rules.md` 및 팀 가이드를 따른다.
+
+> **참고:** v1.0에서는 PM별 고정 Branch 5개(`pm-account`, `pm-ai`,
+> `pm-billing`, `pm-admin`, `pm-growth`)를 사용했다. 장수 Branch의 통합
+> 비용 문제로 v2.0에서 `main` + `develop` 구조로 변경했다.
+> 담당 구분은 `DEV-001 §6`의 소유 경로가 대체한다.
 
 ------------------------------------------------------------------------
 
@@ -438,3 +461,4 @@ Provider로 전달되는 데이터 범위
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
 | 1.0 | 2026-08-28 | `docs/` 이관 및 문서 헤더 도입. **본문 변경 없음** | — |
+| 2.0 | 2026-08-28 | **§6 브랜치 구조 변경.** PM별 고정 Branch 5개 → `main` + `develop` + 단기 작업 Branch. 담당 구분은 DEV-001 §6 소유 경로로 이관. 공통 코드 선행 Merge 원칙 추가 | — |

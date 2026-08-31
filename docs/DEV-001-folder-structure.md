@@ -1,6 +1,6 @@
 # DEV-001 · 폴더 구조 및 PM 소유 경로
 
-> **Version:** 1.0 · **Updated:** 2026-08-28 · **Owner:** 운영 및 백오피스 PM\
+> **Version:** 1.1 · **Updated:** 2026-08-28 · **Owner:** 운영 및 백오피스 PM\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -231,16 +231,19 @@ src/types/
 
 ## 6. PM별 소유 경로
 
-`COM-005 §6`의 브랜치와 대응한다. **자기 소유 경로 밖을 수정하는 PR은 해당
-오너의 리뷰를 받는다.**
+**담당은 Branch가 아니라 이 표가 정한다.** (COM-005 §6 v2.0)
+브랜치는 `main` + `develop` + 단기 작업 브랜치만 두므로, "누가 무엇을 쓰는가"는
+전적으로 폴더 소유로 결정된다.
 
-| PM / Branch | 소유 경로 |
+**자기 소유 경로 밖을 수정하는 PR은 해당 오너의 리뷰를 받는다.**
+
+| PM | 소유 경로 |
 |---|---|
-| 회원·유입 `pm-account` | `app/(auth)/**`<br>`app/(student)/onboarding/**`, `app/(student)/students/**`<br>`app/(parent)/my/**` (marketing 제외)<br>`lib/services/{account,student}.ts`<br>`lib/auth/**` |
-| AI 코어 `pm-ai` | `app/(student)/home/**`, `app/(student)/mission/**`<br>`app/api/ai/**`<br>`lib/ai/**`, `lib/gemini/**`<br>`lib/services/{learning-session,problem,message,evaluation,logic-gap,student-memory}.ts`<br>`components/student/**`<br>`docs/prompts/**` |
-| 과금 `pm-billing` | `app/(parent)/billing/**`<br>`app/api/webhooks/payment/**`<br>`lib/services/{subscription,payment}.ts` |
-| 운영·백오피스 `pm-admin` | `components/system/**`<br>`lib/errors/**`<br>`src/middleware.ts`<br>`scripts/ops/**`<br>`docs/DEV-*.md` |
-| 그로스 `pm-growth` | `app/(parent)/reports/**`, `app/(parent)/my/marketing/**`<br>`app/api/cron/**`<br>`lib/analytics/**`<br>`lib/services/{learning-report,event}.ts` |
+| 회원·유입 | `app/(auth)/**`<br>`app/(student)/onboarding/**`, `app/(student)/students/**`<br>`app/(parent)/my/**` (marketing 제외)<br>`lib/services/{account,student}.ts`<br>`lib/auth/**` |
+| AI 코어 | `app/(student)/home/**`, `app/(student)/mission/**`<br>`app/api/ai/**`<br>`lib/ai/**`, `lib/gemini/**`<br>`lib/services/{learning-session,problem,message,evaluation,logic-gap,student-memory}.ts`<br>`components/student/**`<br>`docs/prompts/**` |
+| 과금 | `app/(parent)/billing/**`<br>`app/api/webhooks/payment/**`<br>`lib/services/{subscription,payment}.ts` |
+| 운영·백오피스 | `components/system/**`<br>`lib/errors/**`<br>`src/middleware.ts`<br>`scripts/ops/**`<br>`docs/DEV-*.md` |
+| 그로스 | `app/(parent)/reports/**`, `app/(parent)/my/marketing/**`<br>`app/api/cron/**`<br>`lib/analytics/**`<br>`lib/services/{learning-report,event}.ts` |
 
 ### 공통 영역 — 변경 시 합의 필요
 
@@ -255,6 +258,26 @@ supabase/migrations/**
 
 이 목록이 COM-002 §17("다른 PM의 테이블/필드명 임의 변경 금지")과 COM-005
 §10("문서 → DB → 코드")을 폴더 차원에서 강제하는 장치다.
+
+### 공통 코드 변경 절차
+
+브랜치를 어떻게 나누든 공통 코드는 같은 규칙을 따른다.
+
+```text
+❌  기능 작업에 공통 파일 변경을 끼워 넣는다
+    "결제 화면 구현" PR 안에 types/database.ts 수정이 섞여 있음
+    → 다른 PM들이 모르는 사이에 공통 타입이 바뀐다
+
+✅  공통 변경을 단독으로 먼저 Merge → 전원 Pull → 그 다음 기능 작업
+```
+
+| 파일 | 문제 | 운영 방법 |
+|---|---|---|
+| `supabase/migrations/**` | 동시 작업 시 번호 충돌 | timestamp 접두어 사용 (§7) |
+| `src/types/database.ts` | 각자 생성하면 매번 diff 발생 | migration Merge 후 **운영 PM 1명이 생성해 커밋**. 나머지는 Pull만 |
+| `package.json` | 의존성 추가가 겹침 | 추가 전 팀 공지 → 단독 PR → 전원 `npm install` |
+| `src/lib/constants/**` | 5명이 동시에 상수 추가 | 파일을 잘게 유지 (`enums` / `copy` / `screens` 분리) |
+| `src/components/ui/**` | 같은 컴포넌트를 각자 만듦 | 새 공통 컴포넌트는 만들기 전에 공지 |
 
 ### 미배정
 
@@ -275,12 +298,20 @@ supabase/migrations/**
 | DB 컬럼 · 변수 | snake_case (COM-002 §2) | `student_id`, `trial_ends_at` |
 | TypeScript 타입 | PascalCase | `StudentMemory` |
 | 상수 | UPPER_SNAKE (값은 소문자) | `PROBLEM_COMPLETED = 'problem_completed'` |
-| Migration | `NNNN_동사_대상.sql` | `0003_create_learning_session.sql` |
+| Migration | `YYYYMMDDHHMMSS_동사_대상.sql` | `20260828143000_create_learning_session.sql` |
 
 ### Migration 규칙
 
-- 번호는 4자리 연번. 한번 merge된 파일은 **수정하지 않고 새 파일을 추가**한다.
+- **연번(`0001`, `0002` …)을 쓰지 않는다.** 여러 명이 병렬로 작업하면 반드시
+  번호가 겹친다. Supabase 표준인 **timestamp 접두어**를 쓴다.
+  ```bash
+  supabase migration new create_learning_session
+  # → supabase/migrations/20260828143000_create_learning_session.sql
+  ```
+- 한번 Merge된 파일은 **수정하지 않고 새 파일을 추가**한다.
 - 스키마 변경 전 COM-002를 먼저 고친다. (COM-005 §10)
+- Migration이 Merge된 뒤 `src/types/database.ts`는 운영 PM 1명이 재생성해
+  커밋한다. 각자 생성하지 않는다. (§6 공통 코드 변경 절차)
 
 ---
 
@@ -317,3 +348,4 @@ lib        →  app                      (금지)
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
 | 1.0 | 2026-08-28 | 최초 작성. COM-005 §7 하위 구조 상세화 | — |
+| 1.1 | 2026-08-28 | §6 PM별 Branch 표기 제거(담당은 소유 경로가 결정) + 공통 코드 변경 절차 추가. §7 Migration 명명을 연번 → timestamp 접두어로 변경 | — |
