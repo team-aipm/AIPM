@@ -35,6 +35,7 @@
 | `DEV-001-folder-structure.md` | 폴더 세부 구조, PM 소유 경로, 명명 규칙 | 확정 |
 | `DEV-002-routes.md` | Screen ID ↔ Route 매핑 | 확정 |
 | `DEV-003-infra-setup.md` | GitHub · Vercel · Supabase 설정과 연동 절차 | 확정 |
+| `DEV-004-onboarding.md` | 팀원 로컬 세팅, AI 도구별 준비, 첫 PR | 확정 |
 
 ---
 
@@ -55,7 +56,9 @@
 | 이 파일을 어디에 둬야 하나 | **DEV-001** |
 | 이 화면의 URL이 뭔가 | **DEV-002** |
 | Supabase · Vercel을 어떻게 연결하나 | **DEV-003** |
-| 환경변수 값을 어디서 받나 | **DEV-003 §6** |
+| 환경변수 값을 어디서 받나 | **DEV-004 §2** |
+| 처음 세팅하는데 뭐부터 하나 | **DEV-004** |
+| 내 도구에서 규칙이 적용되나 | **DEV-004 §3** |
 
 ---
 
