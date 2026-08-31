@@ -4,7 +4,7 @@
 > **Status:** 확정 — **§6 브랜치 구조는 팀 추인 대기**\
 > **Changelog:** 문서 최하단 참조
 
-> **문서 목적:** 5명의 PM이 동일한 기술 스택과 실행 환경에서 Claude
+> **문서 목적:** PM 전원이 동일한 기술 스택과 실행 환경에서 Claude
 > Code로 하나의 서비스를 개발하기 위한 공통 기준\
 > **대상:** 프로젝트 참여 PM 및 Claude Code\
 > **선행 문서:** `COM-001-service-flow.md`, `COM-002-data-model.md`,

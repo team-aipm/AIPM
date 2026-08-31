@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-> **Version:** 1.0 · **Updated:** 2026-08-28 · **Owner:** 운영 및 백오피스 PM
+> **Version:** 1.1 · **Updated:** 2026-08-31 · **Owner:** 운영 및 백오피스 PM
 
 Claude Code가 이 프로젝트에서 작업할 때 따르는 규칙이다.
 상세 기준은 `docs/`의 COM / DEV 문서에 있으며, **이 파일과 문서가 충돌하면
@@ -14,7 +14,8 @@ Claude Code가 이 프로젝트에서 작업할 때 따르는 규칙이다.
 ## 프로젝트
 
 초등학교 4~6학년 수학 · 메타인지 사고과정 Drill-down 학습 서비스.
-PM 5명이 하나의 GitHub Repository에서 각자 브랜치로 개발한다.
+PM 4명이 하나의 GitHub Repository에서 개발한다. 담당은 브랜치가 아니라
+`DEV-001 §6`의 소유 경로가 정한다.
 
 **스택:** Next.js + TypeScript + Tailwind / Supabase (Auth · PostgreSQL ·
 Storage) / Google Gemini API / Vercel / npm

@@ -227,7 +227,7 @@ Vercel Marketplace의 Supabase Integration은 `POSTGRES_*` 등
 
 ### 7-1. Studio에서 스키마를 직접 고치지 않는다
 
-5명이 각자 대시보드에서 테이블을 고치면 현재 스키마를 아무도 모르게 되고,
+여러 명이 각자 대시보드에서 테이블을 고치면 현재 스키마를 아무도 모르게 되고,
 코드와 DB가 조용히 어긋난다. COM-005 §10의 `문서 → DB → 코드` 순서가
 이를 막는 장치다.
 
@@ -243,7 +243,7 @@ COM-002 수정 합의
 ### 7-2. Supabase CLI
 
 ```bash
-npm i -D supabase                       # 전역 대신 repo 고정. 5명 버전 통일
+npm i -D supabase                       # 전역 대신 repo 고정. 전원 버전 통일
 npx supabase link --project-ref <ref>
 npx supabase db push
 ```

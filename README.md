@@ -1,7 +1,7 @@
 # AIPM
 
 초등학교 4~6학년 대상 **수학 · 메타인지 사고과정 Drill-down 학습 서비스**.
-PM 5명이 하나의 저장소에서 각자 담당 폴더를 맡아 개발한다.
+PM 4명이 하나의 저장소에서 각자 담당 폴더를 맡아 개발한다.
 
 **스택** · Next.js 16 · TypeScript · Tailwind v4 / Supabase (Auth · PostgreSQL · Storage) / Google Gemini / Vercel / npm
 
@@ -36,7 +36,7 @@ npm run dev
 
 ## 문서
 
-`COM`은 "무엇을 만들 것인가"(PM 5명 합의 필요), `DEV`는 "어디에 어떻게 둘 것인가"(PR 리뷰).
+`COM`은 "무엇을 만들 것인가"(PM 전원 합의), `DEV`는 "어디에 어떻게 둘 것인가"(PR 리뷰).
 
 | 문서 | 다루는 것 |
 |---|---|

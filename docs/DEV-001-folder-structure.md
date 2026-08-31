@@ -146,7 +146,7 @@ src/components/
 ```
 
 **한 화면에서만 쓰는 컴포넌트는 `components/`가 아니라 그 route의
-`_components/`에 둔다.** 이 규칙이 없으면 `components/`가 5명의 공용 충돌
+`_components/`에 둔다.** 이 규칙이 없으면 `components/`가 전원의 공용 충돌
 지점이 된다.
 
 `ui/`와 `system/`을 합치면 COM-003 §6의 공통 Component 11개가 된다.
@@ -276,7 +276,7 @@ supabase/migrations/**
 | `supabase/migrations/**` | 동시 작업 시 번호 충돌 | timestamp 접두어 사용 (§7) |
 | `src/types/database.ts` | 각자 생성하면 매번 diff 발생 | migration Merge 후 **운영 PM 1명이 생성해 커밋**. 나머지는 Pull만 |
 | `package.json` | 의존성 추가가 겹침 | 추가 전 팀 공지 → 단독 PR → 전원 `npm install` |
-| `src/lib/constants/**` | 5명이 동시에 상수 추가 | 파일을 잘게 유지 (`enums` / `copy` / `screens` 분리) |
+| `src/lib/constants/**` | 여러 명이 동시에 상수 추가 | 파일을 잘게 유지 (`enums` / `copy` / `screens` 분리) |
 | `src/components/ui/**` | 같은 컴포넌트를 각자 만듦 | 새 공통 컴포넌트는 만들기 전에 공지 |
 
 ### 미배정

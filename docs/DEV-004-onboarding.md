@@ -18,7 +18,7 @@
 | Git | 아무 최신 버전 | `git --version` |
 | GitHub 계정 | — | `team-aipm` 조직 초대 수락 |
 
-**npm만 쓴다.** yarn · pnpm 금지다. lock 파일이 갈리면 5명이 서로 다른
+**npm만 쓴다.** yarn · pnpm 금지다. lock 파일이 갈리면 전원이 서로 다른
 의존성으로 작업하게 된다. (COM-005 §5)
 
 ---
@@ -56,7 +56,7 @@ cp .env.example .env.local
 - `.env.local`은 **절대 커밋하지 않는다.** `.gitignore`에 등록되어 있다
 - 값을 단톡방에 올리지 않는다. 나간 사람도 계속 볼 수 있다
 - Supabase 값 3개가 다르면 서로 다른 DB를 보게 된다
-- `GEMINI_API_KEY`는 무료 키를 5명이 공유하면 요청 한도를 서로 잡아먹는다.
+- `GEMINI_API_KEY`는 무료 키를 여러 명이 공유하면 요청 한도를 서로 잡아먹는다.
   각자 [Google AI Studio](https://aistudio.google.com)에서 발급받는다
 
 ### 실행
