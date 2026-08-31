@@ -34,6 +34,7 @@
 | `COM-007-privacy-child-data.md` | 개인정보 · 아동 데이터 정책 | **초안 (작성 필요)** |
 | `DEV-001-folder-structure.md` | 폴더 세부 구조, PM 소유 경로, 명명 규칙 | 확정 |
 | `DEV-002-routes.md` | Screen ID ↔ Route 매핑 | 확정 |
+| `DEV-003-infra-setup.md` | GitHub · Vercel · Supabase 설정과 연동 절차 | 확정 |
 
 ---
 
@@ -53,6 +54,8 @@
 | 환경변수 이름을 새로 만들어도 되나 | COM-005 §8 → 팀 합의 |
 | 이 파일을 어디에 둬야 하나 | **DEV-001** |
 | 이 화면의 URL이 뭔가 | **DEV-002** |
+| Supabase · Vercel을 어떻게 연결하나 | **DEV-003** |
+| 환경변수 값을 어디서 받나 | **DEV-003 §6** |
 
 ---
 
