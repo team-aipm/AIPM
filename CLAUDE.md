@@ -126,6 +126,8 @@ main        배포용
 ```
 
 - PM별 고정 브랜치는 없다. 담당은 `DEV-001 §6`의 소유 경로가 정한다.
+- 담당은 **AI 코어 트랙(2인)** 과 **서비스 트랙(2인)** 으로 나뉜다.
+  트랙 밖을 수정하는 PR은 해당 트랙의 리뷰를 받는다.
 - 공통 코드(`package.json`, `types/database.ts`, `lib/constants/**`,
   `components/ui/**`, `supabase/migrations/**`)는 기능 작업에 섞지 않고
   단독으로 먼저 merge한다.

@@ -1,6 +1,6 @@
 # DEV-001 · 폴더 구조 및 PM 소유 경로
 
-> **Version:** 1.1 · **Updated:** 2026-08-28 · **Owner:** 운영 및 백오피스 PM\
+> **Version:** 1.2 · **Updated:** 2026-08-31 · **Owner:** 세팅 담당\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -229,21 +229,64 @@ src/types/
 
 ---
 
-## 6. PM별 소유 경로
+## 6. 담당과 소유 경로
 
 **담당은 Branch가 아니라 이 표가 정한다.** (COM-005 §6 v2.0)
 브랜치는 `main` + `develop` + 단기 작업 브랜치만 두므로, "누가 무엇을 쓰는가"는
 전적으로 폴더 소유로 결정된다.
 
-**자기 소유 경로 밖을 수정하는 PR은 해당 오너의 리뷰를 받는다.**
+### 두 트랙
 
-| PM | 소유 경로 |
-|---|---|
-| 회원·유입 | `app/(auth)/**`<br>`app/(student)/onboarding/**`, `app/(student)/students/**`<br>`app/(parent)/my/**` (marketing 제외)<br>`lib/services/{account,student}.ts`<br>`lib/auth/**` |
-| AI 코어 | `app/(student)/home/**`, `app/(student)/mission/**`<br>`app/api/ai/**`<br>`lib/ai/**`, `lib/gemini/**`<br>`lib/services/{learning-session,problem,message,evaluation,logic-gap,student-memory}.ts`<br>`components/student/**`<br>`docs/prompts/**` |
-| 과금 | `app/(parent)/billing/**`<br>`app/api/webhooks/payment/**`<br>`lib/services/{subscription,payment}.ts` |
-| 운영·백오피스 | `components/system/**`<br>`lib/errors/**`<br>`src/middleware.ts`<br>`scripts/ops/**`<br>`docs/DEV-*.md` |
-| 그로스 | `app/(parent)/reports/**`, `app/(parent)/my/marketing/**`<br>`app/api/cron/**`<br>`lib/analytics/**`<br>`lib/services/{learning-report,event}.ts` |
+PM 4명이 두 트랙으로 나뉜다. 각 트랙 안에서는 **공동 소유**다.
+
+| 트랙 | 인원 | 맡는 역할 |
+|---|---|---|
+| **AI 코어** | 2명 | 학습 경험 · Drill-down · 평가 |
+| **서비스** | 2명 | 회원·유입 · 과금 · 운영/백오피스 · 그로스 |
+
+**트랙 밖을 수정하는 PR은 해당 트랙의 리뷰를 받는다.**
+같은 트랙 안에서는 서로 자유롭게 수정하되, 작업 전에 무엇을 건드리는지
+공유한다. 공동 소유는 "아무나 고쳐도 된다"가 아니라 "둘 다 책임진다"는 뜻이다.
+
+### AI 코어 트랙
+
+```text
+app/(student)/home/**
+app/(student)/mission/**
+app/api/ai/**
+lib/ai/**  ·  lib/gemini/**
+lib/services/{learning-session,problem,message,evaluation,logic-gap,student-memory}.ts
+components/student/**
+docs/prompts/**
+```
+
+### 서비스 트랙
+
+네 역할을 2명이 함께 맡는다. 역할별로 경로를 구분해 두는 이유는
+소유자를 나누기 위해서가 아니라, **어느 COM 문서를 봐야 하는지**를
+알려주기 위해서다.
+
+| 역할 | 경로 | 참조 문서 |
+|---|---|---|
+| 회원 · 유입 | `app/(auth)/**`<br>`app/(student)/onboarding/**`, `app/(student)/students/**`<br>`app/(parent)/my/**` (marketing 제외)<br>`lib/services/{account,student}.ts`<br>`lib/auth/**` | COM-001 · COM-003 |
+| 과금 | `app/(parent)/billing/**`<br>`app/api/webhooks/payment/**`<br>`lib/services/{subscription,payment}.ts` | COM-002 §11~12 |
+| 운영 · 백오피스 | `components/system/**`<br>`lib/errors/**`<br>`scripts/ops/**` | COM-007 확정 후 |
+| 그로스 | `app/(parent)/reports/**`, `app/(parent)/my/marketing/**`<br>`app/api/cron/**`<br>`lib/analytics/**`<br>`lib/services/{learning-report,event}.ts` | COM-002 §13~14 |
+
+> `src/app/(admin)/`은 COM-007이 확정되기 전까지 만들지 않는다.
+
+### 세팅 담당 — 한시적
+
+프로젝트 초기 환경 구축(저장소 · Vercel · Supabase · 문서 체계 · 스키마)은
+**한시적 역할**이며 위 두 트랙에 속하지 않는다. 세팅이 끝나면 아래 경로와
+책임을 두 트랙에 인계한다.
+
+```text
+src/middleware.ts        docs/DEV-*.md        supabase/migrations/**
+```
+
+인계 항목과 절차는 `DEV-003 §12`를 따른다. **인계가 끝나기 전까지 이
+경로들은 세팅 담당이 유지한다.**
 
 ### 공통 영역 — 변경 시 합의 필요
 
@@ -349,3 +392,4 @@ lib        →  app                      (금지)
 |---|---|---|---|
 | 1.0 | 2026-08-28 | 최초 작성. COM-005 §7 하위 구조 상세화 | — |
 | 1.1 | 2026-08-28 | §6 PM별 Branch 표기 제거(담당은 소유 경로가 결정) + 공통 코드 변경 절차 추가. §7 Migration 명명을 연번 → timestamp 접두어로 변경 | — |
+| 1.2 | 2026-08-31 | §6을 5역할 개인 소유 → **2트랙 공동 소유**로 개편(AI 코어 2인 · 서비스 2인). 세팅 담당을 한시적 역할로 명시하고 인계 대상을 DEV-003 §12로 연결 | — |
