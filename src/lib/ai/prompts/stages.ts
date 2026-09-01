@@ -7,30 +7,42 @@
  * 문서에 반영하고 PR을 올린다.
  */
 
-export type StageId = '01' | '02' | '03' | '04' | '05' | '06';
+import type { CheckRuleId, OutputMode } from '@/lib/ai/schema-check';
 
-export type Stage = {
-  id: StageId;
-  /** 화면에 보이는 이름 */
+/**
+ * 단계의 내용. 화면에서 이름·프롬프트·입력을 모두 바꿀 수 있고, 단계를
+ * 추가·삭제할 수 있다. 아래 목록은 "처음 열었을 때 채워지는 값"일 뿐이다.
+ */
+export type StagePreset = {
+  /** 화면에 보이는 이름. 편집 가능 */
   name: string;
   /** 한 줄 설명 */
-  summary: string;
-  /** COM-002에서 이 단계가 쓰는 테이블 */
-  writes: string;
-  /** systemInstruction 으로 보낼 본문. COMMON_RULES 가 앞에 붙는다. */
+  note: string;
+  /** systemInstruction 으로 보낼 본문 */
   prompt: string;
-  /** 화면 첫 진입 시 입력 칸에 채워지는 예시 */
+  /** 입력 칸 초기값 */
   sampleInput: string;
-  /** 실행 결과를 다음 단계 입력으로 보낼 수 있는지 */
-  feedsInto: StageId | null;
+  /** 출력을 JSON으로 볼지 텍스트로 볼지 */
+  outputMode: OutputMode;
+  /** 붙일 검증 규칙. null이면 JSON 형식만 본다 */
+  checkRule: CheckRuleId | null;
 };
 
-const STAGE_01: Stage = {
-  id: '01',
-  name: 'SYSTEM',
-  summary: '전체 AI 원칙. 단독 실행하지 않고 다른 단계 앞에 붙여 쓴다.',
-  writes: '—',
-  feedsInto: null,
+/** 단계를 새로 추가할 때의 빈 값 */
+export const BLANK_STAGE: StagePreset = {
+  name: '새 단계',
+  note: '',
+  prompt: '',
+  sampleInput: '{\n  \n}',
+  outputMode: 'json',
+  checkRule: null,
+};
+
+const STAGE_01: StagePreset = {
+  name: '01 SYSTEM',
+  note: '전체 AI 원칙. 단독 실행하지 않고 다른 단계 앞에 붙여 쓴다.',
+  outputMode: 'text',
+  checkRule: null,
   sampleInput: '{\n  "note": "01은 원칙 문서다. 단독 호출 대상이 아니다."\n}',
   prompt: `## ROLE
 
@@ -65,12 +77,11 @@ mode_b  AI가 설계된 의도오답을 제시하고 학생이 오류를 찾는�
 judgment · reasoning · rule · transfer · reflection`,
 };
 
-const STAGE_02: Stage = {
-  id: '02',
-  name: 'PROBLEM ANALYSIS',
-  summary: '문제 분석 · 정답 검증 · Answer Lock',
-  writes: 'Problem',
-  feedsInto: '03',
+const STAGE_02: StagePreset = {
+  name: '02 PROBLEM ANALYSIS',
+  note: '문제 분석 · 정답 검증 · Answer Lock → Problem',
+  outputMode: 'json',
+  checkRule: 'aipm-problem',
   sampleInput: `{
   "problem_text": "24 ÷ 4 × 2",
   "problem_source": "text",
@@ -133,12 +144,11 @@ difficulty는 1~5다. 3이 학년 중간 난이도다.
 }`,
 };
 
-const STAGE_03: Stage = {
-  id: '03',
-  name: 'TUTOR',
-  summary: 'MODE A/B · Adaptive Drill-down · Hint',
-  writes: 'Message',
-  feedsInto: '04',
+const STAGE_03: StagePreset = {
+  name: '03 TUTOR',
+  note: 'MODE A/B · Adaptive Drill-down · Hint → Message',
+  outputMode: 'json',
+  checkRule: 'aipm-message',
   sampleInput: `{
   "problem": { "problem_text": "24 ÷ 4 × 2", "concept": "연산 순서", "difficulty": 2 },
   "answer_lock": {
@@ -233,12 +243,11 @@ message는 2문장 이하, 120자 이내. 한 번에 하나의 핵심 질문. �
 action: wait_student · complete · early_complete · needs_review · escalate`,
 };
 
-const STAGE_04: Stage = {
-  id: '04',
-  name: 'EVALUATOR',
-  summary: '평가지표 7개 + Logic Gap',
-  writes: 'Evaluation · LogicGap',
-  feedsInto: '05',
+const STAGE_04: StagePreset = {
+  name: '04 EVALUATOR',
+  note: '평가지표 + Logic Gap → Evaluation · LogicGap',
+  outputMode: 'json',
+  checkRule: 'aipm-evaluation',
   sampleInput: `{
   "problem": { "problem_id": "00000000-0000-0000-0000-000000000001", "concept": "연산 순서", "problem_status": "completed" },
   "answer_lock": { "verified_answer": "12", "verified_solution": "24 ÷ 4 = 6, 6 × 2 = 12" },
@@ -326,12 +335,11 @@ description은 학생 발화에 근거한 한 문장이다.
 }`,
 };
 
-const STAGE_05: Stage = {
-  id: '05',
-  name: 'STUDENT MEMORY',
-  summary: '학생 1명당 1행인 장기 학습기억 갱신',
-  writes: 'StudentMemory',
-  feedsInto: '06',
+const STAGE_05: StagePreset = {
+  name: '05 STUDENT MEMORY',
+  note: '학생 1명당 1행인 장기 학습기억 갱신 → StudentMemory',
+  outputMode: 'json',
+  checkRule: 'aipm-student-memory',
   sampleInput: `{
   "previous_memory": {
     "current_level": 3,
@@ -414,12 +422,11 @@ mastery: not_started · developing · proficient
 }`,
 };
 
-const STAGE_06: Stage = {
-  id: '06',
-  name: 'NEXT PROBLEM',
-  summary: '난이도 판단 + 다음 문제 생성',
-  writes: '(직접 쓰지 않음. 02를 거쳐 Problem)',
-  feedsInto: '02',
+const STAGE_06: StagePreset = {
+  name: '06 NEXT PROBLEM',
+  note: '난이도 판단 + 다음 문제 생성. 02의 검증을 다시 거친다',
+  outputMode: 'json',
+  checkRule: 'aipm-next-problem',
   sampleInput: `{
   "grade": 5,
   "curriculum_scope": "5학년 1학기",
@@ -512,7 +519,11 @@ mode_a / mode_b 를 고른다. recent_mode_history에 같은 모드가 3회 연�
 action: next_problem · session_complete`,
 };
 
-export const STAGES: Stage[] = [
+/**
+ * 이 프로젝트의 기본 프리셋. 화면에서 "AIPM 6단계 불러오기"로 넣는다.
+ * docs/prompts/logic-auditor.md 를 고치면 여기도 함께 고친다.
+ */
+export const AIPM_PRESET: StagePreset[] = [
   STAGE_01,
   STAGE_02,
   STAGE_03,
@@ -520,9 +531,3 @@ export const STAGES: Stage[] = [
   STAGE_05,
   STAGE_06,
 ];
-
-export function findStage(id: StageId): Stage {
-  const stage = STAGES.find((candidate) => candidate.id === id);
-  if (!stage) throw new Error(`알 수 없는 단계: ${id}`);
-  return stage;
-}

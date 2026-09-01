@@ -35,6 +35,13 @@ export type GeminiRequest = {
    * 모델이 실제로 무엇을 내는지 봐야 한다. (docs/prompts §1 공통 규칙)
    */
   forceJsonMimeType?: boolean;
+  /**
+   * 화면에서 입력한 키. 비우면 GEMINI_API_KEY 환경변수를 쓴다.
+   *
+   * 저장하지 않는다. 로그에 남기지 않는다. 오류 메시지에 넣지 않는다.
+   * 단계마다 다른 키·다른 프로젝트로 시험할 수 있게 하기 위한 값이다.
+   */
+  apiKey?: string;
 };
 
 export function hasGeminiApiKey(): boolean {
@@ -45,12 +52,12 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
   const startedAt = Date.now();
   const elapsed = () => Date.now() - startedAt;
 
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = req.apiKey?.trim() || process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     return {
       ok: false,
       error:
-        'GEMINI_API_KEY가 없습니다. .env.local에 넣고 dev 서버를 다시 시작하세요. (DEV-004 §2)',
+        'API 키가 없습니다. 화면 상단에 입력하거나, .env.local의 GEMINI_API_KEY를 채우고 dev 서버를 다시 시작하세요.',
       elapsed_ms: elapsed(),
     };
   }

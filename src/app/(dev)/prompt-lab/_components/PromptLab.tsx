@@ -2,269 +2,486 @@
 
 import { useState, useTransition } from 'react';
 
-import type { Stage, StageId } from '@/lib/ai/prompts/stages';
+import { BLANK_STAGE, type StagePreset } from '@/lib/ai/prompts/stages';
+import { COMMON_RULES } from '@/lib/ai/prompts/common-rules';
 import {
   DEFAULT_GEMINI_MODEL,
   GEMINI_MODEL_CANDIDATES,
 } from '@/lib/gemini/models';
-import type { Check } from '@/lib/ai/schema-check';
+import {
+  CHECK_RULES,
+  type Check,
+  type CheckRuleId,
+  type OutputMode,
+} from '@/lib/ai/schema-check';
 import { runStage, type RunResult } from '../_actions';
 import { bridge } from '../_bridge';
 
-type StageState = {
+type Stage = StagePreset & {
+  /** React key 전용. DOM에 넣지 않는다 */
+  key: string;
+  /** 비우면 기본 모델 */
   model: string;
-  prompt: string;
+  /** 비우면 기본 키 → 없으면 서버의 GEMINI_API_KEY */
+  apiKey: string;
   input: string;
+  useCommonPrompt: boolean;
+  forceJsonMimeType: boolean;
   result: RunResult | null;
   running: boolean;
 };
 
 type Props = {
-  stages: Stage[];
-  hasApiKey: boolean;
+  preset: StagePreset[];
+  hasEnvApiKey: boolean;
 };
 
-export function PromptLab({ stages, hasApiKey }: Props) {
-  const [activeId, setActiveId] = useState<StageId>('02');
-  const [includeCommonRules, setIncludeCommonRules] = useState(true);
-  const [forceJsonMimeType, setForceJsonMimeType] = useState(false);
+/** 프리셋 한 줄을 화면 상태로 바꾼다. key는 React 전용이며 DOM에 넣지 않는다. */
+function toStage(base: StagePreset, key: string): Stage {
+  return {
+    ...base,
+    key,
+    model: '',
+    apiKey: '',
+    input: base.sampleInput,
+    useCommonPrompt: true,
+    forceJsonMimeType: false,
+    result: null,
+    running: false,
+  };
+}
+
+export function PromptLab({ preset, hasEnvApiKey }: Props) {
+  const [stages, setStages] = useState<Stage[]>(() =>
+    preset.map((base, index) => toStage(base, `s${index}`)),
+  );
+  // 새 단계에 줄 key. 순서를 바꿔도 React가 상태를 잃지 않도록 고유하게 둔다.
+  const [keySeq, setKeySeq] = useState(preset.length);
+  const [activeIndex, setActiveIndex] = useState(1);
+  const [defaultModel, setDefaultModel] = useState(DEFAULT_GEMINI_MODEL);
+  const [defaultApiKey, setDefaultApiKey] = useState('');
+  const [commonPrompt, setCommonPrompt] = useState(COMMON_RULES);
+  const [panel, setPanel] = useState<'none' | 'common' | 'config'>('none');
+  const [configText, setConfigText] = useState('');
   const [, startTransition] = useTransition();
 
-  const [state, setState] = useState<Record<StageId, StageState>>(() =>
-    Object.fromEntries(
-      stages.map((stage) => [
-        stage.id,
-        {
-          model: DEFAULT_GEMINI_MODEL,
-          prompt: stage.prompt,
-          input: stage.sampleInput,
-          result: null,
-          running: false,
-        },
-      ]),
-    ) as Record<StageId, StageState>,
-  );
+  const active = stages[activeIndex];
 
-  const active = stages.find((stage) => stage.id === activeId)!;
-  const current = state[activeId];
+  function patch(index: number, next: Partial<Stage>) {
+    setStages((prev) =>
+      prev.map((stage, i) => (i === index ? { ...stage, ...next } : stage)),
+    );
+  }
 
-  const patch = (id: StageId, next: Partial<StageState>) =>
-    setState((prev) => ({ ...prev, [id]: { ...prev[id], ...next } }));
+  function addStage() {
+    setStages((prev) => [...prev, toStage(BLANK_STAGE, `s${keySeq}`)]);
+    setKeySeq((prev) => prev + 1);
+    setActiveIndex(stages.length);
+  }
+
+  function removeStage(index: number) {
+    if (stages.length === 1) return;
+    setStages((prev) => prev.filter((_, i) => i !== index));
+    setActiveIndex((current) => (current >= index && current > 0 ? current - 1 : current));
+  }
+
+  function moveStage(index: number, delta: number) {
+    const target = index + delta;
+    if (target < 0 || target >= stages.length) return;
+    setStages((prev) => {
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setActiveIndex(target);
+  }
 
   function run() {
-    if (current.running) return;
-    patch(activeId, { running: true, result: null });
+    if (!active || active.running) return;
+    const index = activeIndex;
+    patch(index, { running: true, result: null });
+
+    const system = active.useCommonPrompt
+      ? `${commonPrompt}\n\n---\n\n${active.prompt}`
+      : active.prompt;
 
     startTransition(async () => {
       const result = await runStage({
-        stageId: activeId,
-        model: current.model,
-        prompt: current.prompt,
-        input: current.input,
-        includeCommonRules,
-        forceJsonMimeType,
+        model: active.model.trim() || defaultModel,
+        system,
+        input: active.input,
+        outputMode: active.outputMode,
+        checkRule: active.checkRule,
+        forceJsonMimeType: active.forceJsonMimeType,
+        apiKey: active.apiKey.trim() || defaultApiKey.trim(),
       });
-      patch(activeId, { running: false, result });
+      patch(index, { running: false, result });
     });
   }
 
   function sendToNext() {
-    const target = active.feedsInto;
-    const raw = current.result?.raw;
-    if (!target || !raw) return;
+    const nextIndex = activeIndex + 1;
+    const raw = active?.result?.raw;
+    if (!raw || nextIndex >= stages.length) return;
 
+    let mapped: string | null = null;
+    try {
+      mapped = bridge(active.checkRule, JSON.parse(raw), stages[nextIndex].input);
+    } catch {
+      mapped = null;
+    }
+
+    patch(nextIndex, { input: mapped ?? raw });
+    setActiveIndex(nextIndex);
+  }
+
+  function exportConfig() {
+    // API 키는 내보내지 않는다.
+    const payload = {
+      commonPrompt,
+      defaultModel,
+      stages: stages.map((stage) => ({
+        name: stage.name,
+        note: stage.note,
+        prompt: stage.prompt,
+        sampleInput: stage.input,
+        outputMode: stage.outputMode,
+        checkRule: stage.checkRule,
+        model: stage.model,
+        useCommonPrompt: stage.useCommonPrompt,
+        forceJsonMimeType: stage.forceJsonMimeType,
+      })),
+    };
+    const text = JSON.stringify(payload, null, 2);
+    setConfigText(text);
+    setPanel('config');
+    void navigator.clipboard.writeText(text);
+  }
+
+  function importConfig() {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(configText);
     } catch {
+      window.alert('설정 JSON을 파싱하지 못했습니다.');
+      return;
+    }
+    const data = parsed as {
+      commonPrompt?: string;
+      defaultModel?: string;
+      stages?: Partial<StagePreset & { model: string; useCommonPrompt: boolean; forceJsonMimeType: boolean }>[];
+    };
+    if (!Array.isArray(data.stages) || data.stages.length === 0) {
+      window.alert('stages 배열이 없습니다.');
       return;
     }
 
-    const merged = bridge(activeId, parsed, state[target].input);
-    if (merged === null) return;
+    if (typeof data.commonPrompt === 'string') setCommonPrompt(data.commonPrompt);
+    if (typeof data.defaultModel === 'string') setDefaultModel(data.defaultModel);
 
-    patch(target, { input: merged });
-    setActiveId(target);
+    setStages(
+      data.stages.map((item, index) => ({
+        ...toStage({ ...BLANK_STAGE, ...item } as StagePreset, `s${keySeq + index}`),
+        model: item.model ?? '',
+        useCommonPrompt: item.useCommonPrompt ?? true,
+        forceJsonMimeType: item.forceJsonMimeType ?? false,
+        input: item.sampleInput ?? BLANK_STAGE.sampleInput,
+      })),
+    );
+    setKeySeq((prev) => prev + data.stages!.length);
+    setActiveIndex(0);
+    setPanel('none');
   }
 
-  const canSendToNext =
-    active.feedsInto !== null && current.result?.ok === true && current.result.raw !== '';
+  const keySource = active?.apiKey.trim()
+    ? '이 단계 키'
+    : defaultApiKey.trim()
+      ? '기본 키'
+      : hasEnvApiKey
+        ? '.env GEMINI_API_KEY'
+        : '없음';
 
   return (
-    <main className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 p-6 font-mono text-[13px]">
-      <Header hasApiKey={hasApiKey} />
+    <main className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 p-6 font-mono text-[13px]">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-3 dark:border-neutral-800">
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-base font-bold">Prompt Lab</h1>
+          <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[11px] text-amber-900">
+            dev 전용
+          </span>
+          <span className="text-neutral-500">단계별 프롬프트 실행·검증</span>
+        </div>
 
-      <StageRail
-        stages={stages}
-        activeId={activeId}
-        state={state}
-        onSelect={setActiveId}
-      />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2">
-              <span className="text-neutral-500">모델</span>
-              <input
-                list="gemini-models"
-                value={current.model}
-                onChange={(event) => patch(activeId, { model: event.target.value })}
-                className="w-56 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-              />
-              <datalist id="gemini-models">
-                {GEMINI_MODEL_CANDIDATES.map((model) => (
-                  <option key={model} value={model} />
-                ))}
-              </datalist>
-            </label>
-
-            <Toggle
-              checked={includeCommonRules}
-              onChange={setIncludeCommonRules}
-              label="공통 규칙 붙이기"
-              hint="docs/prompts §1"
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2">
+            <span className="text-neutral-500">기본 모델</span>
+            <input
+              list="gemini-models"
+              value={defaultModel}
+              onChange={(event) => setDefaultModel(event.target.value)}
+              className="w-44 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
             />
-            <Toggle
-              checked={forceJsonMimeType}
-              onChange={setForceJsonMimeType}
-              label="JSON 강제"
-              hint="responseMimeType"
+          </label>
+
+          <label className="flex items-center gap-2">
+            <span className="text-neutral-500">기본 API 키</span>
+            <input
+              type="password"
+              value={defaultApiKey}
+              onChange={(event) => setDefaultApiKey(event.target.value)}
+              placeholder={hasEnvApiKey ? '.env 값을 씁니다' : '키를 넣으세요'}
+              className="w-52 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
             />
-          </div>
+          </label>
 
-          <Panel
-            title={`프롬프트 · ${active.name}`}
-            hint={`쓰는 테이블: ${active.writes}`}
-            onCopy={() => navigator.clipboard.writeText(current.prompt)}
-          >
-            <textarea
-              value={current.prompt}
-              onChange={(event) => patch(activeId, { prompt: event.target.value })}
-              spellCheck={false}
-              className="h-[420px] w-full resize-y bg-transparent p-3 outline-none"
-            />
-          </Panel>
-        </section>
+          <button onClick={() => setPanel(panel === 'common' ? 'none' : 'common')} className="text-neutral-500 hover:underline">
+            공통 프롬프트
+          </button>
+          <button onClick={exportConfig} className="text-neutral-500 hover:underline">
+            내보내기
+          </button>
+          <button onClick={() => setPanel(panel === 'config' ? 'none' : 'config')} className="text-neutral-500 hover:underline">
+            불러오기
+          </button>
+        </div>
+      </header>
 
-        <section className="flex flex-col gap-3">
-          <Panel
-            title="입력 JSON"
-            hint={active.summary}
-            onCopy={() => navigator.clipboard.writeText(current.input)}
-          >
-            <textarea
-              value={current.input}
-              onChange={(event) => patch(activeId, { input: event.target.value })}
-              spellCheck={false}
-              className="h-[220px] w-full resize-y bg-transparent p-3 outline-none"
-            />
-          </Panel>
+      <datalist id="gemini-models">
+        {GEMINI_MODEL_CANDIDATES.map((model) => (
+          <option key={model} value={model} />
+        ))}
+      </datalist>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={run}
-              disabled={current.running || activeId === '01'}
-              className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
-            >
-              {current.running ? '실행 중…' : '실행'}
-            </button>
-
-            {canSendToNext && (
-              <button
-                onClick={sendToNext}
-                className="rounded border border-neutral-400 px-3 py-2 dark:border-neutral-600"
-              >
-                → {active.feedsInto} 입력으로 보내기
-              </button>
-            )}
-
-            {current.result && <Meta result={current.result} />}
-          </div>
-
-          {activeId === '01' && (
-            <p className="text-neutral-500">
-              01은 원칙 문서다. 단독 호출하지 않고 다른 단계 앞에 붙여 쓴다.
-            </p>
-          )}
-
-          {current.result && <ResultView result={current.result} />}
-        </section>
-      </div>
-    </main>
-  );
-}
-
-function Header({ hasApiKey }: { hasApiKey: boolean }) {
-  return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-3 dark:border-neutral-800">
-      <div className="flex items-baseline gap-3">
-        <h1 className="text-base font-bold">Prompt Lab</h1>
-        <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[11px] text-amber-900">
-          dev 전용
-        </span>
-        <span className="text-neutral-500">docs/prompts/logic-auditor.md</span>
-      </div>
-
-      {hasApiKey ? (
-        <span className="text-emerald-600 dark:text-emerald-400">
-          GEMINI_API_KEY 있음
-        </span>
-      ) : (
-        <span className="text-red-600 dark:text-red-400">
-          GEMINI_API_KEY 없음 — .env.local에 넣고 dev 서버를 다시 시작하세요
-        </span>
+      {panel === 'common' && (
+        <Panel
+          title="공통 프롬프트"
+          hint="포함을 켠 단계의 프롬프트 앞에 붙습니다"
+          onCopy={() => navigator.clipboard.writeText(commonPrompt)}
+        >
+          <textarea
+            value={commonPrompt}
+            onChange={(event) => setCommonPrompt(event.target.value)}
+            spellCheck={false}
+            className="h-72 w-full resize-y bg-transparent p-3 outline-none"
+          />
+        </Panel>
       )}
-    </header>
-  );
-}
 
-function StageRail({
-  stages,
-  activeId,
-  state,
-  onSelect,
-}: {
-  stages: Stage[];
-  activeId: StageId;
-  state: Record<StageId, StageState>;
-  onSelect: (id: StageId) => void;
-}) {
-  return (
-    <nav className="flex flex-wrap gap-2">
-      {stages.map((stage) => {
-        const result = state[stage.id].result;
-        const status = !result
-          ? 'idle'
-          : !result.ok
-            ? 'error'
-            : result.checks.some((check) => check.level === 'fail')
-              ? 'fail'
-              : result.checks.some((check) => check.level === 'warn')
-                ? 'warn'
-                : 'pass';
+      {panel === 'config' && (
+        <Panel title="설정 JSON" hint="API 키는 포함되지 않습니다">
+          <textarea
+            value={configText}
+            onChange={(event) => setConfigText(event.target.value)}
+            spellCheck={false}
+            placeholder="여기에 붙여넣고 불러오기를 누르세요"
+            className="h-56 w-full resize-y bg-transparent p-3 outline-none"
+          />
+          <div className="border-t border-neutral-200 px-3 py-2 dark:border-neutral-800">
+            <button
+              onClick={importConfig}
+              className="rounded border border-neutral-400 px-3 py-1 dark:border-neutral-600"
+            >
+              불러오기 — 현재 단계를 모두 교체합니다
+            </button>
+          </div>
+        </Panel>
+      )}
 
-        return (
+      <nav className="flex flex-wrap items-center gap-2">
+        {stages.map((stage, index) => (
           <button
-            key={stage.id}
-            onClick={() => onSelect(stage.id)}
+            key={stage.key}
+            onClick={() => setActiveIndex(index)}
             className={`flex items-center gap-2 rounded border px-3 py-1.5 ${
-              stage.id === activeId
+              index === activeIndex
                 ? 'border-neutral-900 dark:border-neutral-100'
                 : 'border-neutral-300 dark:border-neutral-700'
             }`}
           >
-            <StatusDot status={status} />
-            <span className="text-neutral-500">{stage.id}</span>
-            <span>{stage.name}</span>
+            <StatusDot result={stage.result} />
+            <span>{stage.name || '(이름 없음)'}</span>
           </button>
-        );
-      })}
-    </nav>
+        ))}
+        <button
+          onClick={addStage}
+          className="rounded border border-dashed border-neutral-400 px-3 py-1.5 text-neutral-500 dark:border-neutral-600"
+        >
+          + 단계 추가
+        </button>
+      </nav>
+
+      {active && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="flex flex-col gap-3">
+            <Panel title="단계 설정">
+              <div className="flex flex-col gap-2 p-3">
+                <label className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-neutral-500">이름</span>
+                  <input
+                    value={active.name}
+                    onChange={(event) => patch(activeIndex, { name: event.target.value })}
+                    className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  />
+                  <button onClick={() => moveStage(activeIndex, -1)} className="px-1 text-neutral-500">←</button>
+                  <button onClick={() => moveStage(activeIndex, 1)} className="px-1 text-neutral-500">→</button>
+                  <button
+                    onClick={() => removeStage(activeIndex)}
+                    disabled={stages.length === 1}
+                    className="px-1 text-red-600 disabled:opacity-30 dark:text-red-400"
+                  >
+                    삭제
+                  </button>
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-neutral-500">설명</span>
+                  <input
+                    value={active.note}
+                    onChange={(event) => patch(activeIndex, { note: event.target.value })}
+                    className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  />
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-neutral-500">모델</span>
+                  <input
+                    list="gemini-models"
+                    value={active.model}
+                    onChange={(event) => patch(activeIndex, { model: event.target.value })}
+                    placeholder={`비우면 ${defaultModel}`}
+                    className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  />
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-neutral-500">API 키</span>
+                  <input
+                    type="password"
+                    value={active.apiKey}
+                    onChange={(event) => patch(activeIndex, { apiKey: event.target.value })}
+                    placeholder="비우면 기본 키"
+                    className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  />
+                  <span className="shrink-0 text-neutral-500">사용: {keySource}</span>
+                </label>
+
+                <div className="flex flex-wrap items-center gap-4 pt-1">
+                  <label className="flex items-center gap-2">
+                    <span className="text-neutral-500">출력</span>
+                    <select
+                      value={active.outputMode}
+                      onChange={(event) =>
+                        patch(activeIndex, { outputMode: event.target.value as OutputMode })
+                      }
+                      className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    >
+                      <option value="json">JSON</option>
+                      <option value="text">텍스트</option>
+                    </select>
+                  </label>
+
+                  <label className="flex items-center gap-2">
+                    <span className="text-neutral-500">검증</span>
+                    <select
+                      value={active.checkRule ?? ''}
+                      onChange={(event) =>
+                        patch(activeIndex, {
+                          checkRule: (event.target.value || null) as CheckRuleId | null,
+                        })
+                      }
+                      className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    >
+                      <option value="">없음 (형식만)</option>
+                      {CHECK_RULES.map((rule) => (
+                        <option key={rule.id} value={rule.id}>
+                          {rule.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <Toggle
+                    checked={active.useCommonPrompt}
+                    onChange={(next) => patch(activeIndex, { useCommonPrompt: next })}
+                    label="공통 프롬프트 포함"
+                  />
+                  <Toggle
+                    checked={active.forceJsonMimeType}
+                    onChange={(next) => patch(activeIndex, { forceJsonMimeType: next })}
+                    label="JSON 강제"
+                  />
+                </div>
+              </div>
+            </Panel>
+
+            <Panel
+              title="프롬프트"
+              onCopy={() => navigator.clipboard.writeText(active.prompt)}
+            >
+              <textarea
+                value={active.prompt}
+                onChange={(event) => patch(activeIndex, { prompt: event.target.value })}
+                spellCheck={false}
+                placeholder="이 단계의 system 프롬프트"
+                className="h-[380px] w-full resize-y bg-transparent p-3 outline-none"
+              />
+            </Panel>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <Panel
+              title="입력"
+              hint={active.note}
+              onCopy={() => navigator.clipboard.writeText(active.input)}
+            >
+              <textarea
+                value={active.input}
+                onChange={(event) => patch(activeIndex, { input: event.target.value })}
+                spellCheck={false}
+                className="h-[200px] w-full resize-y bg-transparent p-3 outline-none"
+              />
+            </Panel>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={run}
+                disabled={active.running}
+                className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+              >
+                {active.running ? '실행 중…' : '실행'}
+              </button>
+
+              {active.result?.ok && activeIndex + 1 < stages.length && (
+                <button
+                  onClick={sendToNext}
+                  className="rounded border border-neutral-400 px-3 py-2 dark:border-neutral-600"
+                >
+                  → {stages[activeIndex + 1].name} 입력으로
+                </button>
+              )}
+
+              {active.result && <Meta result={active.result} />}
+            </div>
+
+            {active.result && <ResultView result={active.result} />}
+          </section>
+        </div>
+      )}
+    </main>
   );
 }
 
-function StatusDot({ status }: { status: 'idle' | 'pass' | 'warn' | 'fail' | 'error' }) {
+function StatusDot({ result }: { result: RunResult | null }) {
+  const status = !result
+    ? 'idle'
+    : !result.ok
+      ? 'error'
+      : result.checks.some((check) => check.level === 'fail')
+        ? 'fail'
+        : result.checks.some((check) => check.level === 'warn')
+          ? 'warn'
+          : 'pass';
+
   const color = {
     idle: 'bg-neutral-300 dark:bg-neutral-700',
     pass: 'bg-emerald-500',
@@ -272,6 +489,7 @@ function StatusDot({ status }: { status: 'idle' | 'pass' | 'warn' | 'fail' | 'er
     fail: 'bg-red-500',
     error: 'bg-red-700',
   }[status];
+
   return <span className={`h-2 w-2 rounded-full ${color}`} />;
 }
 
@@ -300,7 +518,7 @@ function ResultView({ result }: { result: RunResult }) {
 
   return (
     <>
-      <Panel title="스키마 검증" hint="COM-002 기준">
+      <Panel title="검증">
         <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
           {result.checks.map((check, index) => (
             <CheckRow key={`${check.label}-${index}`} check={check} />
@@ -308,10 +526,7 @@ function ResultView({ result }: { result: RunResult }) {
         </ul>
       </Panel>
 
-      <Panel
-        title="출력 원문"
-        onCopy={() => navigator.clipboard.writeText(result.raw)}
-      >
+      <Panel title="출력" onCopy={() => navigator.clipboard.writeText(result.raw)}>
         <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap p-3">
           {result.raw}
         </pre>
@@ -332,9 +547,7 @@ function CheckRow({ check }: { check: Check }) {
     <li className="flex gap-3 px-3 py-1.5">
       <span className={`w-3 shrink-0 ${color}`}>{mark}</span>
       <span className="shrink-0">{check.label}</span>
-      {check.detail && (
-        <span className="text-neutral-500">{check.detail}</span>
-      )}
+      {check.detail && <span className="text-neutral-500">{check.detail}</span>}
     </li>
   );
 }
@@ -372,12 +585,10 @@ function Toggle({
   checked,
   onChange,
   label,
-  hint,
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   label: string;
-  hint?: string;
 }) {
   return (
     <label className="flex items-center gap-1.5">
@@ -387,7 +598,6 @@ function Toggle({
         onChange={(event) => onChange(event.target.checked)}
       />
       <span>{label}</span>
-      {hint && <span className="text-neutral-500">{hint}</span>}
     </label>
   );
 }

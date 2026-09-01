@@ -1,20 +1,21 @@
-import type { StageId } from '@/lib/ai/prompts/stages';
+import type { CheckRuleId } from '@/lib/ai/schema-check';
 
 /**
  * 한 단계의 출력을 다음 단계의 입력으로 옮긴다.
  *
- * docs/prompts/logic-auditor.md "실행 순서"를 화면에서 그대로 따라갈 수
- * 있게 하는 것이 목적이다. 다음 단계 입력을 통째로 갈아치우지 않고,
- * 이어져야 하는 필드만 덮어쓴다. 나머지는 화면에서 편집한 값을 유지한다.
+ * 검증 규칙이 붙은 단계에는 그 규칙에 맞는 매핑을 쓴다. 다음 단계 입력을
+ * 통째로 갈아치우지 않고, 이어져야 하는 필드만 덮어쓴다. 나머지는 화면에서
+ * 편집한 값을 유지한다.
  *
- * 실패하면 null을 돌려주고 화면은 "직접 옮기세요"로 안내한다.
+ * 규칙이 없는(범용) 단계는 매핑할 근거가 없으므로 null을 돌려준다.
+ * 화면은 그때 출력 원문을 그대로 다음 입력에 넣는다.
  */
 export function bridge(
-  from: StageId,
+  fromRule: CheckRuleId | null,
   output: unknown,
   nextInputJson: string,
 ): string | null {
-  if (!isRecord(output)) return null;
+  if (fromRule === null || !isRecord(output)) return null;
 
   let next: unknown;
   try {
@@ -24,8 +25,8 @@ export function bridge(
   }
   if (!isRecord(next)) return null;
 
-  switch (from) {
-    case '02':
+  switch (fromRule) {
+    case 'aipm-problem':
       return stringify({
         ...next,
         problem: {
@@ -40,7 +41,7 @@ export function bridge(
         },
       });
 
-    case '03': {
+    case 'aipm-message': {
       // Tutor의 이번 턴을 대화에 덧붙인다. Evaluator는 전체 대화를 본다.
       const conversation = Array.isArray(next.conversation) ? next.conversation : [];
       return stringify({
@@ -57,7 +58,7 @@ export function bridge(
       });
     }
 
-    case '04': {
+    case 'aipm-evaluation': {
       const problems = Array.isArray(next.today_problems) ? next.today_problems : [];
       const first = isRecord(problems[0]) ? problems[0] : {};
       return stringify({
@@ -69,15 +70,15 @@ export function bridge(
       });
     }
 
-    case '05':
+    case 'aipm-student-memory':
       return stringify({
         ...next,
         student_memory: output,
         next_learning_focus: output.next_learning_focus ?? null,
       });
 
-    case '06':
-      // 생성된 문제는 반드시 02의 검증을 다시 거친다.
+    case 'aipm-next-problem':
+      // 생성된 문제는 반드시 검증 단계를 다시 거친다.
       return stringify({
         ...next,
         problem_text: output.problem_text,

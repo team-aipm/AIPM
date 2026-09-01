@@ -10,9 +10,27 @@
  */
 
 import { Constants } from '@/types/database';
-import type { StageId } from '@/lib/ai/prompts/stages';
 
 const ENUMS = Constants.public.Enums;
+
+/**
+ * 단계에 붙일 수 있는 검증 규칙.
+ *
+ * 도구 자체는 범용이다. 아래 규칙은 이 프로젝트(AIPM) 전용이며 단계마다
+ * 선택해서 쓴다. 고르지 않으면 JSON 형식 검사만 한다.
+ */
+export const CHECK_RULES = [
+  { id: 'aipm-problem', label: 'AIPM · Problem (COM-002 §6)' },
+  { id: 'aipm-message', label: 'AIPM · Message (§7)' },
+  { id: 'aipm-evaluation', label: 'AIPM · Evaluation + LogicGap (§8·§9)' },
+  { id: 'aipm-student-memory', label: 'AIPM · StudentMemory (§10)' },
+  { id: 'aipm-next-problem', label: 'AIPM · 다음 문제' },
+] as const;
+
+export type CheckRuleId = (typeof CHECK_RULES)[number]['id'];
+
+/** 출력을 JSON으로 볼지, 그냥 텍스트로 볼지 */
+export type OutputMode = 'json' | 'text';
 
 export type CheckLevel = 'pass' | 'warn' | 'fail';
 
@@ -44,12 +62,25 @@ const fail = (label: string, detail?: string): Check => ({
   detail,
 });
 
-export function checkStageOutput(
-  stageId: StageId,
-  rawText: string,
-): CheckReport {
+export function checkOutput(options: {
+  outputMode: OutputMode;
+  rule: CheckRuleId | null;
+  raw: string;
+}): CheckReport {
+  const { outputMode, rule, raw } = options;
   const checks: Check[] = [];
-  const trimmed = rawText.trim();
+  const trimmed = raw.trim();
+
+  if (outputMode === 'text') {
+    return {
+      parsed: null,
+      checks: [
+        trimmed.length > 0
+          ? pass('출력 있음', `${trimmed.length}자`)
+          : fail('출력 비어 있음'),
+      ],
+    };
+  }
 
   // 공통 규칙: "지정된 JSON 객체 하나만 출력한다. 코드펜스를 붙이지 않는다."
   if (trimmed.startsWith('```')) {
@@ -76,24 +107,29 @@ export function checkStageOutput(
     return { parsed, checks };
   }
 
-  checks.push(...checkByStage(stageId, parsed));
+  checks.push(...checkByRule(rule, parsed));
   return { parsed, checks };
 }
 
-function checkByStage(stageId: StageId, value: Record<string, unknown>): Check[] {
-  switch (stageId) {
-    case '02':
+function checkByRule(
+  rule: CheckRuleId | null,
+  value: Record<string, unknown>,
+): Check[] {
+  switch (rule) {
+    case 'aipm-problem':
       return checkProblemAnalysis(value);
-    case '03':
+    case 'aipm-message':
       return checkTutor(value);
-    case '04':
+    case 'aipm-evaluation':
       return checkEvaluator(value);
-    case '05':
+    case 'aipm-student-memory':
       return checkStudentMemory(value);
-    case '06':
+    case 'aipm-next-problem':
       return checkNextProblem(value);
     default:
-      return [warn('단계별 검사 없음', '01은 원칙 문서라 출력 스키마가 없습니다')];
+      return [
+        pass('검증 규칙 없음', 'JSON 형식만 확인했습니다'),
+      ];
   }
 }
 

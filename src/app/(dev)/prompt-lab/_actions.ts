@@ -3,26 +3,34 @@
 import { notFound } from 'next/navigation';
 
 import { callGemini, hasGeminiApiKey } from '@/lib/gemini/client';
-import { checkStageOutput, type Check } from '@/lib/ai/schema-check';
-import { COMMON_RULES } from '@/lib/ai/prompts/common-rules';
-import type { StageId } from '@/lib/ai/prompts/stages';
+import {
+  checkOutput,
+  type Check,
+  type CheckRuleId,
+  type OutputMode,
+} from '@/lib/ai/schema-check';
 
 /**
  * prompt-lab 전용 실행 Action.
  *
  * DB를 건드리지 않으므로 lib/services를 거치지 않는다. Gemini 호출과
- * 스키마 검사만 한다.
+ * 출력 검사만 한다.
+ *
+ * apiKey는 화면에서 받아 그대로 Gemini로 보낸다. 저장하지 않고, 로그에
+ * 남기지 않고, 반환값에도 넣지 않는다.
  */
 
 export type RunInput = {
-  stageId: StageId;
   model: string;
-  /** 화면에서 편집한 프롬프트. COMMON_RULES가 앞에 붙는다. */
-  prompt: string;
-  /** 단계 입력 JSON */
+  /** systemInstruction 전문. 공통 프롬프트 결합은 화면에서 끝낸다 */
+  system: string;
+  /** 단계 입력 */
   input: string;
-  includeCommonRules: boolean;
+  outputMode: OutputMode;
+  checkRule: CheckRuleId | null;
   forceJsonMimeType: boolean;
+  /** 비우면 서버의 GEMINI_API_KEY를 쓴다 */
+  apiKey: string;
 };
 
 export type RunResult = {
@@ -50,27 +58,27 @@ export async function runStage(request: RunInput): Promise<RunResult> {
     raw: '',
   };
 
-  // 입력 JSON이 깨져 있으면 호출 전에 잡는다. 토큰을 낭비할 이유가 없다.
-  try {
-    JSON.parse(request.input);
-  } catch (cause) {
-    return {
-      ...empty,
-      ok: false,
-      error: `입력 JSON을 파싱하지 못했습니다.\n${String(cause)}`,
-      elapsed_ms: 0,
-    };
+  // 입력을 JSON으로 다루는 단계면 호출 전에 파싱해 본다. 토큰을 낭비할
+  // 이유가 없다. 텍스트 단계는 그대로 보낸다.
+  if (request.outputMode === 'json') {
+    try {
+      JSON.parse(request.input);
+    } catch (cause) {
+      return {
+        ...empty,
+        ok: false,
+        error: `입력 JSON을 파싱하지 못했습니다.\n${String(cause)}`,
+        elapsed_ms: 0,
+      };
+    }
   }
-
-  const system = request.includeCommonRules
-    ? `${COMMON_RULES}\n\n---\n\n${request.prompt}`
-    : request.prompt;
 
   const result = await callGemini({
     model: request.model,
-    system,
+    system: request.system,
     input: request.input,
     forceJsonMimeType: request.forceJsonMimeType,
+    apiKey: request.apiKey,
   });
 
   if (!result.ok) {
@@ -82,7 +90,11 @@ export async function runStage(request: RunInput): Promise<RunResult> {
     };
   }
 
-  const report = checkStageOutput(request.stageId, result.text);
+  const report = checkOutput({
+    outputMode: request.outputMode,
+    rule: request.checkRule,
+    raw: result.text,
+  });
 
   return {
     ok: true,
