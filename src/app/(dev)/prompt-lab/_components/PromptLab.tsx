@@ -189,6 +189,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   /** 이번 세션 누적 비용. 새로고침하면 0 부터 다시 센다 */
   const [spentUsd, setSpentUsd] = useState(0);
   const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
+  /** 결과를 보낼 단계. null 이면 기본값(다음 단계, 마지막이면 처음) */
+  const [sendTarget, setSendTarget] = useState<number | null>(null);
   const [, startTransition] = useTransition();
 
   // 저장 여부. 키는 따로 관리한다.
@@ -559,10 +561,16 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     patch(index, { images: [] });
   }
 
-  function sendToNext() {
-    const nextIndex = activeIndex + 1;
+  /**
+   * 결과를 다른 단계의 입력으로 보낸다.
+   *
+   * 다음 단계로만 갈 수 있으면 마지막 단계에서 막힌다. 학습은 한 바퀴를
+   * 돌아 다시 문제로 돌아오므로(06 → 02) 대상을 고를 수 있어야 한다.
+   */
+  function sendTo(nextIndex: number) {
     const raw = active?.result?.raw;
-    if (!raw || nextIndex >= stages.length) return;
+    if (!raw || nextIndex < 0 || nextIndex >= stages.length) return;
+    if (nextIndex === activeIndex) return;
 
     let mapped: string | null = null;
     try {
@@ -579,7 +587,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
     patch(nextIndex, { input: mapped ?? raw });
     setActiveIndex(nextIndex);
+    setSendTarget(null);
   }
+
+  /** 기본 대상. 다음 단계가 있으면 그쪽, 마지막이면 처음으로 돌아간다. */
+  const defaultTarget = activeIndex + 1 < stages.length ? activeIndex + 1 : 0;
 
   function exportConfig() {
     // API 키는 내보내지 않는다.
@@ -1279,15 +1291,33 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 {active.running ? '실행 중…' : '입력 그대로 실행'}
               </button>
 
-              {active.result?.ok && activeIndex + 1 < stages.length && (
-                <button
-                  onClick={sendToNext}
-                  className={`flex items-center gap-2 rounded border border-l-4 border-neutral-400 px-3 py-2 dark:border-neutral-600 ${
-                    stageColor(activeIndex + 1).border
+              {active.result?.ok && stages.length > 1 && (
+                <div
+                  className={`flex items-center gap-1 rounded border border-l-4 border-neutral-400 py-1 pl-2 dark:border-neutral-600 ${
+                    stageColor(sendTarget ?? defaultTarget).border
                   }`}
                 >
-                  → {stages[activeIndex + 1].name} 입력으로
-                </button>
+                  <span className="text-neutral-500">→</span>
+                  <select
+                    value={sendTarget ?? defaultTarget}
+                    onChange={(event) => setSendTarget(Number(event.target.value))}
+                    className="bg-transparent px-1 py-1 outline-none"
+                  >
+                    {stages.map((stage, index) =>
+                      index === activeIndex ? null : (
+                        <option key={stage.key} value={index}>
+                          {stage.name || '(이름 없음)'}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                  <button
+                    onClick={() => sendTo(sendTarget ?? defaultTarget)}
+                    className="px-2 py-1"
+                  >
+                    입력으로
+                  </button>
+                </div>
               )}
 
               {active.result && (
