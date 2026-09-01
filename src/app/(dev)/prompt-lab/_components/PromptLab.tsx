@@ -23,6 +23,15 @@ import { fetchModels, runStage, type RunResult } from '../_actions';
 import { bridge } from '../_bridge';
 import { stageColor } from '../_stage-colors';
 import {
+  costOf,
+  findPrice,
+  formatKrw,
+  formatUsd,
+  PRICING_PAGES,
+  SEED_PRICES,
+  type Price,
+} from '../_pricing';
+import {
   appendAiTurn,
   appendUserTurn,
   pickReply,
@@ -166,7 +175,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     anthropic: '',
   });
   const [commonPrompt, setCommonPrompt] = useState(COMMON_RULES);
-  const [panel, setPanel] = useState<'none' | 'common' | 'config'>('none');
+  const [panel, setPanel] = useState<'none' | 'common' | 'config' | 'price'>('none');
   const [configText, setConfigText] = useState('');
   const [draft, setDraft] = useState('');
   // 프로바이더에서 받아온 실제 모델 목록. 코드의 후보보다 이쪽이 정확하다.
@@ -174,6 +183,12 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [loadingModels, setLoadingModels] = useState(false);
   /** 마지막 응답을 말풍선에 넣지 않은 이유. 데이터 단계에서 정상이다 */
   const [replyNote, setReplyNote] = useState<string | null>(null);
+  // 모델 가격표. 화면에서 고치고 설정과 함께 저장한다.
+  const [prices, setPrices] = useState<Record<string, Price>>(SEED_PRICES);
+  const [krwRate, setKrwRate] = useState('1400');
+  /** 이번 세션 누적 비용. 새로고침하면 0 부터 다시 센다 */
+  const [spentUsd, setSpentUsd] = useState(0);
+  const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
   const [, startTransition] = useTransition();
 
   // 저장 여부. 키는 따로 관리한다.
@@ -194,7 +209,13 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         const parsed = JSON.parse(savedConfig) as {
           commonPrompt?: string;
           stages?: SavedStage[];
+          prices?: Record<string, Price>;
+          krwRate?: string;
         };
+        if (parsed.prices && typeof parsed.prices === 'object') {
+          setPrices(parsed.prices);
+        }
+        if (typeof parsed.krwRate === 'string') setKrwRate(parsed.krwRate);
         if (Array.isArray(parsed.stages) && parsed.stages.length > 0) {
           setStages(
             parsed.stages.map((item, index) =>
@@ -251,12 +272,17 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     try {
       window.localStorage.setItem(
         CONFIG_STORAGE_KEY,
-        JSON.stringify({ commonPrompt, stages: stages.map(toSaved) }),
+        JSON.stringify({
+          commonPrompt,
+          stages: stages.map(toSaved),
+          prices,
+          krwRate,
+        }),
       );
     } catch {
       // 용량 초과 등은 조용히 넘긴다. 화면 동작을 막지 않는다.
     }
-  }, [restored, remember, commonPrompt, stages]);
+  }, [restored, remember, commonPrompt, stages, prices, krwRate]);
 
   // 키 저장은 따로 켠다. 기본은 꺼짐이다.
   // 기본 키와 단계별 개별 키를 함께 저장한다. 단계마다 다른 프로젝트·
@@ -351,10 +377,12 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       ? `${commonPrompt}\n\n---\n\n${active.prompt}`
       : active.prompt;
 
+    const model = active.model.trim() || DEFAULT_MODEL[active.provider];
+
     startTransition(async () => {
       const result = await runStage({
         provider: active.provider,
-        model: active.model.trim() || DEFAULT_MODEL[active.provider],
+        model,
         system,
         input,
         inputMode: active.inputMode,
@@ -366,6 +394,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         images: active.images,
       });
       patch(index, { running: false, result });
+
+      // 이번 호출 비용을 누적한다. 가격을 모르면 더하지 않는다.
+      if (result.ok) {
+        const found = findPrice(prices, model);
+        const cost = costOf(found?.price ?? null, result.tokens);
+        if (cost !== null) setSpentUsd((prev) => prev + cost);
+      }
+
       onDone?.(result);
     });
   }
@@ -549,6 +585,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     // API 키는 내보내지 않는다.
     const payload = {
       commonPrompt,
+      prices,
+      krwRate,
       stages: stages.map((stage) => ({
         name: stage.name,
         note: stage.note,
@@ -584,8 +622,12 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     }
     const data = parsed as {
       commonPrompt?: string;
+      prices?: Record<string, Price>;
+      krwRate?: string;
       stages?: Partial<SavedStage>[];
     };
+    if (data.prices && typeof data.prices === 'object') setPrices(data.prices);
+    if (typeof data.krwRate === 'string') setKrwRate(data.krwRate);
     if (!Array.isArray(data.stages) || data.stages.length === 0) {
       window.alert('stages 배열이 없습니다.');
       return;
@@ -602,6 +644,10 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   }
 
   const accent = stageColor(activeIndex).border;
+  const activeModel = active
+    ? active.model.trim() || DEFAULT_MODEL[active.provider]
+    : '';
+  const activePrice = findPrice(prices, activeModel)?.price ?? null;
   const activeProvider = active?.provider ?? 'gemini';
   const providerLabel =
     PROVIDERS.find((entry) => entry.id === activeProvider)?.label ?? activeProvider;
@@ -670,6 +716,29 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             초기화
           </button>
 
+          <span className="text-neutral-500">
+            이번 세션{' '}
+            <b className="text-neutral-900 dark:text-neutral-100">
+              {formatUsd(spentUsd)}
+            </b>
+            {Number(krwRate) > 0 && ` ${formatKrw(spentUsd, Number(krwRate))}`}
+          </span>
+          {spentUsd > 0 && (
+            <button
+              onClick={() => setSpentUsd(0)}
+              className="text-neutral-500 hover:underline"
+            >
+              비용 초기화
+            </button>
+          )}
+
+          <button
+            onClick={() => setPanel(panel === 'price' ? 'none' : 'price')}
+            className="text-neutral-500 hover:underline"
+          >
+            가격표
+          </button>
+
           <button onClick={() => setPanel(panel === 'common' ? 'none' : 'common')} className="text-neutral-500 hover:underline">
             공통 프롬프트
           </button>
@@ -694,6 +763,128 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             spellCheck={false}
             className="h-72 w-full resize-y bg-transparent p-3 outline-none"
           />
+        </Panel>
+      )}
+
+      {panel === 'price' && (
+        <Panel
+          title="모델 가격표"
+          hint="100만 토큰당 USD. 각 사 요금 페이지에서 확인해 넣으세요"
+        >
+          <div className="p-3">
+            <p className="mb-3 text-[11px] text-neutral-500">
+              가격은 코드에 박아두지 않았습니다. 바뀌면 여기서 고치세요.
+              고친 값은 설정과 함께 저장됩니다. 가격이 없는 모델은 비용을
+              계산하지 않고 &ldquo;가격 미입력&rdquo;이라고만 표시합니다.
+              <br />
+              요금 페이지 — Gemini {PRICING_PAGES.gemini} · OpenAI{' '}
+              {PRICING_PAGES.openai} · Claude {PRICING_PAGES.anthropic}
+            </p>
+
+            <div className="mb-3 flex flex-wrap items-end gap-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-neutral-500">모델명</span>
+                <input
+                  value={priceDraft.model}
+                  onChange={(event) =>
+                    setPriceDraft({ ...priceDraft, model: event.target.value })
+                  }
+                  placeholder={activeModel || 'gemini-3.6-flash'}
+                  className="w-56 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-neutral-500">입력 $/1M</span>
+                <input
+                  value={priceDraft.input}
+                  onChange={(event) =>
+                    setPriceDraft({ ...priceDraft, input: event.target.value })
+                  }
+                  inputMode="decimal"
+                  className="w-24 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-neutral-500">출력 $/1M</span>
+                <input
+                  value={priceDraft.output}
+                  onChange={(event) =>
+                    setPriceDraft({ ...priceDraft, output: event.target.value })
+                  }
+                  inputMode="decimal"
+                  className="w-24 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                />
+              </label>
+              <button
+                onClick={() => {
+                  const name = priceDraft.model.trim();
+                  const input = Number(priceDraft.input);
+                  const output = Number(priceDraft.output);
+                  if (name === '') return;
+                  if (!Number.isFinite(input) || !Number.isFinite(output)) {
+                    window.alert('가격은 숫자로 넣어 주세요.');
+                    return;
+                  }
+                  setPrices((prev) => ({ ...prev, [name]: { input, output } }));
+                  setPriceDraft({ model: '', input: '', output: '' });
+                }}
+                className="rounded border border-neutral-400 px-3 py-1 dark:border-neutral-600"
+              >
+                추가 · 수정
+              </button>
+
+              <label className="ml-auto flex flex-col gap-1">
+                <span className="text-[11px] text-neutral-500">환율 USD→KRW</span>
+                <input
+                  value={krwRate}
+                  onChange={(event) => setKrwRate(event.target.value)}
+                  inputMode="decimal"
+                  placeholder="0이면 원화 표시 안 함"
+                  className="w-36 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                />
+              </label>
+            </div>
+
+            <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
+              {Object.entries(prices).length === 0 && (
+                <li className="py-2 text-neutral-500">등록된 가격이 없습니다.</li>
+              )}
+              {Object.entries(prices)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, price]) => (
+                  <li key={name} className="flex items-center gap-3 py-1.5">
+                    <span className="flex-1">{name}</span>
+                    <span className="text-neutral-500">
+                      in ${price.input} / out ${price.output}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setPriceDraft({
+                          model: name,
+                          input: String(price.input),
+                          output: String(price.output),
+                        })
+                      }
+                      className="text-neutral-500 hover:underline"
+                    >
+                      수정
+                    </button>
+                    <button
+                      onClick={() =>
+                        setPrices((prev) => {
+                          const next = { ...prev };
+                          delete next[name];
+                          return next;
+                        })
+                      }
+                      className="text-red-600 hover:underline dark:text-red-400"
+                    >
+                      삭제
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          </div>
         </Panel>
       )}
 
@@ -1094,7 +1285,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 </button>
               )}
 
-              {active.result && <Meta result={active.result} />}
+              {active.result && (
+                <Meta
+                  result={active.result}
+                  model={activeModel}
+                  price={activePrice}
+                  krwRate={Number(krwRate) || 0}
+                />
+              )}
             </div>
 
             <ResultView result={active.result} accent={accent} />
@@ -1291,7 +1489,19 @@ function StatusDot({ result }: { result: RunResult | null }) {
   return <span className={`h-2 w-2 rounded-full ${color}`} />;
 }
 
-function Meta({ result }: { result: RunResult }) {
+function Meta({
+  result,
+  model,
+  price,
+  krwRate,
+}: {
+  result: RunResult;
+  model: string;
+  price: Price | null;
+  krwRate: number;
+}) {
+  const cost = costOf(price, result.tokens);
+
   return (
     <span className="text-neutral-500">
       {result.elapsed_ms}ms
@@ -1299,6 +1509,21 @@ function Meta({ result }: { result: RunResult }) {
       {result.tokens.prompt !== null &&
         result.tokens.output !== null &&
         ` (in ${result.tokens.prompt} / out ${result.tokens.output})`}
+      {cost !== null ? (
+        <>
+          {' · '}
+          <b className="text-neutral-900 dark:text-neutral-100">
+            {formatUsd(cost)}
+          </b>
+          {krwRate > 0 && ` ${formatKrw(cost, krwRate)}`}
+        </>
+      ) : (
+        result.tokens.total !== null && (
+          <span className="text-amber-600 dark:text-amber-400">
+            {` · ${model} 가격 미입력`}
+          </span>
+        )
+      )}
     </span>
   );
 }
