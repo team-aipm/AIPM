@@ -16,6 +16,7 @@ import {
 } from '@/lib/ai/schema-check';
 import { runStage, type RunResult } from '../_actions';
 import { bridge } from '../_bridge';
+import { appendAiTurn, appendUserTurn, readTurns } from '../_chat';
 
 type Stage = StagePreset & {
   /** React key 전용. DOM에 넣지 않는다 */
@@ -63,6 +64,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [commonPrompt, setCommonPrompt] = useState(COMMON_RULES);
   const [panel, setPanel] = useState<'none' | 'common' | 'config'>('none');
   const [configText, setConfigText] = useState('');
+  const [draft, setDraft] = useState('');
   const [, startTransition] = useTransition();
 
   const active = stages[activeIndex];
@@ -96,7 +98,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     setActiveIndex(target);
   }
 
-  function run() {
+  /** 한 번 호출한다. onDone 으로 후처리를 넘긴다. */
+  function execute(input: string, onDone?: (result: RunResult) => void) {
     if (!active || active.running) return;
     const index = activeIndex;
     patch(index, { running: true, result: null });
@@ -109,13 +112,51 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       const result = await runStage({
         model: active.model.trim() || defaultModel,
         system,
-        input: active.input,
+        input,
         outputMode: active.outputMode,
         checkRule: active.checkRule,
         forceJsonMimeType: active.forceJsonMimeType,
         apiKey: active.apiKey.trim() || defaultApiKey.trim(),
       });
       patch(index, { running: false, result });
+      onDone?.(result);
+    });
+  }
+
+  function run() {
+    if (!active) return;
+    execute(active.input);
+  }
+
+  /** 채팅: 사용자 발화를 붙여 보내고, 응답을 다시 대화에 붙인다. */
+  function send() {
+    if (!active || active.running) return;
+    const text = draft.trim();
+    if (!text) return;
+
+    const withUser = appendUserTurn(active.input, active.historyKey, text);
+    if (withUser === null) {
+      window.alert('입력 JSON을 파싱하지 못해 대화를 이어갈 수 없습니다.');
+      return;
+    }
+
+    const index = activeIndex;
+    const historyKey = active.historyKey;
+    const replyKey = active.replyKey;
+
+    setDraft('');
+    patch(index, { input: withUser });
+
+    execute(withUser, (result) => {
+      if (!result.ok) return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(result.raw);
+      } catch {
+        parsed = result.raw;
+      }
+      const withAi = appendAiTurn(withUser, historyKey, replyKey, parsed);
+      if (withAi !== null) patch(index, { input: withAi });
     });
   }
 
@@ -410,7 +451,37 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                     onChange={(next) => patch(activeIndex, { forceJsonMimeType: next })}
                     label="JSON 강제"
                   />
+                  <Toggle
+                    checked={active.chat}
+                    onChange={(next) => patch(activeIndex, { chat: next })}
+                    label="대화형"
+                  />
                 </div>
+
+                {active.chat && (
+                  <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                    <label className="flex items-center gap-2">
+                      <span className="text-neutral-500">대화 배열 키</span>
+                      <input
+                        value={active.historyKey}
+                        onChange={(event) =>
+                          patch(activeIndex, { historyKey: event.target.value })
+                        }
+                        className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <span className="text-neutral-500">응답 필드</span>
+                      <input
+                        value={active.replyKey}
+                        onChange={(event) =>
+                          patch(activeIndex, { replyKey: event.target.value })
+                        }
+                        className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             </Panel>
 
@@ -429,9 +500,20 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           </section>
 
           <section className="flex flex-col gap-3">
+            {active.chat && (
+              <ChatPanel
+                turns={readTurns(active.input, active.historyKey)}
+                draft={draft}
+                onDraft={setDraft}
+                onSend={send}
+                running={active.running}
+                lastChecks={active.result?.ok ? active.result.checks : null}
+              />
+            )}
+
             <Panel
               title="입력"
-              hint={active.note}
+              hint={active.chat ? '대화창과 같은 값이다. 여기서 고쳐도 된다' : active.note}
               onCopy={() => navigator.clipboard.writeText(active.input)}
             >
               <textarea
@@ -448,7 +530,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 disabled={active.running}
                 className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
               >
-                {active.running ? '실행 중…' : '실행'}
+                {active.running ? '실행 중…' : active.chat ? '한 번만 실행' : '실행'}
               </button>
 
               {active.result?.ok && activeIndex + 1 < stages.length && (
@@ -468,6 +550,91 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         </div>
       )}
     </main>
+  );
+}
+
+function ChatPanel({
+  turns,
+  draft,
+  onDraft,
+  onSend,
+  running,
+  lastChecks,
+}: {
+  turns: { who: 'user' | 'ai' | 'other'; text: string }[];
+  draft: string;
+  onDraft: (next: string) => void;
+  onSend: () => void;
+  running: boolean;
+  lastChecks: Check[] | null;
+}) {
+  const failed = lastChecks?.filter((check) => check.level === 'fail') ?? [];
+
+  return (
+    <div className="rounded border border-neutral-200 dark:border-neutral-800">
+      <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-1.5 dark:border-neutral-800">
+        <span className="font-bold">대화</span>
+        <span className="text-neutral-500">{turns.length}턴</span>
+      </div>
+
+      <div className="flex max-h-[320px] flex-col gap-2 overflow-auto p-3">
+        {turns.length === 0 && (
+          <p className="text-neutral-500">
+            아직 대화가 없습니다. 아래에 학생 답변을 입력해 보세요.
+          </p>
+        )}
+
+        {turns.map((turn, index) => (
+          <div
+            key={index}
+            className={turn.who === 'user' ? 'flex justify-end' : 'flex justify-start'}
+          >
+            <div
+              className={`max-w-[80%] whitespace-pre-wrap rounded px-3 py-2 ${
+                turn.who === 'user'
+                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
+                  : 'bg-neutral-100 dark:bg-neutral-900'
+              }`}
+            >
+              <span className="mr-2 text-[11px] opacity-60">
+                {turn.who === 'user' ? '학생' : turn.who === 'ai' ? 'AI' : '?'}
+              </span>
+              {turn.text}
+            </div>
+          </div>
+        ))}
+
+        {running && <p className="text-neutral-500">응답을 기다리는 중…</p>}
+      </div>
+
+      {failed.length > 0 && (
+        <div className="border-t border-neutral-200 px-3 py-1.5 text-red-600 dark:border-neutral-800 dark:text-red-400">
+          마지막 응답 검증 실패 {failed.length}건 — {failed.map((c) => c.label).join(' · ')}
+        </div>
+      )}
+
+      <div className="flex gap-2 border-t border-neutral-200 p-2 dark:border-neutral-800">
+        <input
+          value={draft}
+          onChange={(event) => onDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              onSend();
+            }
+          }}
+          placeholder="학생이 되어 답해 보세요. Enter로 전송"
+          className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1.5 dark:border-neutral-700"
+        />
+        <button
+          onClick={onSend}
+          disabled={running || draft.trim() === ''}
+          className="rounded bg-neutral-900 px-4 py-1.5 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+        >
+          보내기
+        </button>
+      </div>
+    </div>
   );
 }
 

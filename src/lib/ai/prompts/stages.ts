@@ -26,6 +26,12 @@ export type StagePreset = {
   outputMode: OutputMode;
   /** 붙일 검증 규칙. null이면 JSON 형식만 본다 */
   checkRule: CheckRuleId | null;
+  /** 대화형 단계인가. 켜면 채팅창이 생기고 턴이 쌓인다 */
+  chat: boolean;
+  /** 대화 기록이 담긴 입력 JSON의 배열 키 */
+  historyKey: string;
+  /** 화면에 말풍선으로 보여줄 출력 필드 */
+  replyKey: string;
 };
 
 /** 단계를 새로 추가할 때의 빈 값 */
@@ -36,6 +42,9 @@ export const BLANK_STAGE: StagePreset = {
   sampleInput: '{\n  \n}',
   outputMode: 'json',
   checkRule: null,
+  chat: false,
+  historyKey: 'conversation',
+  replyKey: 'message',
 };
 
 const STAGE_01: StagePreset = {
@@ -43,6 +52,9 @@ const STAGE_01: StagePreset = {
   note: '전체 AI 원칙. 단독 실행하지 않고 다른 단계 앞에 붙여 쓴다.',
   outputMode: 'text',
   checkRule: null,
+  chat: false,
+  historyKey: 'conversation',
+  replyKey: 'message',
   sampleInput: '{\n  "note": "01은 원칙 문서다. 단독 호출 대상이 아니다."\n}',
   prompt: `## ROLE
 
@@ -82,6 +94,9 @@ const STAGE_02: StagePreset = {
   note: '문제 분석 · 정답 검증 · Answer Lock → Problem',
   outputMode: 'json',
   checkRule: 'aipm-problem',
+  chat: false,
+  historyKey: 'conversation',
+  replyKey: 'message',
   sampleInput: `{
   "problem_text": "24 ÷ 4 × 2",
   "problem_source": "text",
@@ -149,6 +164,9 @@ const STAGE_03: StagePreset = {
   note: 'MODE A/B · Adaptive Drill-down · Hint → Message',
   outputMode: 'json',
   checkRule: 'aipm-message',
+  chat: true,
+  historyKey: 'conversation',
+  replyKey: 'message',
   sampleInput: `{
   "problem": { "problem_text": "24 ÷ 4 × 2", "concept": "연산 순서", "difficulty": 2 },
   "answer_lock": {
@@ -161,12 +179,11 @@ const STAGE_03: StagePreset = {
   "grade": 5,
   "student_memory": { "weak_concepts": [], "recurring_logic_gaps": [] },
   "conversation": [
-    { "speaker": "ai", "message_text": "24 ÷ 4 × 2 는 얼마일까?", "turn_number": 1 },
-    { "speaker": "student", "message_text": "12야.", "turn_number": 2 }
+    { "speaker": "ai", "message_text": "24 ÷ 4 × 2 는 얼마일까?", "turn_number": 1 }
   ],
-  "turn_number": 3,
+  "turn_number": 2,
   "current_support_level": 0,
-  "drilldown_question_count": 1,
+  "drilldown_question_count": 0,
   "stage_status": {
     "judgment": "satisfied",
     "reasoning": "missing",
@@ -248,6 +265,9 @@ const STAGE_04: StagePreset = {
   note: '평가지표 + Logic Gap → Evaluation · LogicGap',
   outputMode: 'json',
   checkRule: 'aipm-evaluation',
+  chat: false,
+  historyKey: 'conversation',
+  replyKey: 'message',
   sampleInput: `{
   "problem": { "problem_id": "00000000-0000-0000-0000-000000000001", "concept": "연산 순서", "problem_status": "completed" },
   "answer_lock": { "verified_answer": "12", "verified_solution": "24 ÷ 4 = 6, 6 × 2 = 12" },
@@ -340,6 +360,9 @@ const STAGE_05: StagePreset = {
   note: '학생 1명당 1행인 장기 학습기억 갱신 → StudentMemory',
   outputMode: 'json',
   checkRule: 'aipm-student-memory',
+  chat: false,
+  historyKey: 'conversation',
+  replyKey: 'message',
   sampleInput: `{
   "previous_memory": {
     "current_level": 3,
@@ -427,6 +450,9 @@ const STAGE_06: StagePreset = {
   note: '난이도 판단 + 다음 문제 생성. 02의 검증을 다시 거친다',
   outputMode: 'json',
   checkRule: 'aipm-next-problem',
+  chat: false,
+  historyKey: 'conversation',
+  replyKey: 'message',
   sampleInput: `{
   "grade": 5,
   "curriculum_scope": "5학년 1학기",
