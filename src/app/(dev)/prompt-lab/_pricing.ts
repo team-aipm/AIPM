@@ -20,10 +20,12 @@ export type Price = {
  * 시작용 가격표. **확인하고 쓴다.**
  *
  * Gemini    ai.google.dev/gemini-api/docs/pricing 에서 2026-09-01 확인.
- *           텍스트 생성 모델만 넣었다. 임베딩·TTS·이미지 생성은 단가
- *           체계가 달라서(장당 과금 등) 제외했다.
+ * OpenAI    developers.openai.com/api/docs/pricing 에서 2026-09-01 확인.
+ *           Standard 요금이다. Batch·Flex·Fast 는 단가가 다르다.
  * Anthropic 2026-06-24 기준 확인값.
- * OpenAI    확인된 출처가 없어 비워 둔다.
+ *
+ * 셋 다 텍스트 생성 모델만 넣었다. 임베딩·TTS·이미지 생성은 단가 체계가
+ * 달라서(장당 과금 등) 제외했다.
  *
  * 가격이 없으면 계산하지 않고 화면이 "가격 미입력" 이라고 알린다.
  * 틀린 숫자를 그럴듯하게 보여주는 것보다 낫다.
@@ -32,7 +34,9 @@ export type Price = {
  *   · 오디오 입력은 텍스트보다 비싼 모델이 있다. 텍스트 단가를 넣었다.
  *   · 긴 문맥(200k 초과)에 다른 단가를 매기는 모델이 있다. 낮은 쪽을
  *     넣었으므로 긴 입력에서는 실제보다 적게 나온다.
- *   · Batch·Flex 는 50% 할인이라 해당하면 직접 고쳐야 한다.
+ *   · Batch·Flex 는 할인 요금이라 해당하면 직접 고쳐야 한다.
+ *   · OpenAI 의 cached input 은 반영하지 않는다. usage 에서 캐시 토큰을
+ *     따로 읽지 않으므로, 캐시가 걸리면 실제보다 많게 나온다.
  */
 export const SEED_PRICES: Record<string, Price> = {
   // Gemini · 텍스트 기준
@@ -48,6 +52,33 @@ export const SEED_PRICES: Record<string, Price> = {
   'gemini-2.5-flash': { input: 0.3, output: 2.5 },
   'gemini-2.5-flash-lite': { input: 0.1, output: 0.4 },
 
+  // OpenAI · Standard 요금. Batch·Flex·Fast 는 단가가 달라 직접 고쳐 쓴다
+  'gpt-5.6-sol': { input: 4, output: 20 },
+  'gpt-5.6-terra': { input: 2, output: 12 },
+  'gpt-5.6-luna': { input: 0.2, output: 1.2 },
+  'gpt-5.5-pro': { input: 30, output: 180 },
+  'gpt-5.5': { input: 5, output: 30 },
+  'gpt-5.4-pro': { input: 30, output: 180 },
+  'gpt-5.4-mini': { input: 0.75, output: 4.5 },
+  'gpt-5.4-nano': { input: 0.2, output: 1.25 },
+  'gpt-5.4': { input: 2.5, output: 15 },
+  'gpt-5.2-pro': { input: 21, output: 168 },
+  'gpt-5.2': { input: 1.75, output: 14 },
+  'gpt-5.1': { input: 1.25, output: 10 },
+  'gpt-5-pro': { input: 15, output: 120 },
+  'gpt-5-mini': { input: 0.25, output: 2 },
+  'gpt-5-nano': { input: 0.05, output: 0.4 },
+  'gpt-5': { input: 1.25, output: 10 },
+  'gpt-4.1-mini': { input: 0.4, output: 1.6 },
+  'gpt-4.1-nano': { input: 0.1, output: 0.4 },
+  'gpt-4.1': { input: 2, output: 8 },
+  'gpt-4o-mini': { input: 0.15, output: 0.6 },
+  'gpt-4o': { input: 2.5, output: 10 },
+  'o4-mini': { input: 1.1, output: 4.4 },
+  'o3-mini': { input: 1.1, output: 4.4 },
+  'o3-pro': { input: 20, output: 80 },
+  'o3': { input: 2, output: 8 },
+
   // Anthropic
   'claude-fable-5': { input: 10, output: 50 },
   'claude-opus-5': { input: 5, output: 25 },
@@ -62,7 +93,7 @@ export const SEED_PRICES: Record<string, Price> = {
 /** 요금 페이지. 화면에서 안내로 쓴다. */
 export const PRICING_PAGES: Record<string, string> = {
   gemini: 'ai.google.dev/gemini-api/docs/pricing',
-  openai: 'openai.com/api/pricing',
+  openai: 'developers.openai.com/api/docs/pricing',
   anthropic: 'anthropic.com/pricing',
 };
 
