@@ -62,7 +62,11 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
   const startedAt = Date.now();
   const elapsed = () => Date.now() - startedAt;
 
-  const apiKey = req.apiKey?.trim() || process.env.GEMINI_API_KEY?.trim();
+  // 배포본에서는 서버 키를 대신 써 주지 않는다. 잠금을 통과한 사람이라도
+  // 세팅 담당 개인의 키로 무제한 호출하게 두지 않는다.
+  const serverKey =
+    process.env.NODE_ENV === 'production' ? '' : process.env.GEMINI_API_KEY?.trim();
+  const apiKey = req.apiKey?.trim() || serverKey;
   if (!apiKey) {
     return {
       ok: false,
