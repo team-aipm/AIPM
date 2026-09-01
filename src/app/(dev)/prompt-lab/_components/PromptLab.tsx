@@ -361,14 +361,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         </div>
       </header>
 
-      {PROVIDERS.map((entry) => (
-        <datalist key={entry.id} id={`models-${entry.id}`}>
-          {MODEL_CANDIDATES[entry.id].map((model) => (
-            <option key={model} value={model} />
-          ))}
-        </datalist>
-      ))}
-
       {panel === 'common' && (
         <Panel
           title="공통 프롬프트"
@@ -468,7 +460,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 </label>
 
                 <label className="flex items-center gap-2">
-                  <span className="w-16 shrink-0 text-neutral-500">모델</span>
+                  <span className="w-16 shrink-0 text-neutral-500">프로바이더</span>
                   <select
                     value={active.provider}
                     onChange={(event) =>
@@ -482,14 +474,51 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       </option>
                     ))}
                   </select>
+                  <span className="text-[11px] text-neutral-500">
+                    어느 회사 API로 보낼지만 정합니다
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-neutral-500">모델</span>
                   <input
-                    list={`models-${active.provider}`}
                     value={active.model}
                     onChange={(event) => patch(activeIndex, { model: event.target.value })}
-                    placeholder={`직접 입력 가능. 비우면 ${DEFAULT_MODEL[active.provider]}`}
+                    placeholder={`모델명을 직접 입력. 비우면 ${DEFAULT_MODEL[active.provider]}`}
+                    spellCheck={false}
+                    autoComplete="off"
                     className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                   />
                 </label>
+
+                {/* 목록이 아니라 입력이 원칙이다. 아래는 자주 쓰는 이름을
+                    한 번에 채워 넣는 단축키일 뿐이고, 여기 없는 이름도
+                    그대로 입력해서 쓸 수 있다. */}
+                <div className="flex flex-wrap items-center gap-1.5 pl-[4.5rem]">
+                  {MODEL_CANDIDATES[active.provider].map((candidate) => (
+                    <button
+                      key={candidate}
+                      type="button"
+                      onClick={() => patch(activeIndex, { model: candidate })}
+                      className={`rounded border px-1.5 py-0.5 text-[11px] ${
+                        active.model === candidate
+                          ? 'border-neutral-900 dark:border-neutral-100'
+                          : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'
+                      }`}
+                    >
+                      {candidate}
+                    </button>
+                  ))}
+                  {active.model !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => patch(activeIndex, { model: '' })}
+                      className="px-1.5 py-0.5 text-[11px] text-neutral-500 hover:underline"
+                    >
+                      지우기
+                    </button>
+                  )}
+                </div>
 
                 <label className="flex items-center gap-2">
                   <span className="w-16 shrink-0 text-neutral-500">API 키</span>
