@@ -530,7 +530,13 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
     let mapped: string | null = null;
     try {
-      mapped = bridge(active.checkRule, JSON.parse(raw), stages[nextIndex].input);
+      // 출력만이 아니라 이 단계의 입력도 넘긴다. 대화 기록이 거기 있다.
+      mapped = bridge(
+        active.checkRule,
+        JSON.parse(raw),
+        active.input,
+        stages[nextIndex].input,
+      );
     } catch {
       mapped = null;
     }
