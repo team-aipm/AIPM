@@ -28,7 +28,12 @@ export type GeminiRequest = {
   system: string;
   /** 단계 입력. JSON 문자열을 그대로 넣는다. */
   input: string;
-  temperature?: number;
+  /** 비우면(null) 보내지 않는다. 모델 기본값이 쓰인다 */
+  temperature?: number | null;
+  /** 비우면(null) 보내지 않는다 */
+  maxOutputTokens?: number | null;
+  /** 비우면(null) 보내지 않는다 */
+  topP?: number | null;
   /**
    * true면 responseMimeType을 application/json으로 지정한다.
    * 프롬프트가 JSON만 내도록 강제되어 있는지 확인하려면 false로 두고
@@ -79,8 +84,14 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: req.system }] },
           contents: [{ role: 'user', parts: [{ text: req.input }] }],
+          // 지정하지 않은 값은 키 자체를 넣지 않는다. 빈 값을 0으로 바꿔
+          // 보내면 사용자가 의도하지 않은 설정이 적용된다.
           generationConfig: {
-            temperature: req.temperature ?? 0,
+            ...(req.temperature != null ? { temperature: req.temperature } : {}),
+            ...(req.maxOutputTokens != null
+              ? { maxOutputTokens: req.maxOutputTokens }
+              : {}),
+            ...(req.topP != null ? { topP: req.topP } : {}),
             ...(req.forceJsonMimeType
               ? { responseMimeType: 'application/json' }
               : {}),

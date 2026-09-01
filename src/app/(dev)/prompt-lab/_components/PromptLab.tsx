@@ -29,6 +29,10 @@ type Stage = StagePreset & {
   /** 비우면 기본 키 → 없으면 서버의 GEMINI_API_KEY */
   apiKey: string;
   input: string;
+  /** 화면 입력값. 빈 문자열이면 해당 파라미터를 보내지 않는다 */
+  temperature: string;
+  maxTokens: string;
+  topP: string;
   useCommonPrompt: boolean;
   forceJsonMimeType: boolean;
   result: RunResult | null;
@@ -49,6 +53,9 @@ function toStage(base: StagePreset, key: string): Stage {
     model: '',
     apiKey: '',
     input: base.sampleInput,
+    temperature: '',
+    maxTokens: '',
+    topP: '',
     useCommonPrompt: true,
     forceJsonMimeType: false,
     result: null,
@@ -110,9 +117,41 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     setActiveIndex(target);
   }
 
+  /**
+   * 빈 문자열이면 null(=보내지 않음). 숫자가 아니면 실행을 막는다.
+   * 사용자가 넣은 값을 조용히 무시하지 않기 위해서다.
+   */
+  function readParams(stage: Stage): {
+    temperature: number | null;
+    maxTokens: number | null;
+    topP: number | null;
+  } | null {
+    const parse = (raw: string, label: string): number | null | 'bad' => {
+      const text = raw.trim();
+      if (text === '') return null;
+      const value = Number(text);
+      if (!Number.isFinite(value)) {
+        window.alert(`${label} 값이 숫자가 아닙니다: ${text}`);
+        return 'bad';
+      }
+      return value;
+    };
+
+    const temperature = parse(stage.temperature, 'temperature');
+    if (temperature === 'bad') return null;
+    const maxTokens = parse(stage.maxTokens, 'max output tokens');
+    if (maxTokens === 'bad') return null;
+    const topP = parse(stage.topP, 'top_p');
+    if (topP === 'bad') return null;
+
+    return { temperature, maxTokens, topP };
+  }
+
   /** 한 번 호출한다. onDone 으로 후처리를 넘긴다. */
   function execute(input: string, onDone?: (result: RunResult) => void) {
     if (!active || active.running) return;
+    const params = readParams(active);
+    if (params === null) return;
     const index = activeIndex;
     patch(index, { running: true, result: null });
 
@@ -130,6 +169,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         checkRule: active.checkRule,
         forceJsonMimeType: active.forceJsonMimeType,
         apiKey: active.apiKey.trim() || defaultKeys[active.provider].trim(),
+        params,
       });
       patch(index, { running: false, result });
       onDone?.(result);
@@ -205,6 +245,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         replyKey: stage.replyKey,
         provider: stage.provider,
         model: stage.model,
+        temperature: stage.temperature,
+        maxTokens: stage.maxTokens,
+        topP: stage.topP,
         useCommonPrompt: stage.useCommonPrompt,
         forceJsonMimeType: stage.forceJsonMimeType,
       })),
@@ -229,6 +272,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         StagePreset & {
           provider: ProviderId;
           model: string;
+          temperature: string;
+          maxTokens: string;
+          topP: string;
           useCommonPrompt: boolean;
           forceJsonMimeType: boolean;
         }
@@ -246,6 +292,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         ...toStage({ ...BLANK_STAGE, ...item } as StagePreset, `s${keySeq + index}`),
         provider: item.provider ?? 'gemini',
         model: item.model ?? '',
+        temperature: item.temperature ?? '',
+        maxTokens: item.maxTokens ?? '',
+        topP: item.topP ?? '',
         useCommonPrompt: item.useCommonPrompt ?? true,
         forceJsonMimeType: item.forceJsonMimeType ?? false,
         input: item.sampleInput ?? BLANK_STAGE.sampleInput,
@@ -454,7 +503,47 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   <span className="shrink-0 text-neutral-500">사용: {keySource}</span>
                 </label>
 
-                <div className="flex flex-wrap items-center gap-4 pt-1">
+                <div className="flex flex-wrap items-center gap-3 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                  <span className="text-neutral-500">생성 파라미터</span>
+                  <ParamField
+                    label="temperature"
+                    value={active.temperature}
+                    onChange={(next) => patch(activeIndex, { temperature: next })}
+                  />
+                  <ParamField
+                    label="max output"
+                    value={active.maxTokens}
+                    onChange={(next) => patch(activeIndex, { maxTokens: next })}
+                    placeholder={active.provider === 'anthropic' ? '비우면 16000' : '미전송'}
+                  />
+                  <ParamField
+                    label="top_p"
+                    value={active.topP}
+                    onChange={(next) => patch(activeIndex, { topP: next })}
+                  />
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  비우면 그 항목을 <b>아예 보내지 않습니다</b>. 넣으면 그대로
+                  전송합니다.
+                  {active.provider === 'anthropic' && (
+                    <>
+                      {' '}
+                      Claude는 <b>max output이 필수</b>라 비우면 16000을 씁니다.
+                      현재 모델(Opus 5 · Sonnet 5 · Opus 4.7/4.8 · Fable 5)은{' '}
+                      <b>temperature·top_p를 받으면 400</b>입니다.
+                    </>
+                  )}
+                  {active.provider === 'openai' && (
+                    <>
+                      {' '}
+                      추론 계열 모델은 temperature를 거부합니다. max output은{' '}
+                      <code>max_completion_tokens</code>로 보냅니다.
+                    </>
+                  )}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                   <label className="flex items-center gap-2">
                     <span className="text-neutral-500">출력</span>
                     <select
@@ -804,6 +893,31 @@ function Panel({
       </div>
       {children}
     </div>
+  );
+}
+
+function ParamField({
+  label,
+  value,
+  onChange,
+  placeholder = '미전송',
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="flex items-center gap-1.5">
+      <span className="text-neutral-500">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        inputMode="decimal"
+        className="w-24 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+      />
+    </label>
   );
 }
 

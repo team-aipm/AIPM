@@ -20,6 +20,22 @@ import type { ProviderId } from './_provider-meta';
  * 새 환경변수 이름은 팀 합의 사항이다. (COM-005 §8)
  */
 
+/**
+ * 화면에서 입력한 생성 파라미터. **null이면 해당 키를 아예 보내지 않는다.**
+ *
+ * 빈 값을 0이나 기본값으로 바꿔 보내지 않는 것이 중요하다. 현재 Claude
+ * 모델과 OpenAI 추론 계열은 temperature 를 받으면 400 을 내므로, 사용자가
+ * 넣지 않은 값을 임의로 채우면 멀쩡한 요청이 실패한다.
+ *
+ * 반대로 사용자가 넣은 값은 그대로 보낸다. 모델이 거부하면 그 400 을
+ * 화면에 그대로 보여준다. 조용히 빼지 않는다.
+ */
+export type SamplingParams = {
+  temperature: number | null;
+  maxTokens: number | null;
+  topP: number | null;
+};
+
 export type ProviderRequest = {
   provider: ProviderId;
   model: string;
@@ -27,6 +43,7 @@ export type ProviderRequest = {
   input: string;
   apiKey: string;
   forceJson: boolean;
+  params: SamplingParams;
 };
 
 export type ProviderResult = GeminiResult;
@@ -40,6 +57,9 @@ export async function callProvider(req: ProviderRequest): Promise<ProviderResult
         input: req.input,
         apiKey: req.apiKey,
         forceJsonMimeType: req.forceJson,
+        temperature: req.params.temperature,
+        maxOutputTokens: req.params.maxTokens,
+        topP: req.params.topP,
       });
     case 'openai':
       return callOpenAi(req);
@@ -58,15 +78,20 @@ async function callOpenAi(req: ProviderRequest): Promise<ProviderResult> {
     return { ok: false, error: 'OpenAI API 키를 입력하세요.', elapsed_ms: elapsed() };
   }
 
-  // temperature·max_tokens 를 보내지 않는다. 추론 계열 모델은 temperature 를
-  // 거부하고 max_tokens 대신 max_completion_tokens 를 쓴다. 기본값에 맡기면
-  // 모델 계열이 바뀌어도 그대로 동작한다.
+  // 지정하지 않은 값은 보내지 않는다. 추론 계열 모델은 temperature 를
+  // 거부하므로, 비워 두면 어떤 모델에서도 동작한다.
+  // 출력 상한은 max_completion_tokens 로 보낸다. max_tokens 는 구식 이름이다.
   const body = {
     model: req.model.trim(),
     messages: [
       { role: 'system', content: req.system },
       { role: 'user', content: req.input },
     ],
+    ...(req.params.temperature != null ? { temperature: req.params.temperature } : {}),
+    ...(req.params.topP != null ? { top_p: req.params.topP } : {}),
+    ...(req.params.maxTokens != null
+      ? { max_completion_tokens: req.params.maxTokens }
+      : {}),
     ...(req.forceJson ? { response_format: { type: 'json_object' } } : {}),
   };
 
@@ -128,14 +153,17 @@ async function callAnthropic(req: ProviderRequest): Promise<ProviderResult> {
     return { ok: false, error: 'Claude API 키를 입력하세요.', elapsed_ms: elapsed() };
   }
 
-  // temperature 를 보내지 않는다. 현재 Claude 모델(Opus 5 · Sonnet 5 ·
-  // Opus 4.7/4.8 · Fable 5)은 sampling 파라미터를 받으면 400 을 낸다.
-  // max_tokens 는 필수다.
+  // max_tokens 는 필수라 비어 있으면 기본값을 넣는다.
+  // temperature·top_p 는 지정했을 때만 보낸다. 현재 Claude 모델
+  // (Opus 5 · Sonnet 5 · Opus 4.7/4.8 · Fable 5)은 sampling 파라미터를
+  // 받으면 400 을 내므로, 넣지 않은 값을 임의로 채우면 안 된다.
   const body = {
     model: req.model.trim(),
-    max_tokens: 16000,
+    max_tokens: req.params.maxTokens ?? 16000,
     system: req.system,
     messages: [{ role: 'user', content: req.input }],
+    ...(req.params.temperature != null ? { temperature: req.params.temperature } : {}),
+    ...(req.params.topP != null ? { top_p: req.params.topP } : {}),
   };
 
   const response = await safeFetch('https://api.anthropic.com/v1/messages', {
