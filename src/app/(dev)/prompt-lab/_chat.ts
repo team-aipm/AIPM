@@ -79,7 +79,50 @@ export function appendUserTurn(
 }
 
 /**
+ * 모델 출력에서 **말풍선에 보여줄 부분만** 골라낸다.
+ *
+ * 출력 전체와 학생에게 보이는 문장은 다르다. Tutor 는 message 만 학생이
+ * 보고 drilldown_stage·support_level·stage_status 는 내부 값이다.
+ * Evaluator 처럼 학생에게 보여줄 문장이 아예 없는 단계도 있다.
+ *
+ * replyKey 를 비우면 "채팅에 표시하지 않음" 이다.
+ */
+export type ReplyPick =
+  | { show: true; text: string }
+  | { show: false; reason: string };
+
+export function pickReply(
+  raw: string,
+  outputMode: 'json' | 'text',
+  replyKey: string,
+): ReplyPick {
+  // 출력이 평문이면 고를 필드가 없다. 그대로 보여준다.
+  if (outputMode === 'text') return { show: true, text: raw };
+
+  const key = replyKey.trim();
+  if (key === '') return { show: false, reason: '응답 필드가 비어 있어 표시하지 않습니다' };
+
+  const parsed = safeParse(raw);
+  // JSON 이어야 하는데 깨졌으면 원문을 보여준다. 디버깅에 필요하다.
+  if (!isRecord(parsed)) return { show: true, text: raw };
+
+  if (!(key in parsed)) {
+    return { show: false, reason: `출력에 ${key} 가 없습니다` };
+  }
+
+  const value = parsed[key];
+  return {
+    show: true,
+    text: typeof value === 'string' ? value : JSON.stringify(value, null, 2),
+  };
+}
+
+/**
  * 모델 응답을 대화 배열에 붙이고, 다음 턴을 위한 상태를 옮긴다.
+ *
+ * `replyText` 가 null 이면 말풍선을 만들지 않는다. 데이터만 만드는
+ * 단계에서 대화 기록을 오염시키지 않기 위해서다. 그래도 상태 이월은
+ * 그대로 한다.
  *
  * 상태를 옮기는 규칙은 하나다.
  * **출력의 최상위 키 중 입력에도 같은 이름이 있으면 덮어쓴다.**
@@ -92,24 +135,24 @@ export function appendAiTurn(
   historyKey: string,
   replyKey: string,
   output: unknown,
+  replyText: string | null,
 ): string | null {
   const root = safeParse(inputJson);
   if (!isRecord(root)) return null;
 
-  const reply = isRecord(output)
-    ? typeof output[replyKey] === 'string'
-      ? (output[replyKey] as string)
-      : JSON.stringify(output[replyKey] ?? output)
-    : String(output);
+  let next: Record<string, unknown> = { ...root };
 
-  const history = Array.isArray(root[historyKey]) ? [...(root[historyKey] as unknown[])] : [];
-  history.push({
-    speaker: 'ai',
-    message_text: reply,
-    turn_number: history.length + 1,
-  });
-
-  let next: Record<string, unknown> = { ...root, [historyKey]: history };
+  if (replyText !== null) {
+    const history = Array.isArray(root[historyKey])
+      ? [...(root[historyKey] as unknown[])]
+      : [];
+    history.push({
+      speaker: 'ai',
+      message_text: replyText,
+      turn_number: history.length + 1,
+    });
+    next = { ...next, [historyKey]: history };
+  }
 
   if (isRecord(output)) {
     for (const [key, value] of Object.entries(output)) {
@@ -117,7 +160,10 @@ export function appendAiTurn(
     }
   }
 
-  next = syncTurnNumber(next, history.length);
+  const historyLength = Array.isArray(next[historyKey])
+    ? (next[historyKey] as unknown[]).length
+    : 0;
+  next = syncTurnNumber(next, historyLength);
   return stringify(next);
 }
 

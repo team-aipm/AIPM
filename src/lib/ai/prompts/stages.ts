@@ -49,9 +49,10 @@ export const BLANK_STAGE: StagePreset = {
   name: '새 단계',
   note: '',
   prompt: '',
-  sampleInput: '{\n  \n}',
-  inputMode: 'json',
-  outputMode: 'json',
+  sampleInput: '',
+  // 새 단계는 평문으로 시작한다. 빈 단계에 JSON 을 강요할 이유가 없다.
+  inputMode: 'text',
+  outputMode: 'text',
   checkRule: null,
   historyKey: 'conversation',
   replyKey: 'message',
@@ -64,7 +65,7 @@ const STAGE_00: StagePreset = {
   outputMode: 'json',
   checkRule: 'aipm-ocr',
   historyKey: 'conversation',
-  replyKey: 'message',
+  replyKey: 'problem_text',
   sampleInput: `{
   "grade": 5,
   "note": "아래 '이미지 붙이기'로 문제 사진을 붙이고 실행하세요."
@@ -112,7 +113,7 @@ const STAGE_01: StagePreset = {
   outputMode: 'text',
   checkRule: null,
   historyKey: 'conversation',
-  replyKey: 'message',
+  replyKey: '',
   sampleInput: '{\n  "note": "01은 원칙 문서다. 단독 호출 대상이 아니다."\n}',
   prompt: `## ROLE
 
@@ -154,7 +155,7 @@ const STAGE_02: StagePreset = {
   outputMode: 'json',
   checkRule: 'aipm-problem',
   historyKey: 'conversation',
-  replyKey: 'message',
+  replyKey: '',
   sampleInput: `{
   "problem_text": "24 ÷ 4 × 2",
   "problem_source": "text",
@@ -325,7 +326,7 @@ const STAGE_04: StagePreset = {
   outputMode: 'json',
   checkRule: 'aipm-evaluation',
   historyKey: 'conversation',
-  replyKey: 'message',
+  replyKey: '',
   sampleInput: `{
   "problem": { "problem_id": "00000000-0000-0000-0000-000000000001", "concept": "연산 순서", "problem_status": "completed" },
   "answer_lock": { "verified_answer": "12", "verified_solution": "24 ÷ 4 = 6, 6 × 2 = 12" },
@@ -420,7 +421,7 @@ const STAGE_05: StagePreset = {
   outputMode: 'json',
   checkRule: 'aipm-student-memory',
   historyKey: 'conversation',
-  replyKey: 'message',
+  replyKey: '',
   sampleInput: `{
   "previous_memory": {
     "current_level": 3,
@@ -510,7 +511,7 @@ const STAGE_06: StagePreset = {
   outputMode: 'json',
   checkRule: 'aipm-next-problem',
   historyKey: 'conversation',
-  replyKey: 'message',
+  replyKey: 'problem_text',
   sampleInput: `{
   "grade": 5,
   "curriculum_scope": "5학년 1학기",

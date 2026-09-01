@@ -21,7 +21,13 @@ import {
 } from '@/lib/ai/schema-check';
 import { fetchModels, runStage, type RunResult } from '../_actions';
 import { bridge } from '../_bridge';
-import { appendAiTurn, appendUserTurn, readTurns, type Turn } from '../_chat';
+import {
+  appendAiTurn,
+  appendUserTurn,
+  pickReply,
+  readTurns,
+  type Turn,
+} from '../_chat';
 
 type Stage = StagePreset & {
   /** React key 전용. DOM에 넣지 않는다 */
@@ -165,6 +171,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   // 프로바이더에서 받아온 실제 모델 목록. 코드의 후보보다 이쪽이 정확하다.
   const [liveModels, setLiveModels] = useState<Partial<Record<ProviderId, string[]>>>({});
   const [loadingModels, setLoadingModels] = useState(false);
+  /** 마지막 응답을 말풍선에 넣지 않은 이유. 데이터 단계에서 정상이다 */
+  const [replyNote, setReplyNote] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   // 저장 여부. 키는 따로 관리한다.
@@ -438,6 +446,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
     const index = activeIndex;
     const names = active.images.map((image) => image.name);
+    setReplyNote(null);
 
     if (active.inputMode === 'text') {
       setDraft('');
@@ -448,6 +457,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
       execute(text, (result) => {
         if (!result.ok) return;
+        const pick = pickReply(result.raw, active.outputMode, active.replyKey);
+        setReplyNote(pick.show ? null : pick.reason);
+        if (!pick.show) return;
         setStages((prev) =>
           prev.map((stage, i) =>
             i === index
@@ -455,7 +467,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   ...stage,
                   transcript: [
                     ...stage.transcript,
-                    { who: 'ai', text: result.raw, attachments: [] },
+                    { who: 'ai', text: pick.text, attachments: [] },
                   ],
                 }
               : stage,
@@ -481,6 +493,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     setDraft('');
     patch(index, { input: withUser });
 
+    const outputMode = active.outputMode;
+
     execute(withUser, (result) => {
       if (!result.ok) return;
       let parsed: unknown;
@@ -489,7 +503,18 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       } catch {
         parsed = result.raw;
       }
-      const withAi = appendAiTurn(withUser, historyKey, replyKey, parsed);
+
+      const pick = pickReply(result.raw, outputMode, replyKey);
+      setReplyNote(pick.show ? null : pick.reason);
+
+      // 말풍선을 만들지 않아도 stage_status 같은 상태 이월은 그대로 한다.
+      const withAi = appendAiTurn(
+        withUser,
+        historyKey,
+        replyKey,
+        parsed,
+        pick.show ? pick.text : null,
+      );
       if (withAi !== null) patch(index, { input: withAi });
     });
 
@@ -934,8 +959,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   />
                 </div>
 
-                {active.inputMode === 'json' && (
-                  <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                  {active.inputMode === 'json' && (
                     <label className="flex items-center gap-2">
                       <span className="text-neutral-500">대화 배열 키</span>
                       <input
@@ -946,18 +971,27 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                         className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                       />
                     </label>
-                    <label className="flex items-center gap-2">
-                      <span className="text-neutral-500">응답 필드</span>
-                      <input
-                        value={active.replyKey}
-                        onChange={(event) =>
-                          patch(activeIndex, { replyKey: event.target.value })
-                        }
-                        className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-                      />
-                    </label>
-                  </div>
-                )}
+                  )}
+                  <label className="flex items-center gap-2">
+                    <span className="text-neutral-500">응답 필드</span>
+                    <input
+                      value={active.replyKey}
+                      onChange={(event) =>
+                        patch(activeIndex, { replyKey: event.target.value })
+                      }
+                      placeholder="비우면 표시 안 함"
+                      className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                  </label>
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  <b>응답 필드</b>는 출력 중 <b>말풍선에 보여줄 부분</b>입니다.
+                  나머지는 대화창에 나오지 않고 답변 패널에서만 봅니다.
+                  {active.replyKey.trim() === ''
+                    ? ' 지금은 비어 있어 아무것도 표시하지 않습니다. 데이터만 만드는 단계에 맞습니다.'
+                    : ' 학생에게 보여줄 문장이 없는 단계(평가·기억 저장 등)는 비워 두세요.'}
+                </p>
               </div>
             </Panel>
 
@@ -998,6 +1032,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   ? `입력 JSON 의 ${active.historyKey} 에 쌓입니다`
                   : '보낸 글이 곧 입력이 됩니다. 기록은 화면에만 남습니다'
               }
+              note={replyNote}
               onClear={() =>
                 patch(activeIndex, {
                   transcript: [],
@@ -1065,6 +1100,7 @@ function ChatPanel({
   onAttach,
   onRemoveImage,
   hint,
+  note,
   onClear,
 }: {
   turns: { who: 'user' | 'ai' | 'other'; text: string; attachments: string[] }[];
@@ -1077,6 +1113,7 @@ function ChatPanel({
   onAttach: (files: FileList | null) => void;
   onRemoveImage: (index: number) => void;
   hint: string;
+  note: string | null;
   onClear: () => void;
 }) {
   const failed = lastChecks?.filter((check) => check.level === 'fail') ?? [];
@@ -1132,6 +1169,13 @@ function ChatPanel({
 
         {running && <p className="text-neutral-500">응답을 기다리는 중…</p>}
       </div>
+
+      {note && (
+        <div className="border-t border-neutral-200 px-3 py-1.5 text-[11px] text-neutral-500 dark:border-neutral-800">
+          마지막 응답을 말풍선에 넣지 않았습니다 — {note}. 답변 패널에서 전체
+          출력을 볼 수 있습니다.
+        </div>
+      )}
 
       {failed.length > 0 && (
         <div className="border-t border-neutral-200 px-3 py-1.5 text-red-600 dark:border-neutral-800 dark:text-red-400">
