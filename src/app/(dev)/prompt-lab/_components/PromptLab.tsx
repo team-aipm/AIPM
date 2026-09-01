@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 
 import { BLANK_STAGE, type StagePreset } from '@/lib/ai/prompts/stages';
 import { COMMON_RULES } from '@/lib/ai/prompts/common-rules';
@@ -69,6 +69,65 @@ function toStage(base: StagePreset, key: string): Stage {
   };
 }
 
+
+/**
+ * 브라우저 저장 키.
+ *
+ * 이 도구는 개발 서버에서만 열린다. 저장 위치도 이 브라우저 안이며
+ * 서버로 올라가지 않는다. 설정과 키를 나눠 둔 이유는, 설정은 켜 두고
+ * 키는 저장하지 않는 조합을 기본으로 하기 위해서다.
+ */
+const CONFIG_STORAGE_KEY = 'prompt-lab:config:v1';
+const KEY_STORAGE_KEY = 'prompt-lab:keys:v1';
+
+/** 저장되는 단계. 실행 결과·이미지·단계별 키는 저장하지 않는다. */
+type SavedStage = StagePreset & {
+  provider: ProviderId;
+  model: string;
+  temperature: string;
+  maxTokens: string;
+  topP: string;
+  useCommonPrompt: boolean;
+  forceJsonMimeType: boolean;
+};
+
+function toSaved(stage: Stage): SavedStage {
+  return {
+    name: stage.name,
+    note: stage.note,
+    prompt: stage.prompt,
+    sampleInput: stage.input,
+    inputMode: stage.inputMode,
+    outputMode: stage.outputMode,
+    checkRule: stage.checkRule,
+    chat: stage.chat,
+    historyKey: stage.historyKey,
+    replyKey: stage.replyKey,
+    provider: stage.provider,
+    model: stage.model,
+    temperature: stage.temperature,
+    maxTokens: stage.maxTokens,
+    topP: stage.topP,
+    useCommonPrompt: stage.useCommonPrompt,
+    forceJsonMimeType: stage.forceJsonMimeType,
+  };
+}
+
+function fromSaved(item: Partial<SavedStage>, key: string): Stage {
+  const base = { ...BLANK_STAGE, ...item } as StagePreset;
+  return {
+    ...toStage(base, key),
+    provider: item.provider ?? 'gemini',
+    model: item.model ?? '',
+    temperature: item.temperature ?? '',
+    maxTokens: item.maxTokens ?? '',
+    topP: item.topP ?? '',
+    useCommonPrompt: item.useCommonPrompt ?? true,
+    forceJsonMimeType: item.forceJsonMimeType ?? false,
+    input: item.sampleInput ?? '',
+  };
+}
+
 export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [stages, setStages] = useState<Stage[]>(() =>
     preset.map((base, index) => toStage(base, `s${index}`)),
@@ -91,6 +150,88 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [configText, setConfigText] = useState('');
   const [draft, setDraft] = useState('');
   const [, startTransition] = useTransition();
+
+  // 저장 여부. 키는 따로 관리한다.
+  const [remember, setRemember] = useState(false);
+  const [rememberKeys, setRememberKeys] = useState(false);
+  const [restored, setRestored] = useState(false);
+
+  // 최초 1회 복원. SSR 결과와 어긋나지 않도록 mount 후에 읽는다.
+  //
+  // localStorage 는 React 밖의 저장소이므로 mount 시점에 한 번 읽어 상태로
+  // 옮기는 수밖에 없다. 의존성이 빈 배열이라 재실행되지 않고, 연쇄 렌더를
+  // 만들지 않는다.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    try {
+      const savedConfig = window.localStorage.getItem(CONFIG_STORAGE_KEY);
+      if (savedConfig) {
+        const parsed = JSON.parse(savedConfig) as {
+          commonPrompt?: string;
+          stages?: SavedStage[];
+        };
+        if (Array.isArray(parsed.stages) && parsed.stages.length > 0) {
+          setStages(
+            parsed.stages.map((item, index) =>
+              fromSaved(item, `r${index}`),
+            ),
+          );
+          setKeySeq(parsed.stages.length);
+          setActiveIndex(0);
+        }
+        if (typeof parsed.commonPrompt === 'string') {
+          setCommonPrompt(parsed.commonPrompt);
+        }
+        setRemember(true);
+      }
+
+      const savedKeys = window.localStorage.getItem(KEY_STORAGE_KEY);
+      if (savedKeys) {
+        const parsed = JSON.parse(savedKeys) as Partial<Record<ProviderId, string>>;
+        setDefaultKeys({
+          gemini: parsed.gemini ?? '',
+          openai: parsed.openai ?? '',
+          anthropic: parsed.anthropic ?? '',
+        });
+        setRememberKeys(true);
+      }
+    } catch {
+      // 저장값이 깨졌으면 무시하고 기본값으로 연다.
+    }
+    setRestored(true);
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // 설정 저장. 키는 포함하지 않는다.
+  useEffect(() => {
+    if (!restored) return;
+    if (!remember) {
+      window.localStorage.removeItem(CONFIG_STORAGE_KEY);
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        CONFIG_STORAGE_KEY,
+        JSON.stringify({ commonPrompt, stages: stages.map(toSaved) }),
+      );
+    } catch {
+      // 용량 초과 등은 조용히 넘긴다. 화면 동작을 막지 않는다.
+    }
+  }, [restored, remember, commonPrompt, stages]);
+
+  // 키 저장은 따로 켠다. 기본은 꺼짐이다.
+  useEffect(() => {
+    if (!restored) return;
+    if (!rememberKeys) {
+      window.localStorage.removeItem(KEY_STORAGE_KEY);
+      return;
+    }
+    try {
+      window.localStorage.setItem(KEY_STORAGE_KEY, JSON.stringify(defaultKeys));
+    } catch {
+      // 무시
+    }
+  }, [restored, rememberKeys, defaultKeys]);
 
   const active = stages[activeIndex];
 
@@ -171,6 +312,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         model: active.model.trim() || DEFAULT_MODEL[active.provider],
         system,
         input,
+        inputMode: active.inputMode,
         outputMode: active.outputMode,
         checkRule: active.checkRule,
         forceJsonMimeType: active.forceJsonMimeType,
@@ -295,6 +437,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         note: stage.note,
         prompt: stage.prompt,
         sampleInput: stage.input,
+        inputMode: stage.inputMode,
         outputMode: stage.outputMode,
         checkRule: stage.checkRule,
         chat: stage.chat,
@@ -325,17 +468,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     }
     const data = parsed as {
       commonPrompt?: string;
-      stages?: Partial<
-        StagePreset & {
-          provider: ProviderId;
-          model: string;
-          temperature: string;
-          maxTokens: string;
-          topP: string;
-          useCommonPrompt: boolean;
-          forceJsonMimeType: boolean;
-        }
-      >[];
+      stages?: Partial<SavedStage>[];
     };
     if (!Array.isArray(data.stages) || data.stages.length === 0) {
       window.alert('stages 배열이 없습니다.');
@@ -345,17 +478,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     if (typeof data.commonPrompt === 'string') setCommonPrompt(data.commonPrompt);
 
     setStages(
-      data.stages.map((item, index) => ({
-        ...toStage({ ...BLANK_STAGE, ...item } as StagePreset, `s${keySeq + index}`),
-        provider: item.provider ?? 'gemini',
-        model: item.model ?? '',
-        temperature: item.temperature ?? '',
-        maxTokens: item.maxTokens ?? '',
-        topP: item.topP ?? '',
-        useCommonPrompt: item.useCommonPrompt ?? true,
-        forceJsonMimeType: item.forceJsonMimeType ?? false,
-        input: item.sampleInput ?? BLANK_STAGE.sampleInput,
-      })),
+      data.stages.map((item, index) => fromSaved(item, `s${keySeq + index}`)),
     );
     setKeySeq((prev) => prev + data.stages!.length);
     setActiveIndex(0);
@@ -405,6 +528,23 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               className="w-56 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
             />
           </label>
+
+          <Toggle checked={remember} onChange={setRemember} label="설정 저장" />
+          <Toggle checked={rememberKeys} onChange={setRememberKeys} label="키 저장" />
+
+          <button
+            onClick={() => {
+              if (!window.confirm('단계를 기본 프리셋으로 되돌립니다. 계속할까요?'))
+                return;
+              setStages(preset.map((base, index) => toStage(base, `p${index}`)));
+              setKeySeq(preset.length);
+              setActiveIndex(0);
+              setCommonPrompt(COMMON_RULES);
+            }}
+            className="text-neutral-500 hover:underline"
+          >
+            초기화
+          </button>
 
           <button onClick={() => setPanel(panel === 'common' ? 'none' : 'common')} className="text-neutral-500 hover:underline">
             공통 프롬프트
@@ -631,6 +771,21 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
                 <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                   <label className="flex items-center gap-2">
+                    <span className="text-neutral-500">입력</span>
+                    <select
+                      value={active.inputMode}
+                      disabled={active.chat}
+                      onChange={(event) =>
+                        patch(activeIndex, { inputMode: event.target.value as OutputMode })
+                      }
+                      className="rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:opacity-50 dark:border-neutral-700"
+                    >
+                      <option value="json">JSON</option>
+                      <option value="text">평문</option>
+                    </select>
+                  </label>
+
+                  <label className="flex items-center gap-2">
                     <span className="text-neutral-500">출력</span>
                     <select
                       value={active.outputMode}
@@ -739,7 +894,13 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
             <Panel
               title="입력"
-              hint={active.chat ? '대화창과 같은 값이다. 여기서 고쳐도 된다' : active.note}
+              hint={
+                active.chat
+                  ? '대화창과 같은 값이다. 여기서 고쳐도 된다'
+                  : active.inputMode === 'json'
+                    ? 'JSON 으로 검사한다. 평문을 넣으려면 위에서 입력을 평문으로 바꾼다'
+                    : '평문 그대로 보낸다'
+              }
               onCopy={() => navigator.clipboard.writeText(active.input)}
             >
               <textarea

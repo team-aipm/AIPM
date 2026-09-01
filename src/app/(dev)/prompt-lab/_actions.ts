@@ -29,6 +29,7 @@ export type RunInput = {
   system: string;
   /** 단계 입력 */
   input: string;
+  inputMode: OutputMode;
   outputMode: OutputMode;
   checkRule: CheckRuleId | null;
   forceJsonMimeType: boolean;
@@ -64,8 +65,10 @@ export async function runStage(request: RunInput): Promise<RunResult> {
   };
 
   // 입력을 JSON으로 다루는 단계면 호출 전에 파싱해 본다. 토큰을 낭비할
-  // 이유가 없다. 텍스트 단계는 그대로 보낸다.
-  if (request.outputMode === 'json') {
+  // 이유가 없다. 평문 입력 단계는 그대로 보낸다.
+  //
+  // 입력 형식은 출력 형식과 별개다. 평문을 넣고 JSON을 받는 단계가 있다.
+  if (request.inputMode === 'json') {
     try {
       JSON.parse(request.input);
     } catch (cause) {

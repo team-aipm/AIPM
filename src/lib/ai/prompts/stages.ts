@@ -23,6 +23,12 @@ export type StagePreset = {
   /** 입력 칸 초기값 */
   sampleInput: string;
   /** 출력을 JSON으로 볼지 텍스트로 볼지 */
+  /**
+   * 입력을 JSON으로 다룰지 평문으로 다룰지.
+   * 출력 형식과 별개다. 평문을 넣고 JSON을 받는 단계가 있다.
+   * 대화형 단계는 대화 배열이 입력 JSON 안에 있으므로 json 이어야 한다.
+   */
+  inputMode: OutputMode;
   outputMode: OutputMode;
   /** 붙일 검증 규칙. null이면 JSON 형식만 본다 */
   checkRule: CheckRuleId | null;
@@ -42,6 +48,7 @@ export const BLANK_STAGE: StagePreset = {
   note: '',
   prompt: '',
   sampleInput: '{\n  \n}',
+  inputMode: 'json',
   outputMode: 'json',
   checkRule: null,
   chat: false,
@@ -52,6 +59,7 @@ export const BLANK_STAGE: StagePreset = {
 const STAGE_00: StagePreset = {
   name: '00 OCR (사진)',
   note: '이미지 → 문제 텍스트. 학생 확인 후 02로 (COM-002 §6)',
+  inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-ocr',
   chat: false,
@@ -100,6 +108,7 @@ const STAGE_00: StagePreset = {
 const STAGE_01: StagePreset = {
   name: '01 SYSTEM',
   note: '전체 AI 원칙. 단독 실행하지 않고 다른 단계 앞에 붙여 쓴다.',
+  inputMode: 'json',
   outputMode: 'text',
   checkRule: null,
   chat: false,
@@ -142,6 +151,7 @@ judgment · reasoning · rule · transfer · reflection`,
 const STAGE_02: StagePreset = {
   name: '02 PROBLEM ANALYSIS',
   note: '문제 분석 · 정답 검증 · Answer Lock → Problem',
+  inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-problem',
   chat: false,
@@ -212,6 +222,7 @@ difficulty는 1~5다. 3이 학년 중간 난이도다.
 const STAGE_03: StagePreset = {
   name: '03 TUTOR',
   note: 'MODE A/B · Adaptive Drill-down · Hint → Message',
+  inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-message',
   chat: true,
@@ -313,6 +324,7 @@ action: wait_student · complete · early_complete · needs_review · escalate`,
 const STAGE_04: StagePreset = {
   name: '04 EVALUATOR',
   note: '평가지표 + Logic Gap → Evaluation · LogicGap',
+  inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-evaluation',
   chat: false,
@@ -408,6 +420,7 @@ description은 학생 발화에 근거한 한 문장이다.
 const STAGE_05: StagePreset = {
   name: '05 STUDENT MEMORY',
   note: '학생 1명당 1행인 장기 학습기억 갱신 → StudentMemory',
+  inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-student-memory',
   chat: false,
@@ -498,6 +511,7 @@ mastery: not_started · developing · proficient
 const STAGE_06: StagePreset = {
   name: '06 NEXT PROBLEM',
   note: '난이도 판단 + 다음 문제 생성. 02의 검증을 다시 거친다',
+  inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-next-problem',
   chat: false,
