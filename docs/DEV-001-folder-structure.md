@@ -1,6 +1,6 @@
 # DEV-001 · 폴더 구조 및 PM 소유 경로
 
-> **Version:** 1.2 · **Updated:** 2026-08-31 · **Owner:** 세팅 담당\
+> **Version:** 1.3 · **Updated:** 2026-09-01 · **Owner:** 세팅 담당\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -107,6 +107,12 @@ src/app/
 │        └─ withdraw/
 │           └─ confirm/
 │
+├─ (dev)/                         # 개발 도구 · 제품 화면 아님 · 아래 규칙 6
+│  └─ prompt-lab/                 # 프롬프트 단계별 실행·검증
+│     ├─ _components/
+│     ├─ _actions.ts
+│     └─ _bridge.ts
+│
 └─ api/                           # Server Action으로 안 되는 것만
    ├─ ai/chat/                    # 스트리밍 필요
    ├─ ai/verify/                  # Answer Verification
@@ -116,10 +122,12 @@ src/app/
 ```
 
 각 폴더에 대응하는 Screen ID는 `DEV-002-routes.md`를 따른다.
+`(dev)/`는 예외다. Screen ID가 없고 DEV-002에도 넣지 않는다.
 
 ### 규칙
 
-1. **Route 수는 35개.** COM-003 §12의 Screen Inventory와 1:1로 맞춘다.
+1. **제품 Route 수는 35개.** COM-003 §12의 Screen Inventory와 1:1로 맞춘다.
+   `(dev)/`는 이 수에 포함하지 않는다.
 2. **State / Modal은 절대 Route로 만들지 않는다.** (COM-003 §13-3)
    예: `MIS-001`의 `AI 생각 중`, `힌트`, `중간 종료 확인`은 전부
    `mission/page.tsx` 내부 상태다.
@@ -130,6 +138,13 @@ src/app/
    하는 얇은 래퍼로 유지한다.
 5. **`api/`는 최소로 둔다.** 스트리밍, 외부 콜백, 배치처럼 Server Action으로
    불가능한 경우만 Route Handler를 만든다.
+6. **`(dev)/`는 개발 도구 전용이다.** 만드는 프로그램이 아니라 만들기 위해
+   쓰는 프로그램을 둔다. Screen ID·COM-003 용어 정책·Navigation이 적용되지
+   않는다. 대신 다음을 지킨다.
+   - `NODE_ENV === 'production'`이면 `notFound()`. page와 Server Action
+     **양쪽 모두**에서 막는다. Server Action은 별도 엔드포인트로 노출된다
+   - 학생·부모 데이터를 읽거나 쓰지 않는다
+   - 여기 코드가 `(student)` · `(parent)`에서 import되지 않는다
 
 ---
 
@@ -173,6 +188,7 @@ src/lib/
 │  ├─ evaluation.ts
 │  ├─ persona.ts               # 말투만. 정답/평가/난이도 미개입
 │  ├─ problem-select.ts        # 취약 4 : 현재 4 : 복습 2
+│  ├─ schema-check.ts          # AI 출력 ↔ COM-002 스키마 검증
 │  └─ student-memory.ts
 │
 ├─ services/             # 파일명 = COM-002 엔티티명
@@ -253,6 +269,7 @@ PM 4명이 두 트랙으로 나뉜다. 각 트랙 안에서는 **공동 소유**
 ```text
 app/(student)/home/**
 app/(student)/mission/**
+app/(dev)/**                 개발 도구. §2 규칙 6
 app/api/ai/**
 lib/ai/**  ·  lib/gemini/**
 lib/services/{learning-session,problem,message,evaluation,logic-gap,student-memory}.ts
@@ -393,3 +410,4 @@ lib        →  app                      (금지)
 | 1.0 | 2026-08-28 | 최초 작성. COM-005 §7 하위 구조 상세화 | — |
 | 1.1 | 2026-08-28 | §6 PM별 Branch 표기 제거(담당은 소유 경로가 결정) + 공통 코드 변경 절차 추가. §7 Migration 명명을 연번 → timestamp 접두어로 변경 | — |
 | 1.2 | 2026-08-31 | §6을 5역할 개인 소유 → **2트랙 공동 소유**로 개편(AI 코어 2인 · 서비스 2인). 세팅 담당을 한시적 역할로 명시하고 인계 대상을 DEV-003 §12로 연결 | — |
+| 1.3 | 2026-09-01 | §2에 `(dev)/` Route Group 추가. §6 AI 코어 트랙 소유 경로에 `app/(dev)/**` 추가. 개발 도구 전용이며 Screen ID가 없고 제품 Route 35개에 포함하지 않는다. 지켜야 할 제약 3가지를 규칙 6으로 명시. §4에 `lib/ai/schema-check.ts` 추가 | — |
