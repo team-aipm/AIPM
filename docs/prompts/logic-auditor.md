@@ -1,7 +1,7 @@
 # Logic Auditor — AI 프롬프트 원문
 
-> **Version:** 1.0 · **Updated:** 2026-09-01 · **Owner:** AI 코어 트랙\
-> **Status:** 초안 — §0의 **확정 필요 4건**은 팀 확정 후 COM-002에 반영\
+> **Version:** 1.1 · **Updated:** 2026-09-01 · **Owner:** AI 코어 트랙\
+> **Status:** 프롬프트 확정 — §0의 **COM-002 반영 4건**은 PM 전원 합의 대기\
 > **Changelog:** 문서 최하단 참조
 
 목적: 초등학교 4\~6학년 학생의 수학 학습에서 정답 제시보다 사고 과정,
@@ -17,23 +17,95 @@
 
 ---
 
-# 0. 확정 필요 — COM-002 반영 대기
+# 0. 확정된 값 — COM-002 반영 대기
 
-아래 4건은 COM-002에 **값이 정의되어 있지 않거나 예시와 어긋난다.**
-이 문서는 COM-002와 호환되는 값을 제안하고 그 값으로 프롬프트를
-작성했다. 팀 확정 후 COM-002에 반영하고, 이 절을 삭제한다.
+**2026-09-01, AI 코어 트랙이 아래 4건을 확정했다.** 이 문서 본문은 전부
+확정값으로 작성되어 있다.
 
-| # | 항목 | COM-002 현재 | 이 문서의 제안 | 영향 |
-|---|---|---|---|---|
-| 1 | `learning_mode` | §6 예시 `mode_a`만 | `mode_a` · `mode_b` | PR #1에서 TEXT로 보류 중. enum 전환 가능 |
-| 2 | `answer_lock_status` | §6 예시 `locked`만 | `locked` · `recheck` · `invalid_problem` | 동일 |
-| 3 | 평가 점수 범위 | §8 예시가 `3` · `4` | **0\~2** (§4의 rubric) | §20 "점수의 정확한 범위"가 미확정. 예시값 수정 필요 |
-| 4 | `difficulty` · `current_level` 척도 | 예시 `2` · `3`만 | **1\~5** (3 = 학년 중간) | COM-001 §9 "학년 중간 난이도에서 시작" 기준 |
+남은 것은 COM-002 본문 반영이며, **COM 문서 수정은 PM 전원 합의가
+필요하다.** (docs/README §5) 반영이 끝나면 이 절을 삭제한다.
 
-3번은 COM-002 §8의 **예시값이 rubric 범위를 벗어난다.** 프롬프트가
-0\~2를 내보내는데 문서 예시는 3·4다. 둘 중 하나를 맞춰야 한다.
-0\~2를 제안하는 이유: 초등 대상 3점 척도가 LLM 판정 일관성이 높고,
-경계 정의가 가능하다. 5점 척도로 갈 경우 §4의 rubric 전체를 다시 쓴다.
+| # | 항목 | 확정값 | COM-002 상태 |
+|---|---|---|---|
+| 1 | `learning_mode` | `mode_a` · `mode_b` | §6 예시 `mode_a`만. 값 목록 추가 필요 |
+| 2 | `answer_lock_status` | `locked` · `recheck` · `invalid_problem` | §6 예시 `locked`만. 값 목록 추가 필요 |
+| 3 | 평가 점수 범위 | **0\~2** | §8 **예시값이 범위 밖.** 수정 필요 |
+| 4 | `difficulty` · `current_level` | **1\~5** (3 = 학년 중간) | 범위 명시 필요 |
+
+## COM-002 변경 문안
+
+그대로 옮기면 되도록 정리했다. **논리 구조는 바뀌지 않는다.**
+필드 추가·삭제도 없다. 값 목록과 예시값만 채운다.
+
+### §6 Problem
+
+~~~text
+learning_mode        Description  "내부 모드"
+                  →  "내부 모드. mode_a / mode_b"
+
+answer_lock_status   Description  "검증 상태"
+                  →  "검증 상태. locked / recheck / invalid_problem"
+
+difficulty           Description  "문제 난이도"
+                  →  "문제 난이도 1~5. 3 = 학년 중간"
+~~~
+
+`problem_status`의 값 목록을 표 아래에 적어둔 방식과 같게, 두 필드의
+값 목록도 §6 본문에 추가한다.
+
+### §8 Evaluation
+
+**예시값이 rubric 범위를 벗어나 있다.** 점수 범위를 0\~2로 확정했으므로
+예시를 범위 안으로 고친다.
+
+~~~text
+reasoning_score    Example  3 → 2
+rule_score         Example  4 → 2
+transfer_score     Example  3 → 1
+reflection_score   Example  3 → 2
+~~~
+
+Rules에 한 줄 추가한다.
+
+~~~text
+- 점수 범위는 0~2다. 세부 기준은 prompts/logic-auditor.md §4.
+~~~
+
+기존 Rules의 "점수 범위의 세부 기준은 평가 문서에서 정의"가 가리키던
+문서가 이 문서다.
+
+### §10 StudentMemory
+
+~~~text
+current_level        Description  "현재 종합 수준"
+                  →  "현재 종합 수준 1~5"
+~~~
+
+### §20 구현 전 추가 확정이 필요한 세부사항
+
+두 항목이 해소되었다.
+
+~~~text
+- StudentMemory JSON 내부 세부 schema
+     → prompts/logic-auditor.md §5에서 확정
+- 평가 점수의 정확한 범위와 계산식
+     → 범위 0~2 확정. 계산식은 prompts/logic-auditor.md §4 · §5
+~~~
+
+## 반영 순서
+
+~~~text
+1. COM-002 수정 (PM 전원 합의) — 위 문안. Version 1.0 → 1.1
+2. PR #1 merge
+3. 후속 migration — learning_mode · answer_lock_status 를
+   TEXT → enum 으로 전환
+      supabase/migrations/** 는 공통 코드다. 기능 작업에 섞지 않고
+      단독 PR로 먼저 merge한다. (COM-005 §6)
+4. 이 절 삭제. 이 문서 Version 1.1 → 2.0
+~~~
+
+3번은 1번과 2번이 끝나기 전에 만들지 않는다. 문서에 값이 없는 상태에서
+DB에 값을 만드는 것이기 때문이다. (COM-002 §19-8 · CLAUDE.md)
 
 ---
 
@@ -942,4 +1014,5 @@ Prompt 06  Next Problem  → 목적·난이도·mode 결정
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.1 | 2026-09-01 | §0의 4건을 **확정**으로 전환. 확정값이 기존 제안과 같아(`mode_a`/`mode_b` · `locked`/`recheck`/`invalid_problem` · 점수 0\~2 · 척도 1\~5) 프롬프트 본문은 그대로다. COM-002 변경 문안과 반영 순서를 §0에 명시 | — |
 | 1.0 | 2026-09-01 | `docs/prompts/`로 이관하고 COM-002에 맞춰 개정. ① 출력 JSON을 COM-002 컬럼과 1:1 대응 ② `gap_type` 소문자화 ③ Evaluation / LogicGap 출력 분리, `final_accuracy` 추가 ④ StudentMemory를 학생 1행 구조로 재작성, JSONB 내부 스키마 정의 ⑤ `learning_mode` = `mode_a`/`mode_b`, `answer_lock_status` = `locked`/`recheck`/`invalid_problem` ⑥ §1 공통 규칙 신설 (학생 노출 금지·학생 어휘·시스템 오류·JSON 강제·언어) ⑦ 판정 기준·`confidence` 임계값·Drill-down 5회 상한·예외 상황·Tutor 예시 3건 추가 ⑧ 세션 10문제, 취약 4:현재 4:복습 2 반영 | — |

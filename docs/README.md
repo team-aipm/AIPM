@@ -1,6 +1,6 @@
 # AIPM 공통 문서 지도
 
-> **Version:** 1.2 · **Updated:** 2026-09-01 · **Owner:** (미지정)\
+> **Version:** 1.3 · **Updated:** 2026-09-01 · **Owner:** (미지정)\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -36,7 +36,7 @@
 | `DEV-002-routes.md` | Screen ID ↔ Route 매핑 | 확정 |
 | `DEV-003-infra-setup.md` | GitHub · Vercel · Supabase 설정과 연동 절차 | 확정 |
 | `DEV-004-onboarding.md` | 팀원 로컬 세팅, AI 도구별 준비, 첫 PR | 확정 |
-| `prompts/logic-auditor.md` | Logic Auditor 6개 AI 프롬프트 원문 | **초안 (§0 확정 필요 4건)** |
+| `prompts/logic-auditor.md` | Logic Auditor 6개 AI 프롬프트 원문 | 확정 (COM-002 반영 대기) |
 
 ---
 
@@ -117,8 +117,7 @@ COM  >  DEV
 | ADM(운영/백오피스) 영역 | 운영 PM의 담당 화면 | COM-007 → COM-002 → COM-003 |
 | COM-006 용도 | 문서 번호 체계 | 팀 확인 |
 | 결제 PG사 | BIL-003 결제 진행 | COM-005 §13 |
-| `learning_mode` · `answer_lock_status` 값 | PR #1의 enum 전환, AI 구현 | prompts/logic-auditor.md §0 |
-| 평가 점수 범위 (0~2 vs COM-002 §8 예시) | Evaluation 구현 | prompts/logic-auditor.md §0 |
+| COM-002 반영 4건 (값은 확정) | PR #1 enum 전환, Evaluation 구현 | PM 전원 합의 → prompts/logic-auditor.md §0 |
 
 ---
 
@@ -129,3 +128,4 @@ COM  >  DEV
 | 1.0 | 2026-08-28 | 최초 작성. 문서 계층·우선순위·변경 절차 정의 | — |
 | 1.1 | 2026-08-31 | COM 문서 합의 규칙을 "PM 5명 합의" → **"PM 전원 합의"**로 변경. 인원 변동과 무관하게 유지되도록 함. DEV-003 · DEV-004 추가 반영 | — |
 | 1.2 | 2026-09-01 | `prompts/logic-auditor.md` 등록. §6에 프롬프트 §0의 확정 필요 항목 2줄 추가 | — |
+| 1.3 | 2026-09-01 | 프롬프트 §0의 4건이 확정됨에 따라 §2 Status와 §6 미결 사항을 갱신. 남은 것은 COM-002 본문 반영 | — |
