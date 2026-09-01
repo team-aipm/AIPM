@@ -1,6 +1,6 @@
 # DEV-001 · 폴더 구조 및 PM 소유 경로
 
-> **Version:** 1.3 · **Updated:** 2026-09-01 · **Owner:** 세팅 담당\
+> **Version:** 1.4 · **Updated:** 2026-09-01 · **Owner:** 세팅 담당\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -110,8 +110,10 @@ src/app/
 ├─ (dev)/                         # 개발 도구 · 제품 화면 아님 · 아래 규칙 6
 │  └─ prompt-lab/                 # 프롬프트 단계별 실행·검증
 │     ├─ _components/
+│     ├─ _access.ts               # 통과 암호 잠금
 │     ├─ _actions.ts
-│     └─ _bridge.ts
+│     ├─ _bridge.ts
+│     └─ _chat.ts
 │
 └─ api/                           # Server Action으로 안 되는 것만
    ├─ ai/chat/                    # 스트리밍 필요
@@ -141,8 +143,15 @@ src/app/
 6. **`(dev)/`는 개발 도구 전용이다.** 만드는 프로그램이 아니라 만들기 위해
    쓰는 프로그램을 둔다. Screen ID·COM-003 용어 정책·Navigation이 적용되지
    않는다. 대신 다음을 지킨다.
-   - `NODE_ENV === 'production'`이면 `notFound()`. page와 Server Action
-     **양쪽 모두**에서 막는다. Server Action은 별도 엔드포인트로 노출된다
+   - **잠그고 연다.** 개발 서버에서는 그냥 열리고, 배포본에서는 전용
+     환경변수(예: `PROMPT_LAB_PASSCODE`)가 있어야 열린다. 변수가 없으면
+     `notFound()`. 열어두는 쪽이 아니라 닫는 쪽으로 실패한다
+   - page와 Server Action **양쪽 모두**에서 확인한다. Server Action은
+     별도 엔드포인트로 노출되므로 page만 막으면 뚫린다
+   - `export const dynamic = 'force-dynamic'`. 없으면 빌드 시점 결과가
+     구워져서 나중에 환경변수를 넣어도 반영되지 않는다
+   - **배포본에서 서버의 모델 API 키를 대신 써 주지 않는다.** 각자 자기
+     키를 화면에 넣는다. 개인 키로 무제한 호출되는 것을 막는다
    - 학생·부모 데이터를 읽거나 쓰지 않는다
    - 여기 코드가 `(student)` · `(parent)`에서 import되지 않는다
 
@@ -410,4 +419,5 @@ lib        →  app                      (금지)
 | 1.0 | 2026-08-28 | 최초 작성. COM-005 §7 하위 구조 상세화 | — |
 | 1.1 | 2026-08-28 | §6 PM별 Branch 표기 제거(담당은 소유 경로가 결정) + 공통 코드 변경 절차 추가. §7 Migration 명명을 연번 → timestamp 접두어로 변경 | — |
 | 1.2 | 2026-08-31 | §6을 5역할 개인 소유 → **2트랙 공동 소유**로 개편(AI 코어 2인 · 서비스 2인). 세팅 담당을 한시적 역할로 명시하고 인계 대상을 DEV-003 §12로 연결 | — |
+| 1.4 | 2026-09-01 | §2 규칙 6을 "배포본에서 404"에서 **환경변수 기반 잠금**으로 변경. prompt-lab 을 팀이 웹에서 쓰기로 함. `force-dynamic` 필요성과 배포본에서 서버 API 키를 쓰지 않는다는 규칙 추가 | — |
 | 1.3 | 2026-09-01 | §2에 `(dev)/` Route Group 추가. §6 AI 코어 트랙 소유 경로에 `app/(dev)/**` 추가. 개발 도구 전용이며 Screen ID가 없고 제품 Route 35개에 포함하지 않는다. 지켜야 할 제약 3가지를 규칙 6으로 명시. §4에 `lib/ai/schema-check.ts` 추가 | — |
