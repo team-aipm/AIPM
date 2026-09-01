@@ -50,8 +50,8 @@
 ## 남은 순서
 
 ~~~text
-1. PR #1 merge                            ← 진행 필요
-2. 후속 migration (단독 PR)
+1. PR #1 merge                            완료 2026-09-01
+2. 후속 migration (단독 PR)               PR #3. 이 PR 다음에 merge
      create type learning_mode      as enum ('mode_a', 'mode_b')
      create type answer_lock_status as enum
          ('locked', 'recheck', 'invalid_problem')
