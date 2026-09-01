@@ -777,6 +777,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               고친 값은 설정과 함께 저장됩니다. 가격이 없는 모델은 비용을
               계산하지 않고 &ldquo;가격 미입력&rdquo;이라고만 표시합니다.
               <br />
+              <b>기본값은 텍스트 단가입니다.</b> 오디오 입력이 더 비싼 모델,
+              200k 토큰을 넘으면 단가가 오르는 모델(gemini-2.5-pro ·
+              gemini-3.1-pro-preview)이 있습니다. 그런 경우 실제보다 적게
+              나오니 직접 고쳐 쓰세요. Batch·Flex 는 50% 할인입니다.
+              <br />
               요금 페이지 — Gemini {PRICING_PAGES.gemini} · OpenAI{' '}
               {PRICING_PAGES.openai} · Claude {PRICING_PAGES.anthropic}
             </p>

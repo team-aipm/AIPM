@@ -17,14 +17,38 @@ export type Price = {
 };
 
 /**
- * 시작용 가격표. **반드시 확인하고 쓴다.**
+ * 시작용 가격표. **확인하고 쓴다.**
  *
- * Anthropic 값은 2026-06-24 기준으로 확인된 수치다.
- * Gemini · OpenAI 는 확인된 출처가 없어 비워 둔다. 비어 있으면 비용을
- * 계산하지 않고 화면이 "가격 미입력" 이라고 알린다. 틀린 숫자를 그럴듯하게
- * 보여주는 것보다 낫다.
+ * Gemini    ai.google.dev/gemini-api/docs/pricing 에서 2026-09-01 확인.
+ *           텍스트 생성 모델만 넣었다. 임베딩·TTS·이미지 생성은 단가
+ *           체계가 달라서(장당 과금 등) 제외했다.
+ * Anthropic 2026-06-24 기준 확인값.
+ * OpenAI    확인된 출처가 없어 비워 둔다.
+ *
+ * 가격이 없으면 계산하지 않고 화면이 "가격 미입력" 이라고 알린다.
+ * 틀린 숫자를 그럴듯하게 보여주는 것보다 낫다.
+ *
+ * **주의 — 여기 값은 단순화된 수치다.**
+ *   · 오디오 입력은 텍스트보다 비싼 모델이 있다. 텍스트 단가를 넣었다.
+ *   · 긴 문맥(200k 초과)에 다른 단가를 매기는 모델이 있다. 낮은 쪽을
+ *     넣었으므로 긴 입력에서는 실제보다 적게 나온다.
+ *   · Batch·Flex 는 50% 할인이라 해당하면 직접 고쳐야 한다.
  */
 export const SEED_PRICES: Record<string, Price> = {
+  // Gemini · 텍스트 기준
+  'gemini-3.6-flash': { input: 1.5, output: 7.5 },
+  'gemini-3.5-flash': { input: 1.5, output: 9 },
+  'gemini-3.5-flash-lite': { input: 0.3, output: 2.5 },
+  'gemini-3.1-flash-lite': { input: 0.25, output: 1.5 },
+  // 200k 이하 기준. 초과하면 입력 $4 / 출력 $18
+  'gemini-3.1-pro-preview': { input: 2, output: 12 },
+  'gemini-3-flash-preview': { input: 0.5, output: 3 },
+  // 200k 이하 기준. 초과하면 입력 $2.5 / 출력 $15
+  'gemini-2.5-pro': { input: 1.25, output: 10 },
+  'gemini-2.5-flash': { input: 0.3, output: 2.5 },
+  'gemini-2.5-flash-lite': { input: 0.1, output: 0.4 },
+
+  // Anthropic
   'claude-fable-5': { input: 10, output: 50 },
   'claude-opus-5': { input: 5, output: 25 },
   'claude-opus-4-8': { input: 5, output: 25 },
@@ -37,7 +61,7 @@ export const SEED_PRICES: Record<string, Price> = {
 
 /** 요금 페이지. 화면에서 안내로 쓴다. */
 export const PRICING_PAGES: Record<string, string> = {
-  gemini: 'ai.google.dev/pricing',
+  gemini: 'ai.google.dev/gemini-api/docs/pricing',
   openai: 'openai.com/api/pricing',
   anthropic: 'anthropic.com/pricing',
 };
