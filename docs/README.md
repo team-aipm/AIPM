@@ -1,6 +1,6 @@
 # AIPM 공통 문서 지도
 
-> **Version:** 1.1 · **Updated:** 2026-08-31 · **Owner:** (미지정)\
+> **Version:** 1.2 · **Updated:** 2026-09-01 · **Owner:** (미지정)\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -15,7 +15,7 @@
 |---|---|---|---|
 | `COM-xxx` | 정책 · 기준 | **PM 전원 합의** | COM-001 ~ COM-007 |
 | `DEV-xxx` | 구현 상세 | PR 리뷰 | DEV-001, DEV-002 |
-| `prompts/` | AI Prompt 원문 | AI 코어 PM + 리뷰 | 추후 |
+| `prompts/` | AI Prompt 원문 | AI 코어 PM + 리뷰 | `prompts/logic-auditor.md` |
 
 `COM`은 "무엇을 만들 것인가", `DEV`는 "어디에 어떻게 둘 것인가"를 다룹니다.
 
@@ -36,6 +36,7 @@
 | `DEV-002-routes.md` | Screen ID ↔ Route 매핑 | 확정 |
 | `DEV-003-infra-setup.md` | GitHub · Vercel · Supabase 설정과 연동 절차 | 확정 |
 | `DEV-004-onboarding.md` | 팀원 로컬 세팅, AI 도구별 준비, 첫 PR | 확정 |
+| `prompts/logic-auditor.md` | Logic Auditor 6개 AI 프롬프트 원문 | **초안 (§0 확정 필요 4건)** |
 
 ---
 
@@ -55,6 +56,7 @@
 | 환경변수 이름을 새로 만들어도 되나 | COM-005 §8 → 팀 합의 |
 | 이 파일을 어디에 둬야 하나 | **DEV-001** |
 | 이 화면의 URL이 뭔가 | **DEV-002** |
+| AI가 뭘 어떻게 출력하나 | **prompts/logic-auditor.md** |
 | Supabase · Vercel을 어떻게 연결하나 | **DEV-003** |
 | 환경변수 값을 어디서 받나 | **DEV-004 §2** |
 | 처음 세팅하는데 뭐부터 하나 | **DEV-004** |
@@ -115,6 +117,8 @@ COM  >  DEV
 | ADM(운영/백오피스) 영역 | 운영 PM의 담당 화면 | COM-007 → COM-002 → COM-003 |
 | COM-006 용도 | 문서 번호 체계 | 팀 확인 |
 | 결제 PG사 | BIL-003 결제 진행 | COM-005 §13 |
+| `learning_mode` · `answer_lock_status` 값 | PR #1의 enum 전환, AI 구현 | prompts/logic-auditor.md §0 |
+| 평가 점수 범위 (0~2 vs COM-002 §8 예시) | Evaluation 구현 | prompts/logic-auditor.md §0 |
 
 ---
 
@@ -124,3 +128,4 @@ COM  >  DEV
 |---|---|---|---|
 | 1.0 | 2026-08-28 | 최초 작성. 문서 계층·우선순위·변경 절차 정의 | — |
 | 1.1 | 2026-08-31 | COM 문서 합의 규칙을 "PM 5명 합의" → **"PM 전원 합의"**로 변경. 인원 변동과 무관하게 유지되도록 함. DEV-003 · DEV-004 추가 반영 | — |
+| 1.2 | 2026-09-01 | `prompts/logic-auditor.md` 등록. §6에 프롬프트 §0의 확정 필요 항목 2줄 추가 | — |
