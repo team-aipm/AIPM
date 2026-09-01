@@ -1,7 +1,7 @@
 # Logic Auditor — AI 프롬프트 원문
 
-> **Version:** 1.2 · **Updated:** 2026-09-01 · **Owner:** AI 코어 트랙\
-> **Status:** 확정값 COM-002 v1.1 반영 완료 — **§0-5 1건만 미확정**\
+> **Version:** 1.3 · **Updated:** 2026-09-01 · **Owner:** AI 코어 트랙\
+> **Status:** 확정 — 값 5건 COM-002 v1.1 반영 완료. 남은 것은 migration\
 > **Changelog:** 문서 최하단 참조
 
 목적: 초등학교 4\~6학년 학생의 수학 학습에서 정답 제시보다 사고 과정,
@@ -19,7 +19,7 @@
 
 # 0. 확정된 값
 
-**2026-09-01, PM 전원 합의로 아래 4건을 확정했다.** 이 문서 본문은 전부
+**2026-09-01, PM 전원 합의로 아래 5건을 확정했다.** 이 문서 본문은 전부
 확정값으로 작성되어 있고, **COM-002 v1.1에 반영을 마쳤다.**
 
 | # | 항목 | 확정값 | COM-002 반영 |
@@ -28,29 +28,13 @@
 | 2 | `answer_lock_status` | `locked` · `recheck` · `invalid_problem` | §6 값 목록 |
 | 3 | 평가 점수 범위 | **0\~2** | §8 범위 명시 + 예시값 수정 |
 | 4 | `difficulty` · `current_level` | **1\~5** (3 = 학년 중간) | §6 · §10 범위 명시 |
+| 5 | `transfer_score` · `reflection_score` Required | **`NO`** (NULL 허용) | §8 Required 변경 + NULL 규칙 |
 
-## 0-5. 남은 확인 — `transfer_score` · `reflection_score`의 Required
-
-**반영 작업 중 발견한 항목이다. 아직 확정되지 않았다.**
-
-이 문서 Prompt 04는 "전이·성찰 질문을 하지 않았으면 `null`을 넣는다"고 한다.
-Drill-down은 충분히 이해했으면 조기 종료하므로(COM-001 §7) 두 단계를
-묻지 않고 끝나는 경우가 정상적으로 생긴다.
-
-그런데 COM-002 §8은 두 필드가 **Required YES**이고, PR #1의 migration도
-`not null`이다. **지금 상태로는 insert가 실패한다.**
-
-| 안 | 내용 | 비용 |
-|---|---|---|
-| **A (권장)** | COM-002 §8에서 두 필드 Required를 `NO`로. migration에서 `not null` 제거 | COM-002 재합의 1줄. PR #1 수정 |
-| B | `null` 대신 `0`을 넣는다 | "안 물어봄"과 "못 함"이 구분되지 않는다. StudentMemory의 `transfer_level` 평균이 왜곡된다 |
-| C | 두 단계를 항상 질문한다 | COM-001 §7 "충분한 이해가 확인되면 조기 종료"와 충돌 |
-
-A를 권장한다. 조기 종료는 설계된 정상 동작이고, "측정하지 않음"과
-"측정했는데 0점"은 다른 정보다.
-
-**확정 전까지 Evaluator를 구현하지 않는다.** 확정되면 이 절과 §0을
-삭제하고 이 문서를 2.0으로 올린다.
+5번은 4건을 반영하다 발견한 충돌이다. Drill-down은 충분히 이해했으면
+조기 종료하므로(COM-001 §7) 전이·성찰을 묻지 않고 끝나는 경우가
+정상적으로 생기는데, 두 필드가 Required YES였다. `0`은 "적용하지 못함"을
+뜻하므로 "묻지 않음"에 쓸 수 없다. **NULL 허용으로 확정했고, NULL은
+평균·추이 계산에서 제외한다.**
 
 ## COM-002 v1.1에 반영된 내용
 
@@ -59,25 +43,29 @@ A를 권장한다. 조기 종료는 설계된 정상 동작이고, "측정하지
 | 절 | 변경 |
 |---|---|
 | §6 Problem | `learning_mode` · `answer_lock_status` 값 목록 추가. `difficulty` 1\~5 명시. `invalid_problem` → `verification_failed` 연결 규칙 추가 |
-| §8 Evaluation | 점수 범위 0\~2 명시. 예시값 `3`·`4`·`3`·`3` → `2`·`2`·`1`·`2` |
+| §8 Evaluation | 점수 범위 0\~2 명시. 예시값 `3`·`4`·`3`·`3` → `2`·`2`·`1`·`2`. `transfer_score`·`reflection_score` Required `YES` → `NO`, NULL 처리 규칙 추가 |
 | §10 StudentMemory | 3개 레벨 1\~5 명시. JSONB schema를 이 문서 Prompt 05로 위임. "학생 1명당 1행" 규칙 추가 |
 | §20 | 확정된 2건(JSONB schema · 점수 범위)을 목록에서 이관 |
 
 ## 남은 순서
 
 ~~~text
-1. COM-002 §8 Required 확정 (§0-5)        ← 진행 필요
-2. PR #1 merge
-3. 후속 migration
-     learning_mode · answer_lock_status  TEXT → enum
-     §0-5가 A로 확정되면 transfer_score · reflection_score 의
-     not null 제거도 함께
+1. PR #1 merge                            ← 진행 필요
+2. 후속 migration (단독 PR)
+     create type learning_mode      as enum ('mode_a', 'mode_b')
+     create type answer_lock_status as enum
+         ('locked', 'recheck', 'invalid_problem')
+     problem.learning_mode      text -> enum
+     problem.answer_lock_status text -> enum
+     evaluation.transfer_score   drop not null
+     evaluation.reflection_score drop not null
        supabase/migrations/** 는 공통 코드다. 기능 작업에 섞지 않고
        단독 PR로 먼저 merge한다. (COM-005 §6)
-4. §0 삭제. 이 문서 Version → 2.0
+       기존 migration 파일은 수정하지 않고 추가한다. (CLAUDE.md)
+3. §0 삭제. 이 문서 Version → 2.0
 ~~~
 
-3번은 2번보다 먼저 만들지 않는다. PR #1이 만드는 테이블을 대상으로
+2번은 1번보다 먼저 만들지 않는다. PR #1이 만드는 테이블을 대상으로
 하는 migration이기 때문이다. (COM-002 §19-8 · CLAUDE.md)
 
 ---
@@ -568,8 +556,7 @@ AI 도움 전 최초 답변이 `verified_answer`와 일치했는가.
 - 2: 도움 없이 정확히 적용
 
 전이 질문을 하지 않았으면 0이 아니라 `null`을 넣는다.
-**단, COM-002 §8은 이 필드를 Required로 둔다. §0-5 확정 전까지
-Evaluator를 구현하지 않는다.**
+`0`은 "적용하지 못함"이므로 "묻지 않음"에 쓰지 않는다. (COM-002 §8)
 
 ### `reflection_score` (0\~2)
 
@@ -577,7 +564,7 @@ Evaluator를 구현하지 않는다.**
 - 1: 오류/배운 점 일부 인식
 - 2: 오류 원인과 새롭게 이해한 내용을 명확히 설명
 
-성찰 질문을 하지 않았으면 `null`을 넣는다. (§0-5)
+성찰 질문을 하지 않았으면 0이 아니라 `null`을 넣는다. (COM-002 §8)
 
 ### `support_level` (0\~4)
 
@@ -989,6 +976,7 @@ Prompt 06  Next Problem  → 목적·난이도·mode 결정
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.3 | 2026-09-01 | §0-5를 **A안(Required `NO`)으로 확정**하고 COM-002 §8에 반영. Evaluator 구현 보류 해제. 남은 순서를 migration SQL 수준으로 구체화 | — |
 | 1.2 | 2026-09-01 | PM 전원 합의 후 확정값을 **COM-002 v1.1에 반영 완료**. §0을 반영 내역으로 정리. 반영 중 발견한 `transfer_score`·`reflection_score` Required 충돌을 **§0-5**로 신설 — 확정 전까지 Evaluator 구현 보류 | — |
 | 1.1 | 2026-09-01 | §0의 4건을 **확정**으로 전환. 확정값이 기존 제안과 같아(`mode_a`/`mode_b` · `locked`/`recheck`/`invalid_problem` · 점수 0\~2 · 척도 1\~5) 프롬프트 본문은 그대로다. COM-002 변경 문안과 반영 순서를 §0에 명시 | — |
 | 1.0 | 2026-09-01 | `docs/prompts/`로 이관하고 COM-002에 맞춰 개정. ① 출력 JSON을 COM-002 컬럼과 1:1 대응 ② `gap_type` 소문자화 ③ Evaluation / LogicGap 출력 분리, `final_accuracy` 추가 ④ StudentMemory를 학생 1행 구조로 재작성, JSONB 내부 스키마 정의 ⑤ `learning_mode` = `mode_a`/`mode_b`, `answer_lock_status` = `locked`/`recheck`/`invalid_problem` ⑥ §1 공통 규칙 신설 (학생 노출 금지·학생 어휘·시스템 오류·JSON 강제·언어) ⑦ 판정 기준·`confidence` 임계값·Drill-down 5회 상한·예외 상황·Tutor 예시 3건 추가 ⑧ 세션 10문제, 취약 4:현재 4:복습 2 반영 | — |

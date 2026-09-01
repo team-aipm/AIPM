@@ -238,8 +238,8 @@ Rules: - 대화 턴마다 즉시 저장. - 마지막 저장 Message를 기준으
   `reasoning_score`    SMALLINT             YES 2           이유 설명
   `rule_score`         SMALLINT             YES 2           규칙 이해
   `self_correction`    BOOLEAN              YES true        스스로 수정
-  `transfer_score`     SMALLINT             YES 1           전이
-  `reflection_score`   SMALLINT             YES 2           성찰
+  `transfer_score`     SMALLINT              NO 1           전이
+  `reflection_score`   SMALLINT              NO 2           성찰
   `support_level`      SMALLINT             YES 1           최종 도움 수준
   `final_accuracy`     BOOLEAN              YES true        최종 정답
   `evaluated_at`       TIMESTAMPTZ          YES timestamp   평가 시점
@@ -247,10 +247,16 @@ Rules: - 대화 턴마다 즉시 저장. - 마지막 저장 Message를 기준으
 `reasoning_score` · `rule_score` · `transfer_score` ·
 `reflection_score`: 0\~2. `support_level`: 0\~4.
 
+`transfer_score`와 `reflection_score`만 NULL을 허용한다. Drill-down이
+조기 종료되어(COM-001 §7) 전이·성찰을 묻지 않은 경우가 정상적으로
+발생하며, 이때 `0`은 "적용하지 못함"을 뜻하므로 쓸 수 없다.
+
 Rules: - 시스템 오류 문제에는 정상 Evaluation을 만들지 않는다. - 점수
 범위는 0\~2이며 세부 판정 기준은 `prompts/logic-auditor.md` Prompt 04에서
-정의한다. - `support_level`은 벌점이 아니라 도움 의존도 지표다. - 학생
-화면에는 상세 점수를 그대로 노출하지 않는다.
+정의한다. - 묻지 않은 전이·성찰은 `0`이 아니라 NULL로 둔다. - NULL은
+평균·추이 계산에서 제외한다. 0으로 치환하지 않는다. -
+`support_level`은 벌점이 아니라 도움 의존도 지표다. - 학생 화면에는
+상세 점수를 그대로 노출하지 않는다.
 
 ## 9. LogicGap
 
@@ -480,12 +486,8 @@ COM-002의 논리 구조는 확정하되, 실제 구현 전에 다음은 별도 
 -   **평가 점수의 정확한 범위와 계산식** → 범위 0\~2 확정. 판정 기준은
     `prompts/logic-auditor.md` Prompt 04, 레벨 환산은 Prompt 05
 
-### 남은 확인 (v1.1에서 발견)
-
--   `Evaluation.transfer_score` · `reflection_score`의 **Required**
-    전이·성찰 질문을 하지 않고 조기 종료한 경우(COM-001 §7)에 넣을 값이
-    없다. `0`을 넣으면 "못 함"과 구분되지 않는다. Required를 `NO`로
-    바꿀지 결정이 필요하다. → `prompts/logic-auditor.md` §0-5
+-   **`Evaluation.transfer_score` · `reflection_score`의 Required** →
+    `NO`로 확정. §8 참조
 
 ## 21. 완료 조건
 
@@ -506,4 +508,4 @@ COM-002의 논리 구조는 확정하되, 실제 구현 전에 다음은 별도 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
 | 1.0 | 2026-08-28 | `docs/` 이관 및 문서 헤더 도입. **본문 변경 없음** | — |
-| 1.1 | 2026-09-01 | PM 전원 합의로 미정 값 4건 확정. §6에 `learning_mode`(`mode_a`/`mode_b`) · `answer_lock_status`(`locked`/`recheck`/`invalid_problem`) 값 목록과 `difficulty` 1\~5 추가. §8 점수 범위 0\~2 확정 및 예시값을 범위 안으로 수정(3·4 → 2·2·1·2). §10 레벨 1\~5 명시, JSONB schema를 `prompts/logic-auditor.md` Prompt 05로 위임. §20에서 확정 2건 이관. **엔티티·필드·관계 변경 없음** | — |
+| 1.1 | 2026-09-01 | PM 전원 합의로 미정 값 5건 확정. §6에 `learning_mode`(`mode_a`/`mode_b`) · `answer_lock_status`(`locked`/`recheck`/`invalid_problem`) 값 목록과 `difficulty` 1\~5 추가. §8 점수 범위 0\~2 확정 및 예시값을 범위 안으로 수정(3·4 → 2·2·1·2), **`transfer_score`·`reflection_score`의 Required를 `YES` → `NO`** (Drill-down 조기 종료 시 `0`과 구분). §10 레벨 1\~5 명시, JSONB schema를 `prompts/logic-auditor.md` Prompt 05로 위임. §20에서 확정 3건 이관. **엔티티·필드·관계 변경 없음** | — |
