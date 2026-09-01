@@ -42,7 +42,7 @@ export const MODEL_CANDIDATES: Record<ProviderId, string[]> = {
 
 export const DEFAULT_MODEL: Record<ProviderId, string> = {
   gemini: 'gemini-3.6-flash',
-  openai: 'gpt-4.1-mini',
+  openai: 'gpt-5.6-luna',
   anthropic: 'claude-sonnet-5',
 };
 
