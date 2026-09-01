@@ -80,6 +80,16 @@ function toStage(base: StagePreset, key: string): Stage {
 const CONFIG_STORAGE_KEY = 'prompt-lab:config:v1';
 const KEY_STORAGE_KEY = 'prompt-lab:keys:v1';
 
+/**
+ * 키 저장 묶음. 프로바이더별 기본 키와 **단계별 개별 키**를 함께 둔다.
+ * 단계별 키는 순서대로 저장한다. 단계를 옮기거나 지우면 그 즉시 다시
+ * 저장되므로 어긋나지 않는다.
+ */
+type SavedKeys = {
+  defaults: Record<ProviderId, string>;
+  stageKeys: string[];
+};
+
 /** 저장되는 단계. 실행 결과·이미지·단계별 키는 저장하지 않는다. */
 type SavedStage = StagePreset & {
   provider: ProviderId;
@@ -190,12 +200,26 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
       const savedKeys = window.localStorage.getItem(KEY_STORAGE_KEY);
       if (savedKeys) {
-        const parsed = JSON.parse(savedKeys) as Partial<Record<ProviderId, string>>;
+        const parsed = JSON.parse(savedKeys) as {
+          defaults?: Partial<Record<ProviderId, string>>;
+          stageKeys?: unknown;
+        };
+        const defaults = parsed.defaults ?? {};
         setDefaultKeys({
-          gemini: parsed.gemini ?? '',
-          openai: parsed.openai ?? '',
-          anthropic: parsed.anthropic ?? '',
+          gemini: defaults.gemini ?? '',
+          openai: defaults.openai ?? '',
+          anthropic: defaults.anthropic ?? '',
         });
+
+        const stageKeys = parsed.stageKeys;
+        if (Array.isArray(stageKeys)) {
+          setStages((prev) =>
+            prev.map((stage, index) => ({
+              ...stage,
+              apiKey: typeof stageKeys[index] === 'string' ? stageKeys[index] : '',
+            })),
+          );
+        }
         setRememberKeys(true);
       }
     } catch {
@@ -223,6 +247,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   }, [restored, remember, commonPrompt, stages]);
 
   // 키 저장은 따로 켠다. 기본은 꺼짐이다.
+  // 기본 키와 단계별 개별 키를 함께 저장한다. 단계마다 다른 프로젝트·
+  // 다른 계정으로 시험하는 경우가 있어 기본 키만으로는 모자란다.
   useEffect(() => {
     if (!restored) return;
     if (!rememberKeys) {
@@ -230,11 +256,15 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       return;
     }
     try {
-      window.localStorage.setItem(KEY_STORAGE_KEY, JSON.stringify(defaultKeys));
+      const payload: SavedKeys = {
+        defaults: defaultKeys,
+        stageKeys: stages.map((stage) => stage.apiKey),
+      };
+      window.localStorage.setItem(KEY_STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // 무시
     }
-  }, [restored, rememberKeys, defaultKeys]);
+  }, [restored, rememberKeys, defaultKeys, stages]);
 
   const active = stages[activeIndex];
 
@@ -550,7 +580,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           </label>
 
           <Toggle checked={remember} onChange={setRemember} label="설정 저장" />
-          <Toggle checked={rememberKeys} onChange={setRememberKeys} label="키 저장" />
+          <Toggle
+            checked={rememberKeys}
+            onChange={setRememberKeys}
+            label="키 저장"
+          />
+          <span className="text-[11px] text-neutral-500">
+            기본 키 + 단계별 키
+          </span>
 
           <button
             onClick={() => {
@@ -756,7 +793,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                     type="password"
                     value={active.apiKey}
                     onChange={(event) => patch(activeIndex, { apiKey: event.target.value })}
-                    placeholder="비우면 기본 키"
+                    placeholder={`비우면 기본 ${providerLabel} 키`}
                     className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                   />
                   <span className="shrink-0 text-neutral-500">사용: {keySource}</span>
