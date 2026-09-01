@@ -2,6 +2,8 @@
 
 import { notFound } from 'next/navigation';
 
+import { isConfigured, isUnlocked, unlockWith } from './_access';
+
 import { hasGeminiApiKey } from '@/lib/gemini/client';
 import {
   callProvider,
@@ -60,17 +62,23 @@ export async function fetchModels(
   provider: ProviderId,
   apiKey: string,
 ): Promise<ModelListResult> {
-  assertDevOnly();
+  await assertAccess();
   return listModels(provider, apiKey);
 }
 
+/** 통과 암호 확인. 맞으면 쿠키를 심는다. */
+export async function unlock(input: string): Promise<boolean> {
+  if (!isConfigured()) notFound();
+  return unlockWith(input);
+}
+
 export async function checkApiKey(): Promise<boolean> {
-  assertDevOnly();
+  await assertAccess();
   return hasGeminiApiKey();
 }
 
 export async function runStage(request: RunInput): Promise<RunResult> {
-  assertDevOnly();
+  await assertAccess();
 
   const empty = {
     tokens: { prompt: null, output: null, total: null },
@@ -136,9 +144,10 @@ export async function runStage(request: RunInput): Promise<RunResult> {
 }
 
 /**
- * 개발 서버에서만 동작한다. 빌드된 앱에서는 page가 이미 404지만,
- * Server Action은 별도 엔드포인트로 노출되므로 여기서도 막는다.
+ * Server Action 은 page 와 **별개의 엔드포인트**로 노출된다. page 가
+ * 잠겨 있어도 여기로 직접 요청이 들어올 수 있으므로 매번 다시 확인한다.
  */
-function assertDevOnly() {
-  if (process.env.NODE_ENV === 'production') notFound();
+async function assertAccess() {
+  if (!isConfigured()) notFound();
+  if (!(await isUnlocked())) notFound();
 }
