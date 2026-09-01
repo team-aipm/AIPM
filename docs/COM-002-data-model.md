@@ -1,6 +1,6 @@
 # COM-002 · 공통 데이터 구조 정의서 --- 개발용
 
-> **Version:** 1.0 · **Updated:** 2026-08-28 · **Owner:** (미지정)\
+> **Version:** 1.1 · **Updated:** 2026-09-01 · **Owner:** (미지정)\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -187,9 +187,20 @@ Rules: - 하루 기본 목표는 10문제. - 학생 중간 종료 가능. - 다�
 `problem_status`: - `active` - `completed` - `needs_review` -
 `system_interrupted` - `verification_failed` - `abandoned`
 
+`learning_mode`: - `mode_a` (학생이 답과 이유를 설명) - `mode_b` (AI가
+의도오답을 제시하고 학생이 오류를 찾음)
+
+`answer_lock_status`: - `locked` (검증 완료) - `recheck` (재검증 필요) -
+`invalid_problem` (문제 자체가 부적합)
+
+`difficulty`: 1\~5. 3 = 학년 중간 난이도.
+
 Rules: - `verified_answer`는 학습 시작 전에 검증되어야 한다. - 검증 실패
 문제는 평가 학습에 사용하지 않는다. - 사진 입력은 학생 확인 후
-`problem_text`를 확정한다.
+`problem_text`를 확정한다. - `answer_lock_status`가 `invalid_problem`이면
+`problem_status`를 `verification_failed`로 둔다. - 세 값의 판정 기준은
+`prompts/logic-auditor.md`의 Prompt 02에서
+정의한다.
 
 ## 7. Message
 
@@ -224,18 +235,28 @@ Rules: - 대화 턴마다 즉시 저장. - 마지막 저장 Message를 기준으
   `problem_id`         UUID                 YES uuid        FK → Problem
   `student_id`         UUID                 YES uuid        FK → Student
   `initial_accuracy`   BOOLEAN              YES false       최초 정답
-  `reasoning_score`    SMALLINT             YES 3           이유 설명
-  `rule_score`         SMALLINT             YES 4           규칙 이해
+  `reasoning_score`    SMALLINT             YES 2           이유 설명
+  `rule_score`         SMALLINT             YES 2           규칙 이해
   `self_correction`    BOOLEAN              YES true        스스로 수정
-  `transfer_score`     SMALLINT             YES 3           전이
-  `reflection_score`   SMALLINT             YES 3           성찰
+  `transfer_score`     SMALLINT              NO 1           전이
+  `reflection_score`   SMALLINT              NO 2           성찰
   `support_level`      SMALLINT             YES 1           최종 도움 수준
   `final_accuracy`     BOOLEAN              YES true        최종 정답
   `evaluated_at`       TIMESTAMPTZ          YES timestamp   평가 시점
 
+`reasoning_score` · `rule_score` · `transfer_score` ·
+`reflection_score`: 0\~2. `support_level`: 0\~4.
+
+`transfer_score`와 `reflection_score`만 NULL을 허용한다. Drill-down이
+조기 종료되어(COM-001 §7) 전이·성찰을 묻지 않은 경우가 정상적으로
+발생하며, 이때 `0`은 "적용하지 못함"을 뜻하므로 쓸 수 없다.
+
 Rules: - 시스템 오류 문제에는 정상 Evaluation을 만들지 않는다. - 점수
-범위의 세부 기준은 평가 문서에서 정의. - 학생 화면에는 상세 점수를
-그대로 노출하지 않는다.
+범위는 0\~2이며 세부 판정 기준은 `prompts/logic-auditor.md` Prompt 04에서
+정의한다. - 묻지 않은 전이·성찰은 `0`이 아니라 NULL로 둔다. - NULL은
+평균·추이 계산에서 제외한다. 0으로 치환하지 않는다. -
+`support_level`은 벌점이 아니라 도움 의존도 지표다. - 학생 화면에는
+상세 점수를 그대로 노출하지 않는다.
 
 ## 9. LogicGap
 
@@ -272,10 +293,16 @@ Rules: - 시스템 오류 문제에는 정상 Evaluation을 만들지 않는다.
   `average_support_level`   NUMERIC              YES 1.4         도움 의존도
   `updated_at`              TIMESTAMPTZ          YES timestamp   최근 갱신
 
+`current_level` · `reasoning_level` · `transfer_level`: 1\~5.
+`current_level` 3 = 학년 중간 수준.
+
+3개 JSONB의 내부 schema와 갱신 규칙은 `prompts/logic-auditor.md` Prompt 05에서
+정의한다.
+
 Rules: - 세션 종료 후 삭제하지 않는다. - 새 문제 생성 시 핵심 입력
 데이터로 사용한다. - 첫날 학습 결과로 초기 생성한다. - 이후
 Evaluation/LogicGap을 바탕으로 갱신한다. - 전체 원문 대화를
-StudentMemory에 복사하지 않는다.
+StudentMemory에 복사하지 않는다. - 학생 1명당 1행을 유지한다.
 
 ## 11. Subscription
 
@@ -446,12 +473,21 @@ Claude Code는 이 문서를 기준으로: 1. Supabase/PostgreSQL 테이블을
 COM-002의 논리 구조는 확정하되, 실제 구현 전에 다음은 별도 결정
 가능하다. - Supabase Auth와 `Account` 프로필 테이블의 정확한 연결 방식 -
 결제 PG사 및 PG transaction ID 저장 방식 - OCR 원본 이미지 저장 위치와
-보관기간 - StudentMemory JSON 내부 세부 schema - 평가 점수의 정확한
-범위와 계산식 - 수학 교육과정 concept taxonomy - RLS 세부 정책 - COM-007
+보관기간 - 수학 교육과정 concept taxonomy - RLS 세부 정책 - COM-007
 개인정보/아동 데이터 삭제·보관 세부정책
 
 이 항목들은 본 문서의 핵심 관계를 변경하지 않는 범위에서 후속 문서에서
 확정한다.
+
+### 확정된 항목 (v1.1)
+
+-   **StudentMemory JSON 내부 세부 schema** →
+    `prompts/logic-auditor.md` Prompt 05
+-   **평가 점수의 정확한 범위와 계산식** → 범위 0\~2 확정. 판정 기준은
+    `prompts/logic-auditor.md` Prompt 04, 레벨 환산은 Prompt 05
+
+-   **`Evaluation.transfer_score` · `reflection_score`의 Required** →
+    `NO`로 확정. §8 참조
 
 ## 21. 완료 조건
 
@@ -472,3 +508,4 @@ COM-002의 논리 구조는 확정하되, 실제 구현 전에 다음은 별도 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
 | 1.0 | 2026-08-28 | `docs/` 이관 및 문서 헤더 도입. **본문 변경 없음** | — |
+| 1.1 | 2026-09-01 | PM 전원 합의로 미정 값 5건 확정. §6에 `learning_mode`(`mode_a`/`mode_b`) · `answer_lock_status`(`locked`/`recheck`/`invalid_problem`) 값 목록과 `difficulty` 1\~5 추가. §8 점수 범위 0\~2 확정 및 예시값을 범위 안으로 수정(3·4 → 2·2·1·2), **`transfer_score`·`reflection_score`의 Required를 `YES` → `NO`** (Drill-down 조기 종료 시 `0`과 구분). §10 레벨 1\~5 명시, JSONB schema를 `prompts/logic-auditor.md` Prompt 05로 위임. §20에서 확정 3건 이관. **엔티티·필드·관계 변경 없음** | — |

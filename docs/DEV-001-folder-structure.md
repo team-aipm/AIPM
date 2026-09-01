@@ -1,6 +1,6 @@
 # DEV-001 · 폴더 구조 및 PM 소유 경로
 
-> **Version:** 1.1 · **Updated:** 2026-08-28 · **Owner:** 운영 및 백오피스 PM\
+> **Version:** 1.3 · **Updated:** 2026-09-01 · **Owner:** 세팅 담당\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -107,6 +107,12 @@ src/app/
 │        └─ withdraw/
 │           └─ confirm/
 │
+├─ (dev)/                         # 개발 도구 · 제품 화면 아님 · 아래 규칙 6
+│  └─ prompt-lab/                 # 프롬프트 단계별 실행·검증
+│     ├─ _components/
+│     ├─ _actions.ts
+│     └─ _bridge.ts
+│
 └─ api/                           # Server Action으로 안 되는 것만
    ├─ ai/chat/                    # 스트리밍 필요
    ├─ ai/verify/                  # Answer Verification
@@ -116,10 +122,12 @@ src/app/
 ```
 
 각 폴더에 대응하는 Screen ID는 `DEV-002-routes.md`를 따른다.
+`(dev)/`는 예외다. Screen ID가 없고 DEV-002에도 넣지 않는다.
 
 ### 규칙
 
-1. **Route 수는 35개.** COM-003 §12의 Screen Inventory와 1:1로 맞춘다.
+1. **제품 Route 수는 35개.** COM-003 §12의 Screen Inventory와 1:1로 맞춘다.
+   `(dev)/`는 이 수에 포함하지 않는다.
 2. **State / Modal은 절대 Route로 만들지 않는다.** (COM-003 §13-3)
    예: `MIS-001`의 `AI 생각 중`, `힌트`, `중간 종료 확인`은 전부
    `mission/page.tsx` 내부 상태다.
@@ -130,6 +138,13 @@ src/app/
    하는 얇은 래퍼로 유지한다.
 5. **`api/`는 최소로 둔다.** 스트리밍, 외부 콜백, 배치처럼 Server Action으로
    불가능한 경우만 Route Handler를 만든다.
+6. **`(dev)/`는 개발 도구 전용이다.** 만드는 프로그램이 아니라 만들기 위해
+   쓰는 프로그램을 둔다. Screen ID·COM-003 용어 정책·Navigation이 적용되지
+   않는다. 대신 다음을 지킨다.
+   - `NODE_ENV === 'production'`이면 `notFound()`. page와 Server Action
+     **양쪽 모두**에서 막는다. Server Action은 별도 엔드포인트로 노출된다
+   - 학생·부모 데이터를 읽거나 쓰지 않는다
+   - 여기 코드가 `(student)` · `(parent)`에서 import되지 않는다
 
 ---
 
@@ -146,7 +161,7 @@ src/components/
 ```
 
 **한 화면에서만 쓰는 컴포넌트는 `components/`가 아니라 그 route의
-`_components/`에 둔다.** 이 규칙이 없으면 `components/`가 5명의 공용 충돌
+`_components/`에 둔다.** 이 규칙이 없으면 `components/`가 전원의 공용 충돌
 지점이 된다.
 
 `ui/`와 `system/`을 합치면 COM-003 §6의 공통 Component 11개가 된다.
@@ -173,6 +188,7 @@ src/lib/
 │  ├─ evaluation.ts
 │  ├─ persona.ts               # 말투만. 정답/평가/난이도 미개입
 │  ├─ problem-select.ts        # 취약 4 : 현재 4 : 복습 2
+│  ├─ schema-check.ts          # AI 출력 ↔ COM-002 스키마 검증
 │  └─ student-memory.ts
 │
 ├─ services/             # 파일명 = COM-002 엔티티명
@@ -229,21 +245,65 @@ src/types/
 
 ---
 
-## 6. PM별 소유 경로
+## 6. 담당과 소유 경로
 
 **담당은 Branch가 아니라 이 표가 정한다.** (COM-005 §6 v2.0)
 브랜치는 `main` + `develop` + 단기 작업 브랜치만 두므로, "누가 무엇을 쓰는가"는
 전적으로 폴더 소유로 결정된다.
 
-**자기 소유 경로 밖을 수정하는 PR은 해당 오너의 리뷰를 받는다.**
+### 두 트랙
 
-| PM | 소유 경로 |
-|---|---|
-| 회원·유입 | `app/(auth)/**`<br>`app/(student)/onboarding/**`, `app/(student)/students/**`<br>`app/(parent)/my/**` (marketing 제외)<br>`lib/services/{account,student}.ts`<br>`lib/auth/**` |
-| AI 코어 | `app/(student)/home/**`, `app/(student)/mission/**`<br>`app/api/ai/**`<br>`lib/ai/**`, `lib/gemini/**`<br>`lib/services/{learning-session,problem,message,evaluation,logic-gap,student-memory}.ts`<br>`components/student/**`<br>`docs/prompts/**` |
-| 과금 | `app/(parent)/billing/**`<br>`app/api/webhooks/payment/**`<br>`lib/services/{subscription,payment}.ts` |
-| 운영·백오피스 | `components/system/**`<br>`lib/errors/**`<br>`src/middleware.ts`<br>`scripts/ops/**`<br>`docs/DEV-*.md` |
-| 그로스 | `app/(parent)/reports/**`, `app/(parent)/my/marketing/**`<br>`app/api/cron/**`<br>`lib/analytics/**`<br>`lib/services/{learning-report,event}.ts` |
+PM 4명이 두 트랙으로 나뉜다. 각 트랙 안에서는 **공동 소유**다.
+
+| 트랙 | 인원 | 맡는 역할 |
+|---|---|---|
+| **AI 코어** | 2명 | 학습 경험 · Drill-down · 평가 |
+| **서비스** | 2명 | 회원·유입 · 과금 · 운영/백오피스 · 그로스 |
+
+**트랙 밖을 수정하는 PR은 해당 트랙의 리뷰를 받는다.**
+같은 트랙 안에서는 서로 자유롭게 수정하되, 작업 전에 무엇을 건드리는지
+공유한다. 공동 소유는 "아무나 고쳐도 된다"가 아니라 "둘 다 책임진다"는 뜻이다.
+
+### AI 코어 트랙
+
+```text
+app/(student)/home/**
+app/(student)/mission/**
+app/(dev)/**                 개발 도구. §2 규칙 6
+app/api/ai/**
+lib/ai/**  ·  lib/gemini/**
+lib/services/{learning-session,problem,message,evaluation,logic-gap,student-memory}.ts
+components/student/**
+docs/prompts/**
+```
+
+### 서비스 트랙
+
+네 역할을 2명이 함께 맡는다. 역할별로 경로를 구분해 두는 이유는
+소유자를 나누기 위해서가 아니라, **어느 COM 문서를 봐야 하는지**를
+알려주기 위해서다.
+
+| 역할 | 경로 | 참조 문서 |
+|---|---|---|
+| 회원 · 유입 | `app/(auth)/**`<br>`app/(student)/onboarding/**`, `app/(student)/students/**`<br>`app/(parent)/my/**` (marketing 제외)<br>`lib/services/{account,student}.ts`<br>`lib/auth/**` | COM-001 · COM-003 |
+| 과금 | `app/(parent)/billing/**`<br>`app/api/webhooks/payment/**`<br>`lib/services/{subscription,payment}.ts` | COM-002 §11~12 |
+| 운영 · 백오피스 | `components/system/**`<br>`lib/errors/**`<br>`scripts/ops/**` | COM-007 확정 후 |
+| 그로스 | `app/(parent)/reports/**`, `app/(parent)/my/marketing/**`<br>`app/api/cron/**`<br>`lib/analytics/**`<br>`lib/services/{learning-report,event}.ts` | COM-002 §13~14 |
+
+> `src/app/(admin)/`은 COM-007이 확정되기 전까지 만들지 않는다.
+
+### 세팅 담당 — 한시적
+
+프로젝트 초기 환경 구축(저장소 · Vercel · Supabase · 문서 체계 · 스키마)은
+**한시적 역할**이며 위 두 트랙에 속하지 않는다. 세팅이 끝나면 아래 경로와
+책임을 두 트랙에 인계한다.
+
+```text
+src/middleware.ts        docs/DEV-*.md        supabase/migrations/**
+```
+
+인계 항목과 절차는 `DEV-003 §12`를 따른다. **인계가 끝나기 전까지 이
+경로들은 세팅 담당이 유지한다.**
 
 ### 공통 영역 — 변경 시 합의 필요
 
@@ -276,7 +336,7 @@ supabase/migrations/**
 | `supabase/migrations/**` | 동시 작업 시 번호 충돌 | timestamp 접두어 사용 (§7) |
 | `src/types/database.ts` | 각자 생성하면 매번 diff 발생 | migration Merge 후 **운영 PM 1명이 생성해 커밋**. 나머지는 Pull만 |
 | `package.json` | 의존성 추가가 겹침 | 추가 전 팀 공지 → 단독 PR → 전원 `npm install` |
-| `src/lib/constants/**` | 5명이 동시에 상수 추가 | 파일을 잘게 유지 (`enums` / `copy` / `screens` 분리) |
+| `src/lib/constants/**` | 여러 명이 동시에 상수 추가 | 파일을 잘게 유지 (`enums` / `copy` / `screens` 분리) |
 | `src/components/ui/**` | 같은 컴포넌트를 각자 만듦 | 새 공통 컴포넌트는 만들기 전에 공지 |
 
 ### 미배정
@@ -349,3 +409,5 @@ lib        →  app                      (금지)
 |---|---|---|---|
 | 1.0 | 2026-08-28 | 최초 작성. COM-005 §7 하위 구조 상세화 | — |
 | 1.1 | 2026-08-28 | §6 PM별 Branch 표기 제거(담당은 소유 경로가 결정) + 공통 코드 변경 절차 추가. §7 Migration 명명을 연번 → timestamp 접두어로 변경 | — |
+| 1.2 | 2026-08-31 | §6을 5역할 개인 소유 → **2트랙 공동 소유**로 개편(AI 코어 2인 · 서비스 2인). 세팅 담당을 한시적 역할로 명시하고 인계 대상을 DEV-003 §12로 연결 | — |
+| 1.3 | 2026-09-01 | §2에 `(dev)/` Route Group 추가. §6 AI 코어 트랙 소유 경로에 `app/(dev)/**` 추가. 개발 도구 전용이며 Screen ID가 없고 제품 Route 35개에 포함하지 않는다. 지켜야 할 제약 3가지를 규칙 6으로 명시. §4에 `lib/ai/schema-check.ts` 추가 | — |

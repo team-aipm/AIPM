@@ -1,17 +1,21 @@
 # CLAUDE.md
 
-> **Version:** 1.0 · **Updated:** 2026-08-28 · **Owner:** 운영 및 백오피스 PM
+> **Version:** 1.1 · **Updated:** 2026-08-31 · **Owner:** 운영 및 백오피스 PM
 
 Claude Code가 이 프로젝트에서 작업할 때 따르는 규칙이다.
 상세 기준은 `docs/`의 COM / DEV 문서에 있으며, **이 파일과 문서가 충돌하면
 문서가 우선**한다.
+
+> 저장소 루트의 `AGENTS.md`는 Codex 등 다른 AI 도구를 위한 **요약본**이다.
+> 이 파일이 원본이므로, 규칙을 고칠 때는 `AGENTS.md`도 함께 갱신한다.
 
 ---
 
 ## 프로젝트
 
 초등학교 4~6학년 수학 · 메타인지 사고과정 Drill-down 학습 서비스.
-PM 5명이 하나의 GitHub Repository에서 각자 브랜치로 개발한다.
+PM 4명이 하나의 GitHub Repository에서 개발한다. 담당은 브랜치가 아니라
+`DEV-001 §6`의 소유 경로가 정한다.
 
 **스택:** Next.js + TypeScript + Tailwind / Supabase (Auth · PostgreSQL ·
 Storage) / Google Gemini API / Vercel / npm
@@ -122,6 +126,8 @@ main        배포용
 ```
 
 - PM별 고정 브랜치는 없다. 담당은 `DEV-001 §6`의 소유 경로가 정한다.
+- 담당은 **AI 코어 트랙(2인)** 과 **서비스 트랙(2인)** 으로 나뉜다.
+  트랙 밖을 수정하는 PR은 해당 트랙의 리뷰를 받는다.
 - 공통 코드(`package.json`, `types/database.ts`, `lib/constants/**`,
   `components/ui/**`, `supabase/migrations/**`)는 기능 작업에 섞지 않고
   단독으로 먼저 merge한다.

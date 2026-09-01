@@ -1,6 +1,6 @@
 # AIPM 공통 문서 지도
 
-> **Version:** 1.0 · **Updated:** 2026-08-28 · **Owner:** (미지정)\
+> **Version:** 1.5 · **Updated:** 2026-09-01 · **Owner:** (미지정)\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -13,9 +13,9 @@
 
 | 계층 | 성격 | 변경 조건 | 예 |
 |---|---|---|---|
-| `COM-xxx` | 정책 · 기준 | **PM 5명 합의 필요** | COM-001 ~ COM-007 |
+| `COM-xxx` | 정책 · 기준 | **PM 전원 합의** | COM-001 ~ COM-007 |
 | `DEV-xxx` | 구현 상세 | PR 리뷰 | DEV-001, DEV-002 |
-| `prompts/` | AI Prompt 원문 | AI 코어 PM + 리뷰 | 추후 |
+| `prompts/` | AI Prompt 원문 | AI 코어 PM + 리뷰 | `prompts/logic-auditor.md` |
 
 `COM`은 "무엇을 만들 것인가", `DEV`는 "어디에 어떻게 둘 것인가"를 다룹니다.
 
@@ -26,7 +26,7 @@
 | 문서 | 다루는 것 | Status |
 |---|---|---|
 | `COM-001-service-flow.md` | 서비스 흐름, 상태 전이, 학습 규칙 | 확정 |
-| `COM-002-data-model.md` | 엔티티·필드·관계·명명 규칙 | 확정 |
+| `COM-002-data-model.md` | 엔티티·필드·관계·명명 규칙 | 확정 (v1.1) |
 | `COM-003-screen-ui.md` | Area / Screen ID / State / 공통 UI | 확정 |
 | `COM-004-ai-coding-rules.md` | 바이브코딩 작업 규칙 | **초안 (작성 필요)** |
 | `COM-005-development-environment.md` | 기술 스택, 브랜치, 환경변수, 배포 | 확정 |
@@ -34,6 +34,9 @@
 | `COM-007-privacy-child-data.md` | 개인정보 · 아동 데이터 정책 | **초안 (작성 필요)** |
 | `DEV-001-folder-structure.md` | 폴더 세부 구조, PM 소유 경로, 명명 규칙 | 확정 |
 | `DEV-002-routes.md` | Screen ID ↔ Route 매핑 | 확정 |
+| `DEV-003-infra-setup.md` | GitHub · Vercel · Supabase 설정과 연동 절차 | 확정 |
+| `DEV-004-onboarding.md` | 팀원 로컬 세팅, AI 도구별 준비, 첫 PR | 확정 |
+| `prompts/logic-auditor.md` | Logic Auditor 6개 AI 프롬프트 원문 | 확정 |
 
 ---
 
@@ -53,6 +56,11 @@
 | 환경변수 이름을 새로 만들어도 되나 | COM-005 §8 → 팀 합의 |
 | 이 파일을 어디에 둬야 하나 | **DEV-001** |
 | 이 화면의 URL이 뭔가 | **DEV-002** |
+| AI가 뭘 어떻게 출력하나 | **prompts/logic-auditor.md** |
+| Supabase · Vercel을 어떻게 연결하나 | **DEV-003** |
+| 환경변수 값을 어디서 받나 | **DEV-004 §2** |
+| 처음 세팅하는데 뭐부터 하나 | **DEV-004** |
+| 내 도구에서 규칙이 적용되나 | **DEV-004 §3** |
 
 ---
 
@@ -86,7 +94,7 @@ COM  >  DEV
 → Migration / 코드 반영
 ```
 
-- `COM` 문서 수정은 **PM 5명 합의**가 있어야 합니다.
+- `COM` 문서 수정은 **PM 전원 합의**가 있어야 합니다.
 - `DEV` 문서 수정은 해당 오너 PM이 PR로 처리하고 리뷰만 받습니다.
 - 수정 시 상단 헤더의 `Version` · `Updated`를 반드시 갱신하고 하단 Changelog에 한 줄 남깁니다.
 
@@ -117,3 +125,8 @@ COM  >  DEV
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
 | 1.0 | 2026-08-28 | 최초 작성. 문서 계층·우선순위·변경 절차 정의 | — |
+| 1.1 | 2026-08-31 | COM 문서 합의 규칙을 "PM 5명 합의" → **"PM 전원 합의"**로 변경. 인원 변동과 무관하게 유지되도록 함. DEV-003 · DEV-004 추가 반영 | — |
+| 1.2 | 2026-09-01 | `prompts/logic-auditor.md` 등록. §6에 프롬프트 §0의 확정 필요 항목 2줄 추가 | — |
+| 1.3 | 2026-09-01 | 프롬프트 §0의 4건이 확정됨에 따라 §2 Status와 §6 미결 사항을 갱신. 남은 것은 COM-002 본문 반영 | — |
+| 1.4 | 2026-09-01 | 확정 4건이 COM-002 v1.1에 반영 완료. §6 미결 사항을 새로 발견된 Required 1건으로 교체 | — |
+| 1.5 | 2026-09-01 | `transfer_score`·`reflection_score` Required를 `NO`로 확정. §6 미결 사항에서 제거 | — |
