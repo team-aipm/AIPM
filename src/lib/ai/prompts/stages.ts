@@ -26,15 +26,17 @@ export type StagePreset = {
   /**
    * 입력을 JSON으로 다룰지 평문으로 다룰지.
    * 출력 형식과 별개다. 평문을 넣고 JSON을 받는 단계가 있다.
-   * 대화형 단계는 대화 배열이 입력 JSON 안에 있으므로 json 이어야 한다.
+   * JSON 입력 단계는 대화 기록이 이 JSON 안의 배열에 쌓인다.
    */
   inputMode: OutputMode;
   outputMode: OutputMode;
   /** 붙일 검증 규칙. null이면 JSON 형식만 본다 */
   checkRule: CheckRuleId | null;
-  /** 대화형 단계인가. 켜면 채팅창이 생기고 턴이 쌓인다 */
-  chat: boolean;
-  /** 대화 기록이 담긴 입력 JSON의 배열 키 */
+  /**
+   * 대화 기록이 담긴 입력 JSON의 배열 키.
+   * inputMode 가 json 일 때만 쓴다. 평문 입력 단계는 대화 기록을
+   * 화면에만 남긴다.
+   */
   historyKey: string;
   /** 화면에 말풍선으로 보여줄 출력 필드 */
   replyKey: string;
@@ -51,7 +53,6 @@ export const BLANK_STAGE: StagePreset = {
   inputMode: 'json',
   outputMode: 'json',
   checkRule: null,
-  chat: false,
   historyKey: 'conversation',
   replyKey: 'message',
 };
@@ -62,7 +63,6 @@ const STAGE_00: StagePreset = {
   inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-ocr',
-  chat: false,
   historyKey: 'conversation',
   replyKey: 'message',
   sampleInput: `{
@@ -111,7 +111,6 @@ const STAGE_01: StagePreset = {
   inputMode: 'json',
   outputMode: 'text',
   checkRule: null,
-  chat: false,
   historyKey: 'conversation',
   replyKey: 'message',
   sampleInput: '{\n  "note": "01은 원칙 문서다. 단독 호출 대상이 아니다."\n}',
@@ -154,7 +153,6 @@ const STAGE_02: StagePreset = {
   inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-problem',
-  chat: false,
   historyKey: 'conversation',
   replyKey: 'message',
   sampleInput: `{
@@ -225,7 +223,6 @@ const STAGE_03: StagePreset = {
   inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-message',
-  chat: true,
   historyKey: 'conversation',
   replyKey: 'message',
   sampleInput: `{
@@ -327,7 +324,6 @@ const STAGE_04: StagePreset = {
   inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-evaluation',
-  chat: false,
   historyKey: 'conversation',
   replyKey: 'message',
   sampleInput: `{
@@ -423,7 +419,6 @@ const STAGE_05: StagePreset = {
   inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-student-memory',
-  chat: false,
   historyKey: 'conversation',
   replyKey: 'message',
   sampleInput: `{
@@ -514,7 +509,6 @@ const STAGE_06: StagePreset = {
   inputMode: 'json',
   outputMode: 'json',
   checkRule: 'aipm-next-problem',
-  chat: false,
   historyKey: 'conversation',
   replyKey: 'message',
   sampleInput: `{

@@ -21,7 +21,7 @@ import {
 } from '@/lib/ai/schema-check';
 import { fetchModels, runStage, type RunResult } from '../_actions';
 import { bridge } from '../_bridge';
-import { appendAiTurn, appendUserTurn, readTurns } from '../_chat';
+import { appendAiTurn, appendUserTurn, readTurns, type Turn } from '../_chat';
 
 type Stage = StagePreset & {
   /** React key 전용. DOM에 넣지 않는다 */
@@ -38,6 +38,13 @@ type Stage = StagePreset & {
   topP: string;
   /** 다음 호출에 함께 보낼 이미지. 보내고 나면 비운다 */
   images: Attachment[];
+  /**
+   * 평문 입력 단계의 대화 기록. 화면에만 쓴다.
+   *
+   * JSON 입력 단계는 입력 JSON 안의 배열이 곧 대화 기록이라 별도 상태가
+   * 없다. 평문 단계는 담을 곳이 없어 여기 둔다.
+   */
+  transcript: Turn[];
   useCommonPrompt: boolean;
   forceJsonMimeType: boolean;
   result: RunResult | null;
@@ -62,6 +69,7 @@ function toStage(base: StagePreset, key: string): Stage {
     maxTokens: '',
     topP: '',
     images: [],
+    transcript: [],
     useCommonPrompt: true,
     forceJsonMimeType: false,
     result: null,
@@ -110,7 +118,6 @@ function toSaved(stage: Stage): SavedStage {
     inputMode: stage.inputMode,
     outputMode: stage.outputMode,
     checkRule: stage.checkRule,
-    chat: stage.chat,
     historyKey: stage.historyKey,
     replyKey: stage.replyKey,
     provider: stage.provider,
@@ -144,11 +151,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   );
   // 새 단계에 줄 key. 순서를 바꿔도 React가 상태를 잃지 않도록 고유하게 둔다.
   const [keySeq, setKeySeq] = useState(preset.length);
-  // 대화형 단계가 있으면 거기서 시작한다. 학습 흐름이 먼저 보이는 게 낫다.
-  const [activeIndex, setActiveIndex] = useState(() => {
-    const chatIndex = preset.findIndex((stage) => stage.chat);
-    return chatIndex >= 0 ? chatIndex : 0;
-  });
+  const [activeIndex, setActiveIndex] = useState(0);
   // 프로바이더별 기본 키. 화면에서만 산다. 저장하지 않는다.
   const [defaultKeys, setDefaultKeys] = useState<Record<ProviderId, string>>({
     gemini: '',
@@ -421,25 +424,57 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     );
   }
 
-  /** 채팅: 사용자 발화를 붙여 보내고, 응답을 다시 대화에 붙인다. */
+  /**
+   * 대화 전송. 입력 형식에 따라 기록이 쌓이는 곳이 다르다.
+   *
+   * json  입력 JSON 안의 배열에 학생 턴 -> 응답 턴을 붙인다.
+   * text  보낸 글이 곧 입력이 된다. 기록은 화면(transcript)에만 남는다.
+   */
   function send() {
     if (!active || active.running) return;
     const text = draft.trim();
     // 이미지만 붙여 보낼 수 있다. OCR 단계에서 자주 쓴다.
     if (!text && active.images.length === 0) return;
 
-    const withUser = appendUserTurn(
-      active.input,
-      active.historyKey,
-      text,
-      active.images.map((image) => image.name),
-    );
-    if (withUser === null) {
-      window.alert('입력 JSON을 파싱하지 못해 대화를 이어갈 수 없습니다.');
+    const index = activeIndex;
+    const names = active.images.map((image) => image.name);
+
+    if (active.inputMode === 'text') {
+      setDraft('');
+      patch(index, {
+        input: text,
+        transcript: [...active.transcript, { who: 'user', text, attachments: names }],
+      });
+
+      execute(text, (result) => {
+        if (!result.ok) return;
+        setStages((prev) =>
+          prev.map((stage, i) =>
+            i === index
+              ? {
+                  ...stage,
+                  transcript: [
+                    ...stage.transcript,
+                    { who: 'ai', text: result.raw, attachments: [] },
+                  ],
+                }
+              : stage,
+          ),
+        );
+      });
+      patch(index, { images: [] });
       return;
     }
 
-    const index = activeIndex;
+    const withUser = appendUserTurn(active.input, active.historyKey, text, names);
+    if (withUser === null) {
+      window.alert(
+        '입력 JSON을 파싱하지 못해 대화를 이어갈 수 없습니다. ' +
+          '입력을 평문으로 바꾸거나 JSON을 고쳐 주세요.',
+      );
+      return;
+    }
+
     const historyKey = active.historyKey;
     const replyKey = active.replyKey;
 
@@ -490,7 +525,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         inputMode: stage.inputMode,
         outputMode: stage.outputMode,
         checkRule: stage.checkRule,
-        chat: stage.chat,
         historyKey: stage.historyKey,
         replyKey: stage.replyKey,
         provider: stage.provider,
@@ -666,9 +700,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             <span className="text-[10px] text-neutral-500">
               {PROVIDERS.find((entry) => entry.id === stage.provider)?.label}
             </span>
-            {stage.chat && (
+            {stage.inputMode === 'text' && (
               <span className="rounded bg-neutral-200 px-1 text-[10px] text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                대화
+                평문
               </span>
             )}
           </button>
@@ -844,7 +878,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                     <span className="text-neutral-500">입력</span>
                     <select
                       value={active.inputMode}
-                      disabled={active.chat}
                       onChange={(event) =>
                         patch(activeIndex, { inputMode: event.target.value as OutputMode })
                       }
@@ -899,14 +932,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                     onChange={(next) => patch(activeIndex, { forceJsonMimeType: next })}
                     label="JSON 강제"
                   />
-                  <Toggle
-                    checked={active.chat}
-                    onChange={(next) => patch(activeIndex, { chat: next })}
-                    label="대화형"
-                  />
                 </div>
 
-                {active.chat && (
+                {active.inputMode === 'json' && (
                   <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                     <label className="flex items-center gap-2">
                       <span className="text-neutral-500">대화 배열 키</span>
@@ -948,28 +976,44 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           </section>
 
           <section className="order-1 flex flex-col gap-3 lg:order-2">
-            {active.chat && (
-              <ChatPanel
-                turns={readTurns(active.input, active.historyKey)}
-                draft={draft}
-                onDraft={setDraft}
-                onSend={send}
-                running={active.running}
-                lastChecks={active.result?.ok ? active.result.checks : null}
-                images={active.images}
-                onAttach={attachFiles}
-                onRemoveImage={removeImage}
-              />
-            )}
+            {/* 대화창은 모든 단계에 있다. 입력 형식에 따라 기록이 쌓이는
+                곳만 다르다. JSON 이면 입력 JSON 안의 배열, 평문이면 화면
+                에만 남는다. */}
+            <ChatPanel
+              turns={
+                active.inputMode === 'json'
+                  ? readTurns(active.input, active.historyKey)
+                  : active.transcript
+              }
+              draft={draft}
+              onDraft={setDraft}
+              onSend={send}
+              running={active.running}
+              lastChecks={active.result?.ok ? active.result.checks : null}
+              images={active.images}
+              onAttach={attachFiles}
+              onRemoveImage={removeImage}
+              hint={
+                active.inputMode === 'json'
+                  ? `입력 JSON 의 ${active.historyKey} 에 쌓입니다`
+                  : '보낸 글이 곧 입력이 됩니다. 기록은 화면에만 남습니다'
+              }
+              onClear={() =>
+                patch(activeIndex, {
+                  transcript: [],
+                  ...(active.inputMode === 'json'
+                    ? { input: clearHistory(active.input, active.historyKey) }
+                    : {}),
+                })
+              }
+            />
 
             <Panel
               title="입력"
               hint={
-                active.chat
+                active.inputMode === 'json'
                   ? '대화창과 같은 값이다. 여기서 고쳐도 된다'
-                  : active.inputMode === 'json'
-                    ? 'JSON 으로 검사한다. 평문을 넣으려면 위에서 입력을 평문으로 바꾼다'
-                    : '평문 그대로 보낸다'
+                  : '평문 그대로 보낸다'
               }
               onCopy={() => navigator.clipboard.writeText(active.input)}
             >
@@ -987,7 +1031,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 disabled={active.running}
                 className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
               >
-                {active.running ? '실행 중…' : active.chat ? '한 번만 실행' : '실행'}
+                {active.running ? '실행 중…' : '입력 그대로 실행'}
               </button>
 
               {active.result?.ok && activeIndex + 1 < stages.length && (
@@ -1001,52 +1045,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
               {active.result && <Meta result={active.result} />}
             </div>
-
-            {!active.chat && (
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="cursor-pointer rounded border border-neutral-300 px-3 py-1 text-neutral-500 dark:border-neutral-700">
-                  이미지 붙이기
-                  <input
-                    type="file"
-                    accept={ACCEPTED_IMAGE_TYPES.join(',')}
-                    multiple
-                    onChange={(event) => {
-                      void attachFiles(event.target.files);
-                      event.target.value = '';
-                    }}
-                    className="hidden"
-                  />
-                </label>
-
-                {active.images.length === 0 ? (
-                  <span className="text-[11px] text-neutral-500">
-                    붙이면 이 단계의 모델({active.model.trim() ||
-                      DEFAULT_MODEL[active.provider]})로 함께 보냅니다
-                  </span>
-                ) : (
-                  active.images.map((image, index) => (
-                    <span
-                      key={`${image.name}-${index}`}
-                      className="flex items-center gap-2 rounded border border-neutral-300 px-2 py-1 text-[11px] dark:border-neutral-700"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`data:${image.mediaType};base64,${image.data}`}
-                        alt=""
-                        className="h-8 w-8 rounded object-cover"
-                      />
-                      {image.name}
-                      <button
-                        onClick={() => removeImage(index)}
-                        className="text-neutral-500 hover:underline"
-                      >
-                        제거
-                      </button>
-                    </span>
-                  ))
-                )}
-              </div>
-            )}
 
             <ResultView result={active.result} />
           </section>
@@ -1066,6 +1064,8 @@ function ChatPanel({
   images,
   onAttach,
   onRemoveImage,
+  hint,
+  onClear,
 }: {
   turns: { who: 'user' | 'ai' | 'other'; text: string; attachments: string[] }[];
   draft: string;
@@ -1076,14 +1076,26 @@ function ChatPanel({
   images: Attachment[];
   onAttach: (files: FileList | null) => void;
   onRemoveImage: (index: number) => void;
+  hint: string;
+  onClear: () => void;
 }) {
   const failed = lastChecks?.filter((check) => check.level === 'fail') ?? [];
 
   return (
     <div className="rounded border border-neutral-200 dark:border-neutral-800">
-      <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-1.5 dark:border-neutral-800">
-        <span className="font-bold">대화</span>
-        <span className="text-neutral-500">{turns.length}턴</span>
+      <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-3 py-1.5 dark:border-neutral-800">
+        <div className="flex items-baseline gap-2">
+          <span className="font-bold">대화</span>
+          <span className="text-[11px] text-neutral-500">{hint}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-neutral-500">{turns.length}턴</span>
+          {turns.length > 0 && (
+            <button onClick={onClear} className="text-neutral-500 hover:underline">
+              비우기
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex max-h-[320px] flex-col gap-2 overflow-auto p-3">
@@ -1232,8 +1244,8 @@ function ResultView({ result }: { result: RunResult | null }) {
     return (
       <Panel title="답변" hint="실행하면 여기에 나옵니다">
         <p className="p-3 text-neutral-500">
-          아직 실행하지 않았습니다. API 키를 넣고 실행하거나, 대화형 단계에서
-          메시지를 보내세요.
+          아직 실행하지 않았습니다. API 키를 넣고 대화창에 메시지를 보내거나,
+          입력을 채우고 실행하세요.
         </p>
       </Panel>
     );
@@ -1312,6 +1324,19 @@ function Panel({
       {children}
     </div>
   );
+}
+
+/** 입력 JSON 의 대화 배열만 비운다. 나머지 필드는 그대로 둔다. */
+function clearHistory(inputJson: string, historyKey: string): string {
+  try {
+    const root = JSON.parse(inputJson);
+    if (typeof root !== 'object' || root === null || Array.isArray(root)) {
+      return inputJson;
+    }
+    return JSON.stringify({ ...root, [historyKey]: [] }, null, 2);
+  } catch {
+    return inputJson;
+  }
 }
 
 /** ArrayBuffer -> base64. 큰 파일에서 스택이 넘치지 않게 나눠 처리한다. */
