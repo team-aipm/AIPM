@@ -302,3 +302,80 @@ function parseJson(text: string): unknown {
 function num(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
 }
+
+// ── 모델 목록 조회 ───────────────────────────────────────────────────────
+
+/**
+ * 프로바이더에서 **실제로 쓸 수 있는 모델 목록**을 받아온다.
+ *
+ * 코드에 적어둔 후보 목록은 반드시 낡는다. 모델은 예고 없이 사라지고
+ * (`no longer available to new users`) 새 이름이 생긴다. 목록을 손으로
+ * 관리하는 대신 매번 물어본다.
+ */
+export type ModelListResult =
+  | { ok: true; models: string[] }
+  | { ok: false; error: string };
+
+export async function listModels(
+  provider: ProviderId,
+  apiKey: string,
+): Promise<ModelListResult> {
+  const key = apiKey.trim() || (provider === 'gemini' ? process.env.GEMINI_API_KEY?.trim() : '');
+  if (!key) return { ok: false, error: 'API 키를 먼저 입력하세요.' };
+
+  const config: Record<ProviderId, { url: string; headers: Record<string, string> }> = {
+    gemini: {
+      url: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
+      headers: { 'x-goog-api-key': key },
+    },
+    openai: {
+      url: 'https://api.openai.com/v1/models',
+      headers: { authorization: `Bearer ${key}` },
+    },
+    anthropic: {
+      url: 'https://api.anthropic.com/v1/models?limit=100',
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    },
+  };
+
+  const { url, headers } = config[provider];
+  const outcome = await safeFetch(url, { method: 'GET', headers });
+  if ('error' in outcome) return { ok: false, error: outcome.error };
+  if (!outcome.ok) {
+    return { ok: false, error: `${provider} ${outcome.status}
+${outcome.raw.slice(0, 1000)}` };
+  }
+
+  const body = parseJson(outcome.raw);
+  if (body === null) return { ok: false, error: '목록 응답이 JSON이 아닙니다.' };
+
+  const models = extractModelIds(provider, body);
+  return models.length > 0
+    ? { ok: true, models }
+    : { ok: false, error: `목록이 비어 있습니다.
+${outcome.raw.slice(0, 800)}` };
+}
+
+function extractModelIds(provider: ProviderId, body: unknown): string[] {
+  if (provider === 'gemini') {
+    const list = (body as { models?: unknown[] }).models ?? [];
+    return list
+      .filter((item) => {
+        // 텍스트 생성이 가능한 모델만 남긴다. 임베딩·TTS 등을 걸러낸다.
+        const methods = (item as { supportedGenerationMethods?: unknown })
+          .supportedGenerationMethods;
+        return !Array.isArray(methods) || methods.includes('generateContent');
+      })
+      .map((item) => String((item as { name?: unknown }).name ?? ''))
+      .map((name) => name.replace(/^models\//, ''))
+      .filter(Boolean)
+      .sort();
+  }
+
+  // OpenAI 와 Anthropic 은 둘 다 data[].id 다.
+  const list = (body as { data?: unknown[] }).data ?? [];
+  return list
+    .map((item) => String((item as { id?: unknown }).id ?? ''))
+    .filter(Boolean)
+    .sort();
+}

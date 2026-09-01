@@ -14,18 +14,14 @@ export const PROVIDERS = [
 export type ProviderId = (typeof PROVIDERS)[number]['id'];
 
 /**
- * 모델명은 화면에서 직접 입력한다. 아래는 자동완성 후보일 뿐이며,
- * 목록에 없는 이름을 넣으면 해당 API가 404를 돌려주고 화면이 그대로
- * 보여준다. 새 모델이 나와도 코드를 고칠 필요가 없다.
+ * 시작용 후보. **이 목록은 반드시 낡는다.**
+ *
+ * 모델은 예고 없이 사라지고(`no longer available to new users`) 새 이름이
+ * 생긴다. 화면의 "목록 불러오기" 로 프로바이더에서 실제 목록을 받아오는
+ * 것이 정확하다. 아래는 키를 넣기 전에 보여줄 값일 뿐이다.
  */
 export const MODEL_CANDIDATES: Record<ProviderId, string[]> = {
-  gemini: [
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-  ],
+  gemini: ['gemini-3.6-flash'],
   openai: [
     'gpt-5',
     'gpt-5-mini',
@@ -45,7 +41,7 @@ export const MODEL_CANDIDATES: Record<ProviderId, string[]> = {
 };
 
 export const DEFAULT_MODEL: Record<ProviderId, string> = {
-  gemini: 'gemini-2.5-flash',
+  gemini: 'gemini-3.6-flash',
   openai: 'gpt-4.1-mini',
   anthropic: 'claude-sonnet-5',
 };

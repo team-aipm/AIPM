@@ -19,7 +19,7 @@ import {
   type CheckRuleId,
   type OutputMode,
 } from '@/lib/ai/schema-check';
-import { runStage, type RunResult } from '../_actions';
+import { fetchModels, runStage, type RunResult } from '../_actions';
 import { bridge } from '../_bridge';
 import { appendAiTurn, appendUserTurn, readTurns } from '../_chat';
 
@@ -149,6 +149,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [panel, setPanel] = useState<'none' | 'common' | 'config'>('none');
   const [configText, setConfigText] = useState('');
   const [draft, setDraft] = useState('');
+  // 프로바이더에서 받아온 실제 모델 목록. 코드의 후보보다 이쪽이 정확하다.
+  const [liveModels, setLiveModels] = useState<Partial<Record<ProviderId, string[]>>>({});
+  const [loadingModels, setLoadingModels] = useState(false);
   const [, startTransition] = useTransition();
 
   // 저장 여부. 키는 따로 관리한다.
@@ -328,6 +331,23 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   function run() {
     if (!active) return;
     execute(active.input);
+  }
+
+  /** 지금 단계의 프로바이더에 실제 모델 목록을 물어본다. */
+  async function loadModels() {
+    if (!active || loadingModels) return;
+    const provider = active.provider;
+    const key = active.apiKey.trim() || defaultKeys[provider].trim();
+
+    setLoadingModels(true);
+    const result = await fetchModels(provider, key);
+    setLoadingModels(false);
+
+    if (!result.ok) {
+      window.alert(result.error);
+      return;
+    }
+    setLiveModels((prev) => ({ ...prev, [provider]: result.models }));
   }
 
   /** 파일을 base64로 읽어 현재 단계에 붙인다. */
@@ -692,7 +712,20 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                     한 번에 채워 넣는 단축키일 뿐이고, 여기 없는 이름도
                     그대로 입력해서 쓸 수 있다. */}
                 <div className="flex flex-wrap items-center gap-1.5 pl-[4.5rem]">
-                  {MODEL_CANDIDATES[active.provider].map((candidate) => (
+                  <button
+                    type="button"
+                    onClick={() => void loadModels()}
+                    disabled={loadingModels}
+                    className="rounded border border-neutral-400 px-1.5 py-0.5 text-[11px] disabled:opacity-40 dark:border-neutral-600"
+                  >
+                    {loadingModels ? '불러오는 중…' : '목록 불러오기'}
+                  </button>
+                  {liveModels[active.provider] === undefined && (
+                    <span className="text-[11px] text-neutral-500">
+                      아래는 코드에 적힌 값이라 낡았을 수 있습니다
+                    </span>
+                  )}
+                  {(liveModels[active.provider] ?? MODEL_CANDIDATES[active.provider]).map((candidate) => (
                     <button
                       key={candidate}
                       type="button"

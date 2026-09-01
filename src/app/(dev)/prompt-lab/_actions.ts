@@ -3,7 +3,12 @@
 import { notFound } from 'next/navigation';
 
 import { hasGeminiApiKey } from '@/lib/gemini/client';
-import { callProvider, type SamplingParams } from './_providers';
+import {
+  callProvider,
+  listModels,
+  type ModelListResult,
+  type SamplingParams,
+} from './_providers';
 import type { Attachment, ProviderId } from './_provider-meta';
 import {
   checkOutput,
@@ -49,6 +54,15 @@ export type RunResult = {
   elapsed_ms: number;
   tokens: { prompt: number | null; output: number | null; total: number | null };
 };
+
+/** 프로바이더에서 실제 모델 목록을 받아온다. 코드에 적힌 후보는 낡는다. */
+export async function fetchModels(
+  provider: ProviderId,
+  apiKey: string,
+): Promise<ModelListResult> {
+  assertDevOnly();
+  return listModels(provider, apiKey);
+}
 
 export async function checkApiKey(): Promise<boolean> {
   assertDevOnly();
