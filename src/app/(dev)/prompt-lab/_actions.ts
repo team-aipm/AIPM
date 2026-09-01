@@ -2,7 +2,9 @@
 
 import { notFound } from 'next/navigation';
 
-import { callGemini, hasGeminiApiKey } from '@/lib/gemini/client';
+import { hasGeminiApiKey } from '@/lib/gemini/client';
+import { callProvider } from './_providers';
+import type { ProviderId } from './_provider-meta';
 import {
   checkOutput,
   type Check,
@@ -13,14 +15,15 @@ import {
 /**
  * prompt-lab 전용 실행 Action.
  *
- * DB를 건드리지 않으므로 lib/services를 거치지 않는다. Gemini 호출과
+ * DB를 건드리지 않으므로 lib/services를 거치지 않는다. 모델 호출과
  * 출력 검사만 한다.
  *
- * apiKey는 화면에서 받아 그대로 Gemini로 보낸다. 저장하지 않고, 로그에
- * 남기지 않고, 반환값에도 넣지 않는다.
+ * apiKey는 화면에서 받아 해당 프로바이더로 그대로 보낸다. 저장하지 않고,
+ * 로그에 남기지 않고, 반환값에도 넣지 않는다.
  */
 
 export type RunInput = {
+  provider: ProviderId;
   model: string;
   /** systemInstruction 전문. 공통 프롬프트 결합은 화면에서 끝낸다 */
   system: string;
@@ -73,11 +76,12 @@ export async function runStage(request: RunInput): Promise<RunResult> {
     }
   }
 
-  const result = await callGemini({
+  const result = await callProvider({
+    provider: request.provider,
     model: request.model,
     system: request.system,
     input: request.input,
-    forceJsonMimeType: request.forceJsonMimeType,
+    forceJson: request.forceJsonMimeType,
     apiKey: request.apiKey,
   });
 

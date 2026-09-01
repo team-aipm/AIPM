@@ -34,6 +34,8 @@ export type StagePreset = {
   replyKey: string;
 };
 
+/** 프리셋은 프로바이더를 고르지 않는다. 화면에서 단계마다 정한다. */
+
 /** 단계를 새로 추가할 때의 빈 값 */
 export const BLANK_STAGE: StagePreset = {
   name: '새 단계',

@@ -5,9 +5,11 @@ import { useState, useTransition } from 'react';
 import { BLANK_STAGE, type StagePreset } from '@/lib/ai/prompts/stages';
 import { COMMON_RULES } from '@/lib/ai/prompts/common-rules';
 import {
-  DEFAULT_GEMINI_MODEL,
-  GEMINI_MODEL_CANDIDATES,
-} from '@/lib/gemini/models';
+  DEFAULT_MODEL,
+  MODEL_CANDIDATES,
+  PROVIDERS,
+  type ProviderId,
+} from '../_provider-meta';
 import {
   CHECK_RULES,
   type Check,
@@ -21,7 +23,8 @@ import { appendAiTurn, appendUserTurn, readTurns } from '../_chat';
 type Stage = StagePreset & {
   /** React key 전용. DOM에 넣지 않는다 */
   key: string;
-  /** 비우면 기본 모델 */
+  provider: ProviderId;
+  /** 비우면 프로바이더 기본 모델 */
   model: string;
   /** 비우면 기본 키 → 없으면 서버의 GEMINI_API_KEY */
   apiKey: string;
@@ -42,6 +45,7 @@ function toStage(base: StagePreset, key: string): Stage {
   return {
     ...base,
     key,
+    provider: 'gemini',
     model: '',
     apiKey: '',
     input: base.sampleInput,
@@ -58,9 +62,17 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   );
   // 새 단계에 줄 key. 순서를 바꿔도 React가 상태를 잃지 않도록 고유하게 둔다.
   const [keySeq, setKeySeq] = useState(preset.length);
-  const [activeIndex, setActiveIndex] = useState(1);
-  const [defaultModel, setDefaultModel] = useState(DEFAULT_GEMINI_MODEL);
-  const [defaultApiKey, setDefaultApiKey] = useState('');
+  // 대화형 단계가 있으면 거기서 시작한다. 학습 흐름이 먼저 보이는 게 낫다.
+  const [activeIndex, setActiveIndex] = useState(() => {
+    const chatIndex = preset.findIndex((stage) => stage.chat);
+    return chatIndex >= 0 ? chatIndex : 0;
+  });
+  // 프로바이더별 기본 키. 화면에서만 산다. 저장하지 않는다.
+  const [defaultKeys, setDefaultKeys] = useState<Record<ProviderId, string>>({
+    gemini: '',
+    openai: '',
+    anthropic: '',
+  });
   const [commonPrompt, setCommonPrompt] = useState(COMMON_RULES);
   const [panel, setPanel] = useState<'none' | 'common' | 'config'>('none');
   const [configText, setConfigText] = useState('');
@@ -110,13 +122,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
     startTransition(async () => {
       const result = await runStage({
-        model: active.model.trim() || defaultModel,
+        provider: active.provider,
+        model: active.model.trim() || DEFAULT_MODEL[active.provider],
         system,
         input,
         outputMode: active.outputMode,
         checkRule: active.checkRule,
         forceJsonMimeType: active.forceJsonMimeType,
-        apiKey: active.apiKey.trim() || defaultApiKey.trim(),
+        apiKey: active.apiKey.trim() || defaultKeys[active.provider].trim(),
       });
       patch(index, { running: false, result });
       onDone?.(result);
@@ -180,7 +193,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     // API 키는 내보내지 않는다.
     const payload = {
       commonPrompt,
-      defaultModel,
       stages: stages.map((stage) => ({
         name: stage.name,
         note: stage.note,
@@ -188,6 +200,10 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         sampleInput: stage.input,
         outputMode: stage.outputMode,
         checkRule: stage.checkRule,
+        chat: stage.chat,
+        historyKey: stage.historyKey,
+        replyKey: stage.replyKey,
+        provider: stage.provider,
         model: stage.model,
         useCommonPrompt: stage.useCommonPrompt,
         forceJsonMimeType: stage.forceJsonMimeType,
@@ -209,8 +225,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     }
     const data = parsed as {
       commonPrompt?: string;
-      defaultModel?: string;
-      stages?: Partial<StagePreset & { model: string; useCommonPrompt: boolean; forceJsonMimeType: boolean }>[];
+      stages?: Partial<
+        StagePreset & {
+          provider: ProviderId;
+          model: string;
+          useCommonPrompt: boolean;
+          forceJsonMimeType: boolean;
+        }
+      >[];
     };
     if (!Array.isArray(data.stages) || data.stages.length === 0) {
       window.alert('stages 배열이 없습니다.');
@@ -218,11 +240,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     }
 
     if (typeof data.commonPrompt === 'string') setCommonPrompt(data.commonPrompt);
-    if (typeof data.defaultModel === 'string') setDefaultModel(data.defaultModel);
 
     setStages(
       data.stages.map((item, index) => ({
         ...toStage({ ...BLANK_STAGE, ...item } as StagePreset, `s${keySeq + index}`),
+        provider: item.provider ?? 'gemini',
         model: item.model ?? '',
         useCommonPrompt: item.useCommonPrompt ?? true,
         forceJsonMimeType: item.forceJsonMimeType ?? false,
@@ -234,11 +256,15 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     setPanel('none');
   }
 
+  const activeProvider = active?.provider ?? 'gemini';
+  const providerLabel =
+    PROVIDERS.find((entry) => entry.id === activeProvider)?.label ?? activeProvider;
+
   const keySource = active?.apiKey.trim()
     ? '이 단계 키'
-    : defaultApiKey.trim()
-      ? '기본 키'
-      : hasEnvApiKey
+    : defaultKeys[activeProvider].trim()
+      ? `기본 ${providerLabel} 키`
+      : activeProvider === 'gemini' && hasEnvApiKey
         ? '.env GEMINI_API_KEY'
         : '없음';
 
@@ -255,23 +281,22 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2">
-            <span className="text-neutral-500">기본 모델</span>
-            <input
-              list="gemini-models"
-              value={defaultModel}
-              onChange={(event) => setDefaultModel(event.target.value)}
-              className="w-44 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-            />
-          </label>
-
-          <label className="flex items-center gap-2">
-            <span className="text-neutral-500">기본 API 키</span>
+            <span className="text-neutral-500">{providerLabel} 기본 키</span>
             <input
               type="password"
-              value={defaultApiKey}
-              onChange={(event) => setDefaultApiKey(event.target.value)}
-              placeholder={hasEnvApiKey ? '.env 값을 씁니다' : '키를 넣으세요'}
-              className="w-52 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+              value={defaultKeys[activeProvider]}
+              onChange={(event) =>
+                setDefaultKeys((prev) => ({
+                  ...prev,
+                  [activeProvider]: event.target.value,
+                }))
+              }
+              placeholder={
+                activeProvider === 'gemini' && hasEnvApiKey
+                  ? '.env 값을 씁니다'
+                  : '키를 넣으세요'
+              }
+              className="w-56 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
             />
           </label>
 
@@ -287,11 +312,13 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         </div>
       </header>
 
-      <datalist id="gemini-models">
-        {GEMINI_MODEL_CANDIDATES.map((model) => (
-          <option key={model} value={model} />
-        ))}
-      </datalist>
+      {PROVIDERS.map((entry) => (
+        <datalist key={entry.id} id={`models-${entry.id}`}>
+          {MODEL_CANDIDATES[entry.id].map((model) => (
+            <option key={model} value={model} />
+          ))}
+        </datalist>
+      ))}
 
       {panel === 'common' && (
         <Panel
@@ -341,6 +368,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           >
             <StatusDot result={stage.result} />
             <span>{stage.name || '(이름 없음)'}</span>
+            <span className="text-[10px] text-neutral-500">
+              {PROVIDERS.find((entry) => entry.id === stage.provider)?.label}
+            </span>
+            {stage.chat && (
+              <span className="rounded bg-neutral-200 px-1 text-[10px] text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                대화
+              </span>
+            )}
           </button>
         ))}
         <button
@@ -353,7 +388,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
       {active && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <section className="flex flex-col gap-3">
+          <section className="order-2 flex flex-col gap-3 lg:order-1">
             <Panel title="단계 설정">
               <div className="flex flex-col gap-2 p-3">
                 <label className="flex items-center gap-2">
@@ -385,11 +420,24 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
                 <label className="flex items-center gap-2">
                   <span className="w-16 shrink-0 text-neutral-500">모델</span>
+                  <select
+                    value={active.provider}
+                    onChange={(event) =>
+                      patch(activeIndex, { provider: event.target.value as ProviderId })
+                    }
+                    className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  >
+                    {PROVIDERS.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.label}
+                      </option>
+                    ))}
+                  </select>
                   <input
-                    list="gemini-models"
+                    list={`models-${active.provider}`}
                     value={active.model}
                     onChange={(event) => patch(activeIndex, { model: event.target.value })}
-                    placeholder={`비우면 ${defaultModel}`}
+                    placeholder={`직접 입력 가능. 비우면 ${DEFAULT_MODEL[active.provider]}`}
                     className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                   />
                 </label>
@@ -494,12 +542,12 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 onChange={(event) => patch(activeIndex, { prompt: event.target.value })}
                 spellCheck={false}
                 placeholder="이 단계의 system 프롬프트"
-                className="h-[380px] w-full resize-y bg-transparent p-3 outline-none"
+                className="h-64 w-full resize-y bg-transparent p-3 outline-none"
               />
             </Panel>
           </section>
 
-          <section className="flex flex-col gap-3">
+          <section className="order-1 flex flex-col gap-3 lg:order-2">
             {active.chat && (
               <ChatPanel
                 turns={readTurns(active.input, active.historyKey)}
@@ -545,7 +593,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               {active.result && <Meta result={active.result} />}
             </div>
 
-            {active.result && <ResultView result={active.result} />}
+            <ResultView result={active.result} />
           </section>
         </div>
       )}
@@ -672,7 +720,18 @@ function Meta({ result }: { result: RunResult }) {
   );
 }
 
-function ResultView({ result }: { result: RunResult }) {
+function ResultView({ result }: { result: RunResult | null }) {
+  if (result === null) {
+    return (
+      <Panel title="답변" hint="실행하면 여기에 나옵니다">
+        <p className="p-3 text-neutral-500">
+          아직 실행하지 않았습니다. API 키를 넣고 실행하거나, 대화형 단계에서
+          메시지를 보내세요.
+        </p>
+      </Panel>
+    );
+  }
+
   if (!result.ok) {
     return (
       <Panel title="오류">
