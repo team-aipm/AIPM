@@ -26,6 +26,18 @@ export function bridge(
   if (!isRecord(next)) return null;
 
   switch (fromRule) {
+    // 인식 결과를 02 의 입력으로 옮긴다. 학생 확인은 사람이 화면에서
+    // 텍스트를 보고 하는 절차이므로, 확인 플래그는 false 로 둔다.
+    // (COM-002 §6)
+    case 'aipm-ocr':
+      return stringify({
+        ...next,
+        problem_source: 'photo',
+        problem_text: output.problem_text,
+        ocr_text: output.problem_text,
+        ocr_confirmed_by_student: false,
+      });
+
     case 'aipm-problem':
       return stringify({
         ...next,

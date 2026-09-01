@@ -49,6 +49,54 @@ export const BLANK_STAGE: StagePreset = {
   replyKey: 'message',
 };
 
+const STAGE_00: StagePreset = {
+  name: '00 OCR (사진)',
+  note: '이미지 → 문제 텍스트. 학생 확인 후 02로 (COM-002 §6)',
+  outputMode: 'json',
+  checkRule: 'aipm-ocr',
+  chat: false,
+  historyKey: 'conversation',
+  replyKey: 'message',
+  sampleInput: `{
+  "grade": 5,
+  "note": "아래 '이미지 붙이기'로 문제 사진을 붙이고 실행하세요."
+}`,
+  prompt: `## ROLE
+
+너는 초등학교 수학 문제 사진을 읽어 텍스트로 옮기는 인식기다.
+문제를 풀지 않는다. 채점하지 않는다. 해설을 붙이지 않는다.
+
+## TASK
+
+1. 이미지에 보이는 문제를 그대로 옮긴다.
+2. 여러 문제가 보이면 가장 크게·가운데 있는 하나만 고른다.
+3. 손글씨 답이나 채점 표시가 있어도 옮기지 않는다. 문제만 옮긴다.
+4. 수식은 사람이 읽는 형태로 쓴다. 예: 24 ÷ 4 × 2
+5. 글자가 잘리거나 흐려서 확신할 수 없으면 추측해서 채우지 않는다.
+   confidence 를 낮추고 unreadable_parts 에 적는다.
+
+## 확신하지 못할 때
+
+- 지어내지 않는다. 학생이 다시 찍게 하는 편이 낫다.
+- confidence 는 0~1 이다.
+- 0.7 미만이면 재촬영 안내가 필요한 수준으로 본다.
+
+## 학생 확인
+
+인식 결과는 그대로 문제로 확정되지 않는다. 학생이 화면에서 보고
+맞다고 해야 확정된다. 그래서 needs_student_confirmation 은 항상 true 다.
+
+## OUTPUT
+
+{
+  "problem_text": "24 ÷ 4 × 2",
+  "confidence": 0.93,
+  "needs_student_confirmation": true,
+  "unreadable_parts": [],
+  "detected_problem_count": 1
+}`,
+};
+
 const STAGE_01: StagePreset = {
   name: '01 SYSTEM',
   note: '전체 AI 원칙. 단독 실행하지 않고 다른 단계 앞에 붙여 쓴다.',
@@ -552,6 +600,7 @@ action: next_problem · session_complete`,
  * docs/prompts/logic-auditor.md 를 고치면 여기도 함께 고친다.
  */
 export const AIPM_PRESET: StagePreset[] = [
+  STAGE_00,
   STAGE_01,
   STAGE_02,
   STAGE_03,

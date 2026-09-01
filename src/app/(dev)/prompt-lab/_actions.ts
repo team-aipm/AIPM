@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 
 import { hasGeminiApiKey } from '@/lib/gemini/client';
 import { callProvider, type SamplingParams } from './_providers';
-import type { ProviderId } from './_provider-meta';
+import type { Attachment, ProviderId } from './_provider-meta';
 import {
   checkOutput,
   type Check,
@@ -33,6 +33,7 @@ export type RunInput = {
   checkRule: CheckRuleId | null;
   forceJsonMimeType: boolean;
   params: SamplingParams;
+  images: Attachment[];
   /** 비우면 서버의 GEMINI_API_KEY를 쓴다 */
   apiKey: string;
 };
@@ -85,6 +86,7 @@ export async function runStage(request: RunInput): Promise<RunResult> {
     forceJson: request.forceJsonMimeType,
     apiKey: request.apiKey,
     params: request.params,
+    images: request.images,
   });
 
   if (!result.ok) {

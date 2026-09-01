@@ -20,6 +20,7 @@ const ENUMS = Constants.public.Enums;
  * 선택해서 쓴다. 고르지 않으면 JSON 형식 검사만 한다.
  */
 export const CHECK_RULES = [
+  { id: 'aipm-ocr', label: 'AIPM · 사진 인식 (COM-002 §6)' },
   { id: 'aipm-problem', label: 'AIPM · Problem (COM-002 §6)' },
   { id: 'aipm-message', label: 'AIPM · Message (§7)' },
   { id: 'aipm-evaluation', label: 'AIPM · Evaluation + LogicGap (§8·§9)' },
@@ -116,6 +117,8 @@ function checkByRule(
   value: Record<string, unknown>,
 ): Check[] {
   switch (rule) {
+    case 'aipm-ocr':
+      return checkOcr(value);
     case 'aipm-problem':
       return checkProblemAnalysis(value);
     case 'aipm-message':
@@ -131,6 +134,34 @@ function checkByRule(
         pass('검증 규칙 없음', 'JSON 형식만 확인했습니다'),
       ];
   }
+}
+
+// ── 사진 인식 ────────────────────────────────────────────────────────────
+
+/**
+ * COM-002 §6 "사진 입력은 학생 확인 후 problem_text를 확정한다".
+ * 인식 결과는 그대로 문제로 쓰지 않는다. 학생 확인 절차가 사이에 있다.
+ */
+function checkOcr(value: Record<string, unknown>): Check[] {
+  const checks: Check[] = [checkNonEmptyString(value, 'problem_text')];
+
+  const confidence = value.confidence;
+  checks.push(
+    typeof confidence === 'number' && confidence >= 0 && confidence <= 1
+      ? pass(`confidence = ${confidence}`)
+      : warn('confidence 0~1 없음', '인식 신뢰도를 내면 재촬영 안내에 쓸 수 있습니다'),
+  );
+
+  checks.push(
+    value.needs_student_confirmation === true
+      ? pass('needs_student_confirmation = true', 'COM-002 §6')
+      : fail(
+          'needs_student_confirmation 이 true 가 아님',
+          '사진 인식 결과는 학생 확인 전에는 확정하지 않는다',
+        ),
+  );
+
+  return checks;
 }
 
 // ── 02. Problem ──────────────────────────────────────────────────────────

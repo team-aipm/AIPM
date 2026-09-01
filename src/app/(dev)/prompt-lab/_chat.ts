@@ -9,6 +9,8 @@
 export type Turn = {
   who: 'user' | 'ai' | 'other';
   text: string;
+  /** 그 턴에 함께 보낸 이미지 파일명 */
+  attachments: string[];
 };
 
 /** 말한 사람을 담는 키 후보. 앞에서부터 찾는다. */
@@ -28,8 +30,12 @@ export function readTurns(inputJson: string, historyKey: string): Turn[] {
   if (!Array.isArray(history)) return [];
 
   return history.map((item) => {
-    if (typeof item === 'string') return { who: 'other' as const, text: item };
-    if (!isRecord(item)) return { who: 'other' as const, text: JSON.stringify(item) };
+    if (typeof item === 'string') {
+      return { who: 'other' as const, text: item, attachments: [] };
+    }
+    if (!isRecord(item)) {
+      return { who: 'other' as const, text: JSON.stringify(item), attachments: [] };
+    }
 
     const speaker = pick(item, SPEAKER_KEYS);
     const text = pick(item, TEXT_KEYS) ?? JSON.stringify(item);
@@ -41,7 +47,11 @@ export function readTurns(inputJson: string, historyKey: string): Turn[] {
         ? ('ai' as const)
         : ('other' as const);
 
-    return { who, text };
+    const attachments = Array.isArray(item.attachments)
+      ? item.attachments.filter((name): name is string => typeof name === 'string')
+      : [];
+
+    return { who, text, attachments };
   });
 }
 
@@ -50,15 +60,19 @@ export function appendUserTurn(
   inputJson: string,
   historyKey: string,
   text: string,
+  attachmentNames: string[] = [],
 ): string | null {
   const root = safeParse(inputJson);
   if (!isRecord(root)) return null;
 
   const history = Array.isArray(root[historyKey]) ? [...(root[historyKey] as unknown[])] : [];
+  // 이미지 본문(base64)은 대화 기록에 넣지 않는다. 파일명만 남긴다.
+  // 넣으면 입력 JSON 이 수십 KB 로 부풀어 화면에서 읽을 수 없게 된다.
   history.push({
     speaker: 'student',
     message_text: text,
     turn_number: history.length + 1,
+    ...(attachmentNames.length > 0 ? { attachments: attachmentNames } : {}),
   });
 
   return stringify(syncTurnNumber({ ...root, [historyKey]: history }, history.length));

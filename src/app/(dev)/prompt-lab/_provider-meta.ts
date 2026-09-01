@@ -49,3 +49,27 @@ export const DEFAULT_MODEL: Record<ProviderId, string> = {
   openai: 'gpt-4.1-mini',
   anthropic: 'claude-sonnet-5',
 };
+
+/**
+ * 첨부 이미지. `data`는 base64 본문만 담는다(`data:` 접두어 제외).
+ *
+ * OCR 전용 모델 선택기를 따로 두지 않는다. 이미지는 그 단계의
+ * 프로바이더·모델로 그대로 보낸다. OCR을 다른 모델로 돌리고 싶으면
+ * OCR 단계를 만들어 그 단계의 모델을 바꾼다.
+ */
+export type Attachment = {
+  name: string;
+  mediaType: string;
+  data: string;
+};
+
+/** 한 장당 상한. next.config.ts 의 serverActions.bodySizeLimit 과 함께 본다. */
+export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+export const ACCEPTED_IMAGE_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+];

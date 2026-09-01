@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { callGemini, type GeminiResult } from '@/lib/gemini/client';
-import type { ProviderId } from './_provider-meta';
+import type { Attachment, ProviderId } from './_provider-meta';
 
 /**
  * prompt-lab 전용 멀티 프로바이더 호출.
@@ -44,6 +44,8 @@ export type ProviderRequest = {
   apiKey: string;
   forceJson: boolean;
   params: SamplingParams;
+  /** 사용자 메시지에 함께 보낼 이미지. 프로바이더마다 형식이 다르다 */
+  images: Attachment[];
 };
 
 export type ProviderResult = GeminiResult;
@@ -60,6 +62,10 @@ export async function callProvider(req: ProviderRequest): Promise<ProviderResult
         temperature: req.params.temperature,
         maxOutputTokens: req.params.maxTokens,
         topP: req.params.topP,
+        images: req.images.map((image) => ({
+          mediaType: image.mediaType,
+          data: image.data,
+        })),
       });
     case 'openai':
       return callOpenAi(req);
@@ -85,7 +91,21 @@ async function callOpenAi(req: ProviderRequest): Promise<ProviderResult> {
     model: req.model.trim(),
     messages: [
       { role: 'system', content: req.system },
-      { role: 'user', content: req.input },
+      {
+        role: 'user',
+        content:
+          req.images.length === 0
+            ? req.input
+            : [
+                ...req.images.map((image) => ({
+                  type: 'image_url' as const,
+                  image_url: {
+                    url: `data:${image.mediaType};base64,${image.data}`,
+                  },
+                })),
+                { type: 'text' as const, text: req.input },
+              ],
+      },
     ],
     ...(req.params.temperature != null ? { temperature: req.params.temperature } : {}),
     ...(req.params.topP != null ? { top_p: req.params.topP } : {}),
@@ -161,7 +181,25 @@ async function callAnthropic(req: ProviderRequest): Promise<ProviderResult> {
     model: req.model.trim(),
     max_tokens: req.params.maxTokens ?? 16000,
     system: req.system,
-    messages: [{ role: 'user', content: req.input }],
+    messages: [
+      {
+        role: 'user',
+        content:
+          req.images.length === 0
+            ? req.input
+            : [
+                ...req.images.map((image) => ({
+                  type: 'image' as const,
+                  source: {
+                    type: 'base64' as const,
+                    media_type: image.mediaType,
+                    data: image.data,
+                  },
+                })),
+                { type: 'text' as const, text: req.input },
+              ],
+      },
+    ],
     ...(req.params.temperature != null ? { temperature: req.params.temperature } : {}),
     ...(req.params.topP != null ? { top_p: req.params.topP } : {}),
   };

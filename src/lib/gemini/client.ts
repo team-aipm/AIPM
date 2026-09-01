@@ -22,6 +22,9 @@ export type GeminiResult =
   | { ok: true; text: string; usage: GeminiUsage; elapsed_ms: number }
   | { ok: false; error: string; elapsed_ms: number };
 
+/** 첨부 이미지. data 는 base64 본문만. */
+export type GeminiImage = { mediaType: string; data: string };
+
 export type GeminiRequest = {
   model: string;
   /** 프롬프트 본문. Gemini의 systemInstruction으로 보낸다. */
@@ -47,6 +50,8 @@ export type GeminiRequest = {
    * 단계마다 다른 키·다른 프로젝트로 시험할 수 있게 하기 위한 값이다.
    */
   apiKey?: string;
+  /** 사용자 파트에 함께 보낼 이미지 */
+  images?: GeminiImage[];
 };
 
 export function hasGeminiApiKey(): boolean {
@@ -83,7 +88,17 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
         },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: req.system }] },
-          contents: [{ role: 'user', parts: [{ text: req.input }] }],
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                ...(req.images ?? []).map((image) => ({
+                  inlineData: { mimeType: image.mediaType, data: image.data },
+                })),
+                { text: req.input },
+              ],
+            },
+          ],
           // 지정하지 않은 값은 키 자체를 넣지 않는다. 빈 값을 0으로 바꿔
           // 보내면 사용자가 의도하지 않은 설정이 적용된다.
           generationConfig: {
