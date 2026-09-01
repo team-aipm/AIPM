@@ -21,6 +21,7 @@ import {
 } from '@/lib/ai/schema-check';
 import { fetchModels, runStage, type RunResult } from '../_actions';
 import { bridge } from '../_bridge';
+import { stageColor } from '../_stage-colors';
 import {
   appendAiTurn,
   appendUserTurn,
@@ -594,6 +595,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     setPanel('none');
   }
 
+  const accent = stageColor(activeIndex).border;
   const activeProvider = active?.provider ?? 'gemini';
   const providerLabel =
     PROVIDERS.find((entry) => entry.id === activeProvider)?.label ?? activeProvider;
@@ -720,8 +722,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 : 'border-neutral-300 dark:border-neutral-700'
             }`}
           >
+            <span className={`h-4 w-1 shrink-0 rounded ${stageColor(index).bar}`} />
             <StatusDot result={stage.result} />
-            <span>{stage.name || '(이름 없음)'}</span>
+            <span className={index === activeIndex ? stageColor(index).text : undefined}>
+              {stage.name || '(이름 없음)'}
+            </span>
             <span className="text-[10px] text-neutral-500">
               {PROVIDERS.find((entry) => entry.id === stage.provider)?.label}
             </span>
@@ -743,7 +748,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       {active && (
         <div className="grid gap-4 lg:grid-cols-2">
           <section className="order-2 flex flex-col gap-3 lg:order-1">
-            <Panel title="단계 설정">
+            <Panel title="단계 설정" accent={accent}>
               <div className="flex flex-col gap-2 p-3">
                 <label className="flex items-center gap-2">
                   <span className="w-16 shrink-0 text-neutral-500">이름</span>
@@ -997,6 +1002,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
             <Panel
               title="프롬프트"
+              accent={accent}
               onCopy={() => navigator.clipboard.writeText(active.prompt)}
             >
               <textarea
@@ -1014,6 +1020,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 곳만 다르다. JSON 이면 입력 JSON 안의 배열, 평문이면 화면
                 에만 남는다. */}
             <ChatPanel
+              accent={accent}
               turns={
                 active.inputMode === 'json'
                   ? readTurns(active.input, active.historyKey)
@@ -1045,6 +1052,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
             <Panel
               title="입력"
+              accent={accent}
               hint={
                 active.inputMode === 'json'
                   ? '대화창과 같은 값이다. 여기서 고쳐도 된다'
@@ -1072,7 +1080,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               {active.result?.ok && activeIndex + 1 < stages.length && (
                 <button
                   onClick={sendToNext}
-                  className="rounded border border-neutral-400 px-3 py-2 dark:border-neutral-600"
+                  className={`flex items-center gap-2 rounded border border-l-4 border-neutral-400 px-3 py-2 dark:border-neutral-600 ${
+                    stageColor(activeIndex + 1).border
+                  }`}
                 >
                   → {stages[activeIndex + 1].name} 입력으로
                 </button>
@@ -1081,7 +1091,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               {active.result && <Meta result={active.result} />}
             </div>
 
-            <ResultView result={active.result} />
+            <ResultView result={active.result} accent={accent} />
           </section>
         </div>
       )}
@@ -1090,6 +1100,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 }
 
 function ChatPanel({
+  accent,
   turns,
   draft,
   onDraft,
@@ -1103,6 +1114,7 @@ function ChatPanel({
   note,
   onClear,
 }: {
+  accent: string;
   turns: { who: 'user' | 'ai' | 'other'; text: string; attachments: string[] }[];
   draft: string;
   onDraft: (next: string) => void;
@@ -1119,7 +1131,9 @@ function ChatPanel({
   const failed = lastChecks?.filter((check) => check.level === 'fail') ?? [];
 
   return (
-    <div className="rounded border border-neutral-200 dark:border-neutral-800">
+    <div
+      className={`rounded border border-l-4 border-neutral-200 dark:border-neutral-800 ${accent}`}
+    >
       <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-3 py-1.5 dark:border-neutral-800">
         <div className="flex items-baseline gap-2">
           <span className="font-bold">대화</span>
@@ -1283,10 +1297,16 @@ function Meta({ result }: { result: RunResult }) {
   );
 }
 
-function ResultView({ result }: { result: RunResult | null }) {
+function ResultView({
+  result,
+  accent,
+}: {
+  result: RunResult | null;
+  accent: string;
+}) {
   if (result === null) {
     return (
-      <Panel title="답변" hint="실행하면 여기에 나옵니다">
+      <Panel title="답변" hint="실행하면 여기에 나옵니다" accent={accent}>
         <p className="p-3 text-neutral-500">
           아직 실행하지 않았습니다. API 키를 넣고 대화창에 메시지를 보내거나,
           입력을 채우고 실행하세요.
@@ -1297,7 +1317,7 @@ function ResultView({ result }: { result: RunResult | null }) {
 
   if (!result.ok) {
     return (
-      <Panel title="오류">
+      <Panel title="오류" accent={accent}>
         <pre className="whitespace-pre-wrap p-3 text-red-600 dark:text-red-400">
           {result.error}
         </pre>
@@ -1307,7 +1327,7 @@ function ResultView({ result }: { result: RunResult | null }) {
 
   return (
     <>
-      <Panel title="검증">
+      <Panel title="검증" accent={accent}>
         <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
           {result.checks.map((check, index) => (
             <CheckRow key={`${check.label}-${index}`} check={check} />
@@ -1315,7 +1335,11 @@ function ResultView({ result }: { result: RunResult | null }) {
         </ul>
       </Panel>
 
-      <Panel title="출력" onCopy={() => navigator.clipboard.writeText(result.raw)}>
+      <Panel
+        title="출력"
+        accent={accent}
+        onCopy={() => navigator.clipboard.writeText(result.raw)}
+      >
         <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap p-3">
           {result.raw}
         </pre>
@@ -1345,15 +1369,22 @@ function Panel({
   title,
   hint,
   onCopy,
+  accent,
   children,
 }: {
   title: string;
   hint?: string;
   onCopy?: () => void;
+  /** 단계 색. 왼쪽 테두리로 어느 단계를 보고 있는지 알린다 */
+  accent?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded border border-neutral-200 dark:border-neutral-800">
+    <div
+      className={`rounded border border-neutral-200 dark:border-neutral-800 ${
+        accent ? `border-l-4 ${accent}` : ''
+      }`}
+    >
       <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-1.5 dark:border-neutral-800">
         <div className="flex items-baseline gap-2">
           <span className="font-bold">{title}</span>
