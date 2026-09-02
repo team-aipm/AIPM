@@ -21,6 +21,21 @@ import {
 } from '@/lib/ai/schema-check';
 import { fetchModels, runStage, type RunResult } from '../_actions';
 import { bridge } from '../_bridge';
+import {
+  BLANK_FIELD_RULE,
+  EMPTY_RULES,
+  FIELD_TYPES,
+  type CustomRules,
+  type FieldRule,
+  type FieldType,
+} from '../_field-rules';
+import {
+  applyMapping,
+  BLANK_MAP_ROW,
+  MAP_SOURCES,
+  type MapRow,
+  type MapSource,
+} from '../_mapping';
 import { stageColor } from '../_stage-colors';
 import {
   costOf,
@@ -82,6 +97,13 @@ type Stage = StagePreset & {
   topP: string;
   useCommonPrompt: boolean;
   forceJsonMimeType: boolean;
+  /**
+   * 사용자가 직접 만든 검증 규칙. `checkRule`(AIPM 규칙)과 **함께** 돈다.
+   * 이쪽이 이 도구를 다른 프로젝트에서도 쓸 수 있게 하는 부분이다.
+   */
+  rules: CustomRules;
+  /** 다음 단계로 무엇을 옮길지. 비어 있으면 AIPM 규칙 → 원문 순으로 넘어간다 */
+  mapping: MapRow[];
   threads: Thread[];
   activeThread: number;
 };
@@ -116,6 +138,8 @@ function toStage(base: StagePreset, key: string): Stage {
     topP: '',
     useCommonPrompt: true,
     forceJsonMimeType: false,
+    rules: EMPTY_RULES,
+    mapping: [],
     threads: [newThread(`${key}-t0`, '대화 1', base.sampleInput)],
     activeThread: 0,
   };
@@ -151,6 +175,8 @@ type SavedStage = StagePreset & {
   topP: string;
   useCommonPrompt: boolean;
   forceJsonMimeType: boolean;
+  rules: CustomRules;
+  mapping: MapRow[];
   /** 대화는 이름과 입력만 남긴다. 결과는 다시 실행하면 되고 이미지는 무겁다 */
   threads: { name: string; input: string }[];
 };
@@ -174,6 +200,8 @@ function toSaved(stage: Stage): SavedStage {
     topP: stage.topP,
     useCommonPrompt: stage.useCommonPrompt,
     forceJsonMimeType: stage.forceJsonMimeType,
+    rules: stage.rules,
+    mapping: stage.mapping,
   };
 }
 
@@ -188,6 +216,12 @@ function fromSaved(item: Partial<SavedStage>, key: string): Stage {
     topP: item.topP ?? '',
     useCommonPrompt: item.useCommonPrompt ?? true,
     forceJsonMimeType: item.forceJsonMimeType ?? false,
+    // 예전 저장본에는 없다. 없으면 빈 규칙으로 연다.
+    rules: {
+      fields: Array.isArray(item.rules?.fields) ? item.rules.fields : [],
+      banned: typeof item.rules?.banned === 'string' ? item.rules.banned : '',
+    },
+    mapping: Array.isArray(item.mapping) ? item.mapping : [],
     // 예전 저장본에는 threads 가 없다. sampleInput 하나를 대화 1로 만든다.
     threads: (Array.isArray(item.threads) && item.threads.length > 0
       ? item.threads
@@ -231,6 +265,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
   /** 결과를 보낼 단계. null 이면 기본값(다음 단계, 마지막이면 처음) */
   const [sendTarget, setSendTarget] = useState<number | null>(null);
+  /** 방금 옮긴 결과를 알린다. 어느 규칙으로 옮겼는지 보여야 한다 */
+  const [sendNote, setSendNote] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   // 저장 여부. 키는 따로 관리한다.
@@ -382,6 +418,54 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     patchThread(activeIndex, active.activeThread, next);
   }
 
+  // ── 검증 규칙 · 단계 연결 ──────────────────────────────────────────────
+
+  function setFieldRule(index: number, next: Partial<FieldRule>) {
+    if (!active) return;
+    patch(activeIndex, {
+      rules: {
+        ...active.rules,
+        fields: active.rules.fields.map((rule, i) =>
+          i === index ? { ...rule, ...next } : rule,
+        ),
+      },
+    });
+  }
+
+  function addFieldRule() {
+    if (!active) return;
+    patch(activeIndex, {
+      rules: { ...active.rules, fields: [...active.rules.fields, BLANK_FIELD_RULE] },
+    });
+  }
+
+  function removeFieldRule(index: number) {
+    if (!active) return;
+    patch(activeIndex, {
+      rules: {
+        ...active.rules,
+        fields: active.rules.fields.filter((_, i) => i !== index),
+      },
+    });
+  }
+
+  function setMapRow(index: number, next: Partial<MapRow>) {
+    if (!active) return;
+    patch(activeIndex, {
+      mapping: active.mapping.map((row, i) => (i === index ? { ...row, ...next } : row)),
+    });
+  }
+
+  function addMapRow() {
+    if (!active) return;
+    patch(activeIndex, { mapping: [...active.mapping, BLANK_MAP_ROW] });
+  }
+
+  function removeMapRow(index: number) {
+    if (!active) return;
+    patch(activeIndex, { mapping: active.mapping.filter((_, i) => i !== index) });
+  }
+
   function addStage() {
     setStages((prev) => [...prev, toStage(BLANK_STAGE, `s${keySeq}`)]);
     setKeySeq((prev) => prev + 1);
@@ -443,6 +527,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     const index = activeIndex;
     const threadIndex = active.activeThread;
     patchThread(index, threadIndex, { running: true, result: null });
+    setSendNote(null);
 
     const system = active.useCommonPrompt
       ? `${commonPrompt}\n\n---\n\n${active.prompt}`
@@ -459,6 +544,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         inputMode: active.inputMode,
         outputMode: active.outputMode,
         checkRule: active.checkRule,
+        rules: active.rules,
         forceJsonMimeType: active.forceJsonMimeType,
         apiKey: active.apiKey.trim() || defaultKeys[active.provider].trim(),
         params,
@@ -653,20 +739,35 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     const target = stages[nextIndex];
     const targetThread = target.activeThread;
 
-    let mapped: string | null = null;
+    const targetInput = target.threads[targetThread]?.input ?? '{}';
+    let output: unknown = null;
     try {
-      // 출력만이 아니라 이 단계의 입력도 넘긴다. 대화 기록이 거기 있다.
-      mapped = bridge(
-        active.checkRule,
-        JSON.parse(raw),
-        thread.input,
-        target.threads[targetThread]?.input ?? '{}',
-      );
+      output = JSON.parse(raw);
     } catch {
-      mapped = null;
+      // 평문 출력이면 매핑할 게 없다. 아래에서 원문을 그대로 넣는다.
     }
 
-    patchThread(nextIndex, targetThread, { input: mapped ?? raw });
+    // 우선순위: 사용자가 적은 매핑 → AIPM 규칙 → 출력 원문.
+    // 손으로 적은 것이 항상 이긴다. 도구가 몰래 다르게 옮기면 안 된다.
+    const custom = applyMapping(active.mapping, output, thread.input, targetInput);
+    if (custom !== null) {
+      patchThread(nextIndex, targetThread, { input: custom.json });
+      setSendNote(
+        custom.notes.length > 0
+          ? `${custom.applied}칸 옮겼습니다. ${custom.notes.join(' ')}`
+          : `${custom.applied}칸 옮겼습니다.`,
+      );
+    } else {
+      // 출력만이 아니라 이 단계의 입력도 넘긴다. 대화 기록이 거기 있다.
+      const mapped = bridge(active.checkRule, output, thread.input, targetInput);
+      patchThread(nextIndex, targetThread, { input: mapped ?? raw });
+      setSendNote(
+        mapped !== null
+          ? '검증 규칙에 맞춰 옮겼습니다.'
+          : '옮길 규칙이 없어 결과 원문을 그대로 넣었습니다.',
+      );
+    }
+
     setActiveIndex(nextIndex);
     setSendTarget(null);
   }
@@ -749,7 +850,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[11px] text-amber-900">
             dev 전용
           </span>
-          <span className="text-neutral-500">단계별 프롬프트 실행·검증</span>
+          <span className="text-neutral-500">
+            단계별 프롬프트를 AI에 보내고 결과를 검증합니다
+          </span>
         </div>
 
         {/* 헤더에는 비용과 저장만 둔다. 값을 편집하는 것들(키·가격표·
@@ -1215,7 +1318,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   </label>
 
                   <label className="flex items-center gap-2">
-                    <span className="text-neutral-500">검증</span>
+                    {/* 이 목록은 AIPM 전용이다. 다른 프로젝트에서 쓸 검사는
+                        아래 [검증 규칙] 패널에서 직접 만든다. */}
+                    <span className="text-neutral-500">검증 프리셋</span>
                     <select
                       value={active.checkRule ?? ''}
                       onChange={(event) =>
@@ -1233,6 +1338,15 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       ))}
                     </select>
                   </label>
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  <b>검증 프리셋</b>은 이 프로젝트(AIPM)의 규격이 코드에 박혀
+                  있는 것입니다. 다른 프로젝트에서는 <b>아래 [검증 규칙]</b> 에
+                  직접 적어 쓰세요.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
 
                   <Toggle
                     checked={active.useCommonPrompt}
@@ -1294,6 +1408,212 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 placeholder="이 단계의 system 프롬프트"
                 className="h-64 w-full resize-y bg-transparent p-3 outline-none"
               />
+            </Panel>
+
+            {/* 여기부터가 이 도구를 다른 프로젝트에서도 쓰게 하는 부분이다.
+                위의 `검증` 목록은 이 프로젝트 전용이라 남에게는 소용이
+                없다. 아래 둘은 직접 적는다. */}
+            <Panel
+              title="검증 규칙"
+              accent={accent}
+              hint="결과가 규격에 맞는지 자동으로 본다"
+            >
+              <div className="flex flex-col gap-2 p-3">
+                <p className="text-[11px] text-neutral-500">
+                  실행할 때마다 아래 규칙을 봅니다. 필드가 빠졌는지, 값이
+                  범위를 벗어났는지, 정해진 값 말고 다른 걸 냈는지 잡습니다.
+                  경로는 <code>evaluation.score</code> 처럼 적고, 목록 전체를
+                  보려면 <code>logic_gaps[].gap_type</code> 처럼 적습니다.
+                </p>
+
+                {active.rules.fields.length > 0 && (
+                  <div className="hidden gap-1 text-[11px] text-neutral-500 md:flex">
+                    <span className="w-40">필드 경로</span>
+                    <span className="w-20">종류</span>
+                    <span className="w-24">필수 / null</span>
+                    <span className="w-36">허용값 (쉼표)</span>
+                    <span className="w-28">최소 / 최대</span>
+                  </div>
+                )}
+
+                {active.rules.fields.map((rule, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-wrap items-center gap-1 border-b border-dashed border-neutral-200 pb-2 dark:border-neutral-800 md:border-0 md:pb-0"
+                  >
+                    <input
+                      value={rule.path}
+                      onChange={(event) => setFieldRule(index, { path: event.target.value })}
+                      placeholder="필드 경로"
+                      spellCheck={false}
+                      className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <select
+                      value={rule.type}
+                      onChange={(event) =>
+                        setFieldRule(index, { type: event.target.value as FieldType })
+                      }
+                      className="w-20 rounded border border-neutral-300 bg-transparent px-1 py-1 dark:border-neutral-700"
+                    >
+                      {FIELD_TYPES.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="flex w-24 items-center gap-2">
+                      <label className="flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={rule.required}
+                          onChange={(event) =>
+                            setFieldRule(index, { required: event.target.checked })
+                          }
+                        />
+                        필수
+                      </label>
+                      <label className="flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={rule.nullable}
+                          onChange={(event) =>
+                            setFieldRule(index, { nullable: event.target.checked })
+                          }
+                        />
+                        null
+                      </label>
+                    </span>
+                    <input
+                      value={rule.allowed}
+                      onChange={(event) => setFieldRule(index, { allowed: event.target.value })}
+                      placeholder="비우면 안 봄"
+                      spellCheck={false}
+                      className="w-36 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <input
+                      value={rule.min}
+                      onChange={(event) => setFieldRule(index, { min: event.target.value })}
+                      placeholder="최소"
+                      className="w-14 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <input
+                      value={rule.max}
+                      onChange={(event) => setFieldRule(index, { max: event.target.value })}
+                      placeholder="최대"
+                      className="w-14 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <button
+                      onClick={() => removeFieldRule(index)}
+                      className="px-2 text-neutral-400 hover:text-red-600"
+                      title="이 줄 삭제"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={addFieldRule}
+                    className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
+                  >
+                    + 규칙
+                  </button>
+                  <label className="flex flex-1 items-center gap-2">
+                    <span className="text-neutral-500">금지어</span>
+                    <input
+                      value={active.rules.banned}
+                      onChange={(event) =>
+                        patch(activeIndex, {
+                          rules: { ...active.rules, banned: event.target.value },
+                        })
+                      }
+                      placeholder="쉼표로 나눠 적습니다. 결과 전체에서 찾습니다"
+                      className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                  </label>
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  <b>최소 / 최대</b>는 숫자면 값, 문자면 글자 수, 목록이면
+                  개수입니다. <b>null</b> 을 켜면 값이 비어 있어도 통과합니다.
+                </p>
+              </div>
+            </Panel>
+
+            <Panel
+              title="다음 단계로 보낼 값"
+              accent={accent}
+              hint="[입력으로] 를 눌렀을 때 무엇을 옮길지"
+            >
+              <div className="flex flex-col gap-2 p-3">
+                <p className="text-[11px] text-neutral-500">
+                  적어 두면 다음 단계 입력에서 <b>여기 적은 칸만</b> 덮어씁니다.
+                  나머지는 건드리지 않습니다. 한 줄도 없으면 결과 원문을 그대로
+                  넣습니다.
+                </p>
+
+                {active.mapping.map((row, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-wrap items-center gap-1 border-b border-dashed border-neutral-200 pb-2 dark:border-neutral-800 md:border-0 md:pb-0"
+                  >
+                    <select
+                      value={row.source}
+                      onChange={(event) =>
+                        setMapRow(index, { source: event.target.value as MapSource })
+                      }
+                      className="w-28 rounded border border-neutral-300 bg-transparent px-1 py-1 dark:border-neutral-700"
+                    >
+                      {MAP_SOURCES.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={row.from}
+                      onChange={(event) => setMapRow(index, { from: event.target.value })}
+                      placeholder={
+                        MAP_SOURCES.find((item) => item.id === row.source)?.hint ?? ''
+                      }
+                      spellCheck={false}
+                      className="w-44 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <span className="text-neutral-400">→</span>
+                    <input
+                      value={row.to}
+                      onChange={(event) => setMapRow(index, { to: event.target.value })}
+                      placeholder="다음 입력의 위치"
+                      spellCheck={false}
+                      className="w-44 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <button
+                      onClick={() => removeMapRow(index)}
+                      className="px-2 text-neutral-400 hover:text-red-600"
+                      title="이 줄 삭제"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+
+                <div>
+                  <button
+                    onClick={addMapRow}
+                    className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
+                  >
+                    + 옮길 값
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  <b>이 단계 입력</b>은 대화 기록을 그대로 넘길 때 씁니다.
+                  대화는 결과가 아니라 입력에 쌓여 있기 때문입니다.
+                  <b> 직접 적기</b>는 고정값입니다. 새 문제로 넘어갈 때
+                  대화를 비우려면 <code>[]</code> 를 넣으세요.
+                </p>
+              </div>
             </Panel>
           </section>
 
@@ -1405,7 +1725,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 disabled={thread.running}
                 className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
               >
-                {thread.running ? '실행 중…' : '입력 그대로 실행'}
+                {thread.running ? '보내는 중…' : '새 메시지 없이 보내기'}
               </button>
 
               {thread.result?.ok && stages.length > 1 && (
@@ -1446,6 +1766,10 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 />
               )}
             </div>
+
+            {sendNote && (
+              <p className="text-[11px] text-neutral-500">{sendNote}</p>
+            )}
 
             <ResultView result={thread.result} accent={accent} />
           </section>
@@ -1689,10 +2013,10 @@ function ResultView({
 }) {
   if (result === null) {
     return (
-      <Panel title="답변" hint="실행하면 여기에 나옵니다" accent={accent}>
+      <Panel title="답변" hint="AI에게 보내면 여기에 나옵니다" accent={accent}>
         <p className="p-3 text-neutral-500">
-          아직 실행하지 않았습니다. API 키를 넣고 대화창에 메시지를 보내거나,
-          입력을 채우고 실행하세요.
+          아직 AI에게 보내지 않았습니다. API 키를 넣고, 대화창에 메시지를
+          보내거나 아래 <b>새 메시지 없이 보내기</b>를 누르세요.
         </p>
       </Panel>
     );

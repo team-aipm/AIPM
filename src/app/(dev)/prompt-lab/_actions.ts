@@ -18,6 +18,7 @@ import {
   type CheckRuleId,
   type OutputMode,
 } from '@/lib/ai/schema-check';
+import { checkFieldRules, type CustomRules } from './_field-rules';
 
 /**
  * prompt-lab 전용 실행 Action.
@@ -39,6 +40,8 @@ export type RunInput = {
   inputMode: OutputMode;
   outputMode: OutputMode;
   checkRule: CheckRuleId | null;
+  /** 화면에서 직접 만든 규칙. `checkRule` 과 함께 돈다 */
+  rules: CustomRules;
   forceJsonMimeType: boolean;
   params: SamplingParams;
   images: Attachment[];
@@ -129,11 +132,19 @@ export async function runStage(request: RunInput): Promise<RunResult> {
     raw: result.text,
   });
 
+  // 두 검사를 이어 붙인다. 프리셋 규칙과 직접 만든 규칙은 서로를
+  // 대체하지 않는다. 하나만 쓰는 쪽이 훨씬 흔하지만 둘 다 켤 수 있다.
+  const custom = checkFieldRules(
+    request.rules ?? { fields: [], banned: '' },
+    report.parsed,
+    result.text,
+  );
+
   return {
     ok: true,
     raw: result.text,
     error: null,
-    checks: report.checks,
+    checks: [...report.checks, ...custom],
     elapsed_ms: result.elapsed_ms,
     tokens: {
       prompt: result.usage.prompt_tokens,
