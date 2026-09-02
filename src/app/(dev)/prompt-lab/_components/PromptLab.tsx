@@ -749,7 +749,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[11px] text-amber-900">
             dev 전용
           </span>
-          <span className="text-neutral-500">단계별 프롬프트 실행·검증</span>
+          <span className="text-neutral-500">
+            단계별 프롬프트를 AI에 보내고 결과를 검증합니다
+          </span>
         </div>
 
         {/* 헤더에는 비용과 저장만 둔다. 값을 편집하는 것들(키·가격표·
@@ -1405,7 +1407,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 disabled={thread.running}
                 className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
               >
-                {thread.running ? '실행 중…' : '입력 그대로 실행'}
+                {thread.running ? '보내는 중…' : '새 메시지 없이 보내기'}
               </button>
 
               {thread.result?.ok && stages.length > 1 && (
@@ -1689,10 +1691,10 @@ function ResultView({
 }) {
   if (result === null) {
     return (
-      <Panel title="답변" hint="실행하면 여기에 나옵니다" accent={accent}>
+      <Panel title="답변" hint="AI에게 보내면 여기에 나옵니다" accent={accent}>
         <p className="p-3 text-neutral-500">
-          아직 실행하지 않았습니다. API 키를 넣고 대화창에 메시지를 보내거나,
-          입력을 채우고 실행하세요.
+          아직 AI에게 보내지 않았습니다. API 키를 넣고, 대화창에 메시지를
+          보내거나 아래 <b>새 메시지 없이 보내기</b>를 누르세요.
         </p>
       </Panel>
     );
