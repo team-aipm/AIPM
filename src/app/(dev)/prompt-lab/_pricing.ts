@@ -146,6 +146,7 @@ export function formatUsd(value: number): string {
 
 export function formatKrw(usd: number, rate: number): string {
   const won = usd * rate;
+  if (won === 0) return '0원';
   if (won < 1) return `${won.toFixed(2)}원`;
   return `${Math.round(won).toLocaleString('ko-KR')}원`;
 }
