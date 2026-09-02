@@ -223,6 +223,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [krwRate, setKrwRate] = useState('1400');
   /** 이번 세션 누적 비용. 새로고침하면 0 부터 다시 센다 */
   const [spentUsd, setSpentUsd] = useState(0);
+  /**
+   * 이번 세션 누적 토큰. 비용과 따로 센다.
+   * 가격을 모르는 모델도 토큰은 나오므로, 비용이 0 이어도 사용량은 쌓인다.
+   */
+  const [spentTokens, setSpentTokens] = useState({ prompt: 0, output: 0 });
   const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
   /** 결과를 보낼 단계. null 이면 기본값(다음 단계, 마지막이면 처음) */
   const [sendTarget, setSendTarget] = useState<number | null>(null);
@@ -461,8 +466,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       });
       patchThread(index, threadIndex, { running: false, result });
 
-      // 이번 호출 비용을 누적한다. 가격을 모르면 더하지 않는다.
       if (result.ok) {
+        // 토큰은 가격을 몰라도 쌓는다.
+        setSpentTokens((prev) => ({
+          prompt: prev.prompt + (result.tokens.prompt ?? 0),
+          output: prev.output + (result.tokens.output ?? 0),
+        }));
+
+        // 비용은 가격을 아는 모델만 더한다.
         const found = findPrice(prices, model);
         const cost = costOf(found?.price ?? null, result.tokens);
         if (cost !== null) setSpentUsd((prev) => prev + cost);
@@ -747,16 +758,23 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           <span className="text-neutral-500">
             이번 세션{' '}
             <b className="text-neutral-900 dark:text-neutral-100">
+              {(spentTokens.prompt + spentTokens.output).toLocaleString('ko-KR')} tok
+            </b>
+            {` (in ${spentTokens.prompt.toLocaleString('ko-KR')} / out ${spentTokens.output.toLocaleString('ko-KR')}) · `}
+            <b className="text-neutral-900 dark:text-neutral-100">
               {formatUsd(spentUsd)}
             </b>
             {Number(krwRate) > 0 && ` ${formatKrw(spentUsd, Number(krwRate))}`}
           </span>
-          {spentUsd > 0 && (
+          {(spentUsd > 0 || spentTokens.prompt + spentTokens.output > 0) && (
             <button
-              onClick={() => setSpentUsd(0)}
+              onClick={() => {
+                setSpentUsd(0);
+                setSpentTokens({ prompt: 0, output: 0 });
+              }}
               className="text-neutral-500 hover:underline"
             >
-              비용 초기화
+              사용량 초기화
             </button>
           )}
 
