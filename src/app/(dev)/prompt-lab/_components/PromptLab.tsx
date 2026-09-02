@@ -1159,70 +1159,59 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               onToggle={() => togglePanel('setting')}
               hint={`${active.provider} · ${active.model.trim() || DEFAULT_MODEL[active.provider]}`}
             >
+              {/* 한 줄에 들어갈 것은 한 줄에 둔다. 항목마다 줄을 나누면
+                  설정만으로 화면이 다 찬다. 성격이 같은 것끼리 묶었다. */}
               <div className="flex flex-col gap-2 p-3">
-                <label className="flex items-center gap-2">
-                  <span className="w-16 shrink-0 text-neutral-500">이름</span>
-                  <input
-                    value={active.name}
-                    onChange={(event) => patch(activeIndex, { name: event.target.value })}
-                    className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-                  />
-                  <button onClick={() => moveStage(activeIndex, -1)} className="px-1 text-neutral-500">←</button>
-                  <button onClick={() => moveStage(activeIndex, 1)} className="px-1 text-neutral-500">→</button>
-                  <button
-                    onClick={() => removeStage(activeIndex)}
-                    disabled={stages.length === 1}
-                    className="px-1 text-red-600 disabled:opacity-30 dark:text-red-400"
-                  >
-                    삭제
-                  </button>
-                </label>
+                {/* 어디로 · 무엇으로 · 누구 키로 보낼지 */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <label className="flex items-center gap-2">
+                    <span className="shrink-0 text-neutral-500">프로바이더</span>
+                    <select
+                      value={active.provider}
+                      onChange={(event) =>
+                        patch(activeIndex, { provider: event.target.value as ProviderId })
+                      }
+                      className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    >
+                      {PROVIDERS.map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                <label className="flex items-center gap-2">
-                  <span className="w-16 shrink-0 text-neutral-500">설명</span>
-                  <input
-                    value={active.note}
-                    onChange={(event) => patch(activeIndex, { note: event.target.value })}
-                    className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-                  />
-                </label>
+                  <label className="flex min-w-[15rem] flex-1 items-center gap-2">
+                    <span className="shrink-0 text-neutral-500">모델</span>
+                    <input
+                      value={active.model}
+                      onChange={(event) => patch(activeIndex, { model: event.target.value })}
+                      placeholder={`직접 입력. 비우면 ${DEFAULT_MODEL[active.provider]}`}
+                      spellCheck={false}
+                      autoComplete="off"
+                      className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                  </label>
 
-                <label className="flex items-center gap-2">
-                  <span className="w-16 shrink-0 text-neutral-500">프로바이더</span>
-                  <select
-                    value={active.provider}
-                    onChange={(event) =>
-                      patch(activeIndex, { provider: event.target.value as ProviderId })
-                    }
-                    className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-                  >
-                    {PROVIDERS.map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-[11px] text-neutral-500">
-                    어느 회사 API로 보낼지만 정합니다
-                  </span>
-                </label>
-
-                <label className="flex items-center gap-2">
-                  <span className="w-16 shrink-0 text-neutral-500">모델</span>
-                  <input
-                    value={active.model}
-                    onChange={(event) => patch(activeIndex, { model: event.target.value })}
-                    placeholder={`모델명을 직접 입력. 비우면 ${DEFAULT_MODEL[active.provider]}`}
-                    spellCheck={false}
-                    autoComplete="off"
-                    className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-                  />
-                </label>
+                  <label className="flex items-center gap-2">
+                    <span className="shrink-0 text-neutral-500">API 키</span>
+                    <input
+                      type="password"
+                      value={active.apiKey}
+                      onChange={(event) => patch(activeIndex, { apiKey: event.target.value })}
+                      placeholder={`비우면 기본 ${providerLabel} 키`}
+                      className="w-44 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <span className="shrink-0 text-[11px] text-neutral-500">
+                      사용: {keySource}
+                    </span>
+                  </label>
+                </div>
 
                 {/* 목록이 아니라 입력이 원칙이다. 아래는 자주 쓰는 이름을
                     한 번에 채워 넣는 단축키일 뿐이고, 여기 없는 이름도
                     그대로 입력해서 쓸 수 있다. */}
-                <div className="flex flex-wrap items-center gap-1.5 pl-[4.5rem]">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => void loadModels()}
@@ -1261,20 +1250,41 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   )}
                 </div>
 
-                <label className="flex items-center gap-2">
-                  <span className="w-16 shrink-0 text-neutral-500">API 키</span>
-                  <input
-                    type="password"
-                    value={active.apiKey}
-                    onChange={(event) => patch(activeIndex, { apiKey: event.target.value })}
-                    placeholder={`비우면 기본 ${providerLabel} 키`}
-                    className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-                  />
-                  <span className="shrink-0 text-neutral-500">사용: {keySource}</span>
-                </label>
+                {/* 이 단계가 무엇인지. 순서 변경·삭제도 이름 옆에 둔다 */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                  <label className="flex min-w-[12rem] flex-1 items-center gap-2">
+                    <span className="shrink-0 text-neutral-500">이름</span>
+                    <input
+                      value={active.name}
+                      onChange={(event) => patch(activeIndex, { name: event.target.value })}
+                      className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                  </label>
 
-                <div className="flex flex-wrap items-center gap-3 border-t border-neutral-200 pt-2 dark:border-neutral-800">
-                  <span className="text-neutral-500">생성 파라미터</span>
+                  <label className="flex min-w-[14rem] flex-[2] items-center gap-2">
+                    <span className="shrink-0 text-neutral-500">설명</span>
+                    <input
+                      value={active.note}
+                      onChange={(event) => patch(activeIndex, { note: event.target.value })}
+                      className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                  </label>
+
+                  <span className="flex shrink-0 items-center gap-1">
+                    <button onClick={() => moveStage(activeIndex, -1)} className="px-1 text-neutral-500">←</button>
+                    <button onClick={() => moveStage(activeIndex, 1)} className="px-1 text-neutral-500">→</button>
+                    <button
+                      onClick={() => removeStage(activeIndex)}
+                      disabled={stages.length === 1}
+                      className="px-1 text-red-600 disabled:opacity-30 dark:text-red-400"
+                    >
+                      삭제
+                    </button>
+                  </span>
+                </div>
+
+                {/* 어떻게 생성하고 무엇으로 주고받을지 */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                   <ParamField
                     label="temperature"
                     value={active.temperature}
@@ -1291,37 +1301,15 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                     value={active.topP}
                     onChange={(next) => patch(activeIndex, { topP: next })}
                   />
-                </div>
 
-                <p className="text-[11px] text-neutral-500">
-                  비우면 그 항목을 <b>아예 보내지 않습니다</b>. 넣으면 그대로
-                  전송합니다.
-                  {active.provider === 'anthropic' && (
-                    <>
-                      {' '}
-                      Claude는 <b>max output이 필수</b>라 비우면 16000을 씁니다.
-                      현재 모델(Opus 5 · Sonnet 5 · Opus 4.7/4.8 · Fable 5)은{' '}
-                      <b>temperature·top_p를 받으면 400</b>입니다.
-                    </>
-                  )}
-                  {active.provider === 'openai' && (
-                    <>
-                      {' '}
-                      추론 계열 모델은 temperature를 거부합니다. max output은{' '}
-                      <code>max_completion_tokens</code>로 보냅니다.
-                    </>
-                  )}
-                </p>
-
-                <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                   <label className="flex items-center gap-2">
-                    <span className="text-neutral-500">입력</span>
+                    <span className="shrink-0 text-neutral-500">입력</span>
                     <select
                       value={active.inputMode}
                       onChange={(event) =>
                         patch(activeIndex, { inputMode: event.target.value as OutputMode })
                       }
-                      className="rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:opacity-50 dark:border-neutral-700"
+                      className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                     >
                       <option value="json">JSON</option>
                       <option value="text">평문</option>
@@ -1329,7 +1317,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   </label>
 
                   <label className="flex items-center gap-2">
-                    <span className="text-neutral-500">출력</span>
+                    <span className="shrink-0 text-neutral-500">출력</span>
                     <select
                       value={active.outputMode}
                       onChange={(event) =>
@@ -1345,7 +1333,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   <label className="flex items-center gap-2">
                     {/* 이 목록은 AIPM 전용이다. 다른 프로젝트에서 쓸 검사는
                         아래 [검증 규칙] 패널에서 직접 만든다. */}
-                    <span className="text-neutral-500">검증 프리셋</span>
+                    <span className="shrink-0 text-neutral-500">검증 프리셋</span>
                     <select
                       value={active.checkRule ?? ''}
                       onChange={(event) =>
@@ -1365,14 +1353,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   </label>
                 </div>
 
-                <p className="text-[11px] text-neutral-500">
-                  <b>검증 프리셋</b>은 이 프로젝트(AIPM)의 규격이 코드에 박혀
-                  있는 것입니다. 다른 프로젝트에서는 <b>아래 [검증 규칙]</b> 에
-                  직접 적어 쓰세요.
-                </p>
-
-                <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
-
+                {/* 보낼 때 붙일 것과, 주고받은 것 중 어디를 볼지 */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                   <Toggle
                     checked={active.useCommonPrompt}
                     onChange={(next) => patch(activeIndex, { useCommonPrompt: next })}
@@ -1383,41 +1365,65 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                     onChange={(next) => patch(activeIndex, { forceJsonMimeType: next })}
                     label="JSON 강제"
                   />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-4 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                   {active.inputMode === 'json' && (
                     <label className="flex items-center gap-2">
-                      <span className="text-neutral-500">대화 배열 키</span>
+                      <span className="shrink-0 text-neutral-500">대화 배열 키</span>
                       <input
                         value={active.historyKey}
                         onChange={(event) =>
                           patch(activeIndex, { historyKey: event.target.value })
                         }
-                        className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                        className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                       />
                     </label>
                   )}
                   <label className="flex items-center gap-2">
-                    <span className="text-neutral-500">응답 필드</span>
+                    <span className="shrink-0 text-neutral-500">응답 필드</span>
                     <input
                       value={active.replyKey}
                       onChange={(event) =>
                         patch(activeIndex, { replyKey: event.target.value })
                       }
                       placeholder="비우면 표시 안 함"
-                      className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                      className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                     />
                   </label>
                 </div>
 
-                <p className="text-[11px] text-neutral-500">
-                  <b>응답 필드</b>는 출력 중 <b>말풍선에 보여줄 부분</b>입니다.
-                  나머지는 대화창에 나오지 않고 답변 패널에서만 봅니다.
-                  {active.replyKey.trim() === ''
-                    ? ' 지금은 비어 있어 아무것도 표시하지 않습니다. 데이터만 만드는 단계에 맞습니다.'
-                    : ' 학생에게 보여줄 문장이 없는 단계(평가·기억 저장 등)는 비워 두세요.'}
-                </p>
+                {/* 안내는 한 덩어리로 모은다. 컨트롤 사이사이에 끼우면
+                    줄 수가 두 배가 된다. */}
+                <div className="flex flex-col gap-1 border-t border-neutral-200 pt-2 text-[11px] text-neutral-500 dark:border-neutral-800">
+                  <p>
+                    <b>temperature · max output · top_p</b>는 비우면 아예 보내지
+                    않습니다.
+                    {active.provider === 'anthropic' && (
+                      <>
+                        {' '}
+                        Claude는 max output이 필수라 비우면 16000을 씁니다. 현재
+                        모델(Opus 5 · Sonnet 5 · Opus 4.7/4.8 · Fable 5)은
+                        temperature·top_p를 받으면 400입니다.
+                      </>
+                    )}
+                    {active.provider === 'openai' && (
+                      <>
+                        {' '}
+                        추론 계열 모델은 temperature를 거부합니다. max output은{' '}
+                        <code>max_completion_tokens</code>로 보냅니다.
+                      </>
+                    )}
+                  </p>
+                  <p>
+                    <b>검증 프리셋</b>은 이 프로젝트(AIPM) 규격이 코드에 박힌
+                    것입니다. 다른 프로젝트에서는 아래 <b>[검증 규칙]</b>에 직접
+                    적어 쓰세요.
+                  </p>
+                  <p>
+                    <b>응답 필드</b>는 출력 중 말풍선에 보여줄 부분입니다.
+                    {active.replyKey.trim() === ''
+                      ? ' 지금은 비어 있어 아무것도 표시하지 않습니다. 데이터만 만드는 단계에 맞습니다.'
+                      : ' 보여줄 문장이 없는 단계(평가·기억 저장 등)는 비워 두세요.'}
+                  </p>
+                </div>
               </div>
             </Panel>
 
