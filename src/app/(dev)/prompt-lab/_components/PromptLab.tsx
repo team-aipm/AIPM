@@ -267,6 +267,22 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [sendTarget, setSendTarget] = useState<number | null>(null);
   /** 방금 옮긴 결과를 알린다. 어느 규칙으로 옮겼는지 보여야 한다 */
   const [sendNote, setSendNote] = useState<string | null>(null);
+  /**
+   * 상단 설정 패널의 펼침 상태.
+   *
+   * 단계마다 두지 않는다. 단계를 옮길 때마다 접혔다 펴졌다 하면 오히려
+   * 성가시다. 자주 고치는 프롬프트만 열어 두고 시작한다.
+   */
+  const [openPanel, setOpenPanel] = useState({
+    setting: false,
+    prompt: true,
+    rules: false,
+    mapping: false,
+  });
+
+  function togglePanel(name: keyof typeof openPanel) {
+    setOpenPanel((prev) => ({ ...prev, [name]: !prev[name] }));
+  }
   const [, startTransition] = useTransition();
 
   // 저장 여부. 키는 따로 관리한다.
@@ -1131,9 +1147,18 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       </nav>
 
       {active && thread && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <section className="order-2 flex flex-col gap-3 lg:order-1">
-            <Panel title="단계 설정" accent={accent}>
+        <div className="flex flex-col gap-4">
+          {/* 설정은 위에 모아 두고 접는다. 한 번 맞추면 계속 볼 이유가 없고,
+              접어야 대화와 결과가 화면에 들어온다. 넓게 쓸 수 있어서
+              검증 규칙 표도 여기가 낫다. */}
+          <section className="flex flex-col gap-3">
+            <Panel
+              title="단계 설정"
+              accent={accent}
+              open={openPanel.setting}
+              onToggle={() => togglePanel('setting')}
+              hint={`${active.provider} · ${active.model.trim() || DEFAULT_MODEL[active.provider]}`}
+            >
               <div className="flex flex-col gap-2 p-3">
                 <label className="flex items-center gap-2">
                   <span className="w-16 shrink-0 text-neutral-500">이름</span>
@@ -1399,6 +1424,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             <Panel
               title="프롬프트"
               accent={accent}
+              open={openPanel.prompt}
+              onToggle={() => togglePanel('prompt')}
+              hint={`${active.prompt.length}자${active.useCommonPrompt ? ' · 공통 포함' : ''}`}
               onCopy={() => navigator.clipboard.writeText(active.prompt)}
             >
               <textarea
@@ -1416,7 +1444,13 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             <Panel
               title="검증 규칙"
               accent={accent}
-              hint="결과가 규격에 맞는지 자동으로 본다"
+              open={openPanel.rules}
+              onToggle={() => togglePanel('rules')}
+              hint={
+                active.rules.fields.length === 0 && active.rules.banned.trim() === ''
+                  ? '결과가 규격에 맞는지 자동으로 본다'
+                  : `${active.rules.fields.length}줄${active.rules.banned.trim() === '' ? '' : ' · 금지어 있음'}`
+              }
             >
               <div className="flex flex-col gap-2 p-3">
                 <p className="text-[11px] text-neutral-500">
@@ -1544,7 +1578,13 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             <Panel
               title="다음 단계로 보낼 값"
               accent={accent}
-              hint="[입력으로] 를 눌렀을 때 무엇을 옮길지"
+              open={openPanel.mapping}
+              onToggle={() => togglePanel('mapping')}
+              hint={
+                active.mapping.length === 0
+                  ? '[입력으로] 를 눌렀을 때 무엇을 옮길지'
+                  : `${active.mapping.length}줄`
+              }
             >
               <div className="flex flex-col gap-2 p-3">
                 <p className="text-[11px] text-neutral-500">
@@ -1617,162 +1657,167 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             </Panel>
           </section>
 
-          <section className="order-1 flex flex-col gap-3 lg:order-2">
-            {/* 같은 프롬프트로 여러 시나리오를 나란히 둔다. 프롬프트·모델은
-                단계에 있으므로 고치면 모든 대화에 함께 반영된다. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-neutral-500">대화</span>
-              {active.threads.map((t, index) => (
-                <button
-                  key={t.key}
-                  onClick={() => patch(activeIndex, { activeThread: index })}
-                  className={`flex items-center gap-2 rounded border px-2 py-1 ${
-                    index === active.activeThread
-                      ? 'border-neutral-900 dark:border-neutral-100'
-                      : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'
-                  }`}
-                >
-                  <StatusDot result={t.result} />
-                  {t.name || '(이름 없음)'}
-                </button>
-              ))}
-
-              <button
-                onClick={addThread}
-                className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
-              >
-                + 대화
-              </button>
-              <button
-                onClick={duplicateThread}
-                className="text-neutral-500 hover:underline"
-              >
-                복제
-              </button>
-              {active.threads.length > 1 && (
-                <button
-                  onClick={() => removeThread(active.activeThread)}
-                  className="text-red-600 hover:underline dark:text-red-400"
-                >
-                  삭제
-                </button>
-              )}
-
-              <input
-                value={thread.name}
-                onChange={(event) =>
-                  renameThread(active.activeThread, event.target.value)
-                }
-                className="ml-auto w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-              />
-            </div>
-
-            {/* 대화창은 모든 단계에 있다. 입력 형식에 따라 기록이 쌓이는
-                곳만 다르다. JSON 이면 입력 JSON 안의 배열, 평문이면 화면
-                에만 남는다. */}
-            <ChatPanel
-              accent={accent}
-              turns={
-                active.inputMode === 'json'
-                  ? readTurns(thread.input, active.historyKey)
-                  : thread.transcript
-              }
-              draft={draft}
-              onDraft={setDraft}
-              onSend={send}
-              running={thread.running}
-              lastChecks={thread.result?.ok ? thread.result.checks : null}
-              images={thread.images}
-              onAttach={attachFiles}
-              onRemoveImage={removeImage}
-              hint={
-                active.inputMode === 'json'
-                  ? `입력 JSON 의 ${active.historyKey} 에 쌓입니다`
-                  : '보낸 글이 곧 입력이 됩니다. 기록은 화면에만 남습니다'
-              }
-              note={replyNote}
-              onClear={() =>
-                patchActive({
-                  transcript: [],
-                  ...(active.inputMode === 'json'
-                    ? { input: clearHistory(thread.input, active.historyKey) }
-                    : {}),
-                })
-              }
-            />
-
-            <Panel
-              title="입력"
-              accent={accent}
-              hint={
-                active.inputMode === 'json'
-                  ? '대화창과 같은 값이다. 여기서 고쳐도 된다'
-                  : '평문 그대로 보낸다'
-              }
-              onCopy={() => navigator.clipboard.writeText(thread.input)}
-            >
-              <textarea
-                value={thread.input}
-                onChange={(event) => patchActive({ input: event.target.value })}
-                spellCheck={false}
-                className="h-[200px] w-full resize-y bg-transparent p-3 outline-none"
-              />
-            </Panel>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={run}
-                disabled={thread.running}
-                className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
-              >
-                {thread.running ? '보내는 중…' : '새 메시지 없이 보내기'}
-              </button>
-
-              {thread.result?.ok && stages.length > 1 && (
-                <div
-                  className={`flex items-center gap-1 rounded border border-l-4 border-neutral-400 py-1 pl-2 dark:border-neutral-600 ${
-                    stageColor(sendTarget ?? defaultTarget).border
-                  }`}
-                >
-                  <span className="text-neutral-500">→</span>
-                  <select
-                    value={sendTarget ?? defaultTarget}
-                    onChange={(event) => setSendTarget(Number(event.target.value))}
-                    className="bg-transparent px-1 py-1 outline-none"
-                  >
-                    {stages.map((stage, index) =>
-                      index === activeIndex ? null : (
-                        <option key={stage.key} value={index}>
-                          {stage.name || '(이름 없음)'}
-                        </option>
-                      ),
-                    )}
-                  </select>
+          {/* 실제로 손이 가는 곳. 왼쪽에서 대화하고 오른쪽에서 결과를 본다 */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <section className="flex flex-col gap-3">
+              {/* 같은 프롬프트로 여러 시나리오를 나란히 둔다. 프롬프트·모델은
+                  단계에 있으므로 고치면 모든 대화에 함께 반영된다. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-neutral-500">대화</span>
+                {active.threads.map((t, index) => (
                   <button
-                    onClick={() => sendTo(sendTarget ?? defaultTarget)}
-                    className="px-2 py-1"
+                    key={t.key}
+                    onClick={() => patch(activeIndex, { activeThread: index })}
+                    className={`flex items-center gap-2 rounded border px-2 py-1 ${
+                      index === active.activeThread
+                        ? 'border-neutral-900 dark:border-neutral-100'
+                        : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'
+                    }`}
                   >
-                    입력으로
+                    <StatusDot result={t.result} />
+                    {t.name || '(이름 없음)'}
                   </button>
-                </div>
-              )}
+                ))}
 
-              {thread.result && (
-                <Meta
-                  result={thread.result}
-                  model={activeModel}
-                  price={activePrice}
-                  krwRate={Number(krwRate) || 0}
+                <button
+                  onClick={addThread}
+                  className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
+                >
+                  + 대화
+                </button>
+                <button
+                  onClick={duplicateThread}
+                  className="text-neutral-500 hover:underline"
+                >
+                  복제
+                </button>
+                {active.threads.length > 1 && (
+                  <button
+                    onClick={() => removeThread(active.activeThread)}
+                    className="text-red-600 hover:underline dark:text-red-400"
+                  >
+                    삭제
+                  </button>
+                )}
+
+                <input
+                  value={thread.name}
+                  onChange={(event) =>
+                    renameThread(active.activeThread, event.target.value)
+                  }
+                  className="ml-auto w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                 />
+              </div>
+
+              {/* 대화창은 모든 단계에 있다. 입력 형식에 따라 기록이 쌓이는
+                  곳만 다르다. JSON 이면 입력 JSON 안의 배열, 평문이면 화면
+                  에만 남는다. */}
+              <ChatPanel
+                accent={accent}
+                turns={
+                  active.inputMode === 'json'
+                    ? readTurns(thread.input, active.historyKey)
+                    : thread.transcript
+                }
+                draft={draft}
+                onDraft={setDraft}
+                onSend={send}
+                running={thread.running}
+                lastChecks={thread.result?.ok ? thread.result.checks : null}
+                images={thread.images}
+                onAttach={attachFiles}
+                onRemoveImage={removeImage}
+                hint={
+                  active.inputMode === 'json'
+                    ? `입력 JSON 의 ${active.historyKey} 에 쌓입니다`
+                    : '보낸 글이 곧 입력이 됩니다. 기록은 화면에만 남습니다'
+                }
+                note={replyNote}
+                onClear={() =>
+                  patchActive({
+                    transcript: [],
+                    ...(active.inputMode === 'json'
+                      ? { input: clearHistory(thread.input, active.historyKey) }
+                      : {}),
+                  })
+                }
+              />
+            </section>
+
+            <section className="flex flex-col gap-3">
+              <Panel
+                title="입력"
+                accent={accent}
+                hint={
+                  active.inputMode === 'json'
+                    ? '대화창과 같은 값이다. 여기서 고쳐도 된다'
+                    : '평문 그대로 보낸다'
+                }
+                onCopy={() => navigator.clipboard.writeText(thread.input)}
+              >
+                <textarea
+                  value={thread.input}
+                  onChange={(event) => patchActive({ input: event.target.value })}
+                  spellCheck={false}
+                  className="h-[200px] w-full resize-y bg-transparent p-3 outline-none"
+                />
+              </Panel>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={run}
+                  disabled={thread.running}
+                  className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+                >
+                  {thread.running ? '보내는 중…' : '새 메시지 없이 보내기'}
+                </button>
+
+                {thread.result?.ok && stages.length > 1 && (
+                  <div
+                    className={`flex items-center gap-1 rounded border border-l-4 border-neutral-400 py-1 pl-2 dark:border-neutral-600 ${
+                      stageColor(sendTarget ?? defaultTarget).border
+                    }`}
+                  >
+                    <span className="text-neutral-500">→</span>
+                    <select
+                      value={sendTarget ?? defaultTarget}
+                      onChange={(event) => setSendTarget(Number(event.target.value))}
+                      className="bg-transparent px-1 py-1 outline-none"
+                    >
+                      {stages.map((stage, index) =>
+                        index === activeIndex ? null : (
+                          <option key={stage.key} value={index}>
+                            {stage.name || '(이름 없음)'}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                    <button
+                      onClick={() => sendTo(sendTarget ?? defaultTarget)}
+                      className="px-2 py-1"
+                    >
+                      입력으로
+                    </button>
+                  </div>
+                )}
+
+                {thread.result && (
+                  <Meta
+                    result={thread.result}
+                    model={activeModel}
+                    price={activePrice}
+                    krwRate={Number(krwRate) || 0}
+                  />
+                )}
+              </div>
+
+              {sendNote && (
+                <p className="text-[11px] text-neutral-500">{sendNote}</p>
               )}
-            </div>
 
-            {sendNote && (
-              <p className="text-[11px] text-neutral-500">{sendNote}</p>
-            )}
-
-            <ResultView result={thread.result} accent={accent} />
-          </section>
+              <ResultView result={thread.result} accent={accent} />
+            </section>
+          </div>
         </div>
       )}
     </main>
@@ -2072,11 +2117,20 @@ function CheckRow({ check }: { check: Check }) {
   );
 }
 
+/**
+ * 제목줄이 붙은 상자.
+ *
+ * `onToggle` 을 주면 제목줄을 눌러 접을 수 있다. 설정 패널이 그렇다.
+ * 한 번 맞춰 두면 계속 펼쳐 둘 이유가 없고, 접어야 대화와 결과가
+ * 화면에 들어온다.
+ */
 function Panel({
   title,
   hint,
   onCopy,
   accent,
+  open,
+  onToggle,
   children,
 }: {
   title: string;
@@ -2084,26 +2138,49 @@ function Panel({
   onCopy?: () => void;
   /** 단계 색. 왼쪽 테두리로 어느 단계를 보고 있는지 알린다 */
   accent?: string;
+  /** `onToggle` 이 있을 때만 본다 */
+  open?: boolean;
+  onToggle?: () => void;
   children: React.ReactNode;
 }) {
+  const collapsible = onToggle !== undefined;
+  const shown = !collapsible || open !== false;
+
   return (
     <div
       className={`rounded border border-neutral-200 dark:border-neutral-800 ${
         accent ? `border-l-4 ${accent}` : ''
       }`}
     >
-      <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-1.5 dark:border-neutral-800">
-        <div className="flex items-baseline gap-2">
-          <span className="font-bold">{title}</span>
-          {hint && <span className="text-neutral-500">{hint}</span>}
-        </div>
+      <div
+        className={`flex items-center justify-between border-neutral-200 px-3 py-1.5 dark:border-neutral-800 ${
+          shown ? 'border-b' : ''
+        }`}
+      >
+        {collapsible ? (
+          <button
+            onClick={onToggle}
+            className="flex flex-1 items-baseline gap-2 text-left"
+            aria-expanded={shown}
+          >
+            <span className="text-neutral-400">{shown ? '▾' : '▸'}</span>
+            <span className="font-bold">{title}</span>
+            {hint && <span className="text-neutral-500">{hint}</span>}
+          </button>
+        ) : (
+          <div className="flex items-baseline gap-2">
+            <span className="font-bold">{title}</span>
+            {hint && <span className="text-neutral-500">{hint}</span>}
+          </div>
+        )}
         {onCopy && (
           <button onClick={onCopy} className="text-neutral-500 hover:underline">
             복사
           </button>
         )}
       </div>
-      {children}
+      {/* 접어도 상태는 그대로 둔다. 다시 펴면 쓰던 값이 그대로 있어야 한다 */}
+      <div hidden={!shown}>{children}</div>
     </div>
   );
 }
