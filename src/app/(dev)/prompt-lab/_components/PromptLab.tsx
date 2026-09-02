@@ -39,6 +39,35 @@ import {
   type Turn,
 } from '../_chat';
 
+/**
+ * 한 단계 안의 **대화 하나**.
+ *
+ * 같은 프롬프트·모델로 여러 시나리오를 나란히 두려고 단계와 분리했다.
+ * "학생이 잘 답하는 경우"와 "몰라요만 하는 경우"를 각각 대화로 두고
+ * 오가며 비교한다. 프롬프트를 고치면 모든 대화에 동시에 반영된다.
+ */
+type Thread = {
+  /** React key 전용. DOM에 넣지 않는다 */
+  key: string;
+  name: string;
+  input: string;
+  /**
+   * 평문 입력 단계의 대화 기록. 화면에만 쓴다.
+   *
+   * JSON 입력 단계는 입력 JSON 안의 배열이 곧 대화 기록이라 별도 상태가
+   * 없다. 평문 단계는 담을 곳이 없어 여기 둔다.
+   */
+  transcript: Turn[];
+  /** 다음 호출에 함께 보낼 이미지. 보내고 나면 비운다 */
+  images: Attachment[];
+  result: RunResult | null;
+  running: boolean;
+};
+
+/**
+ * 단계. 프롬프트·모델·파라미터는 여기 있고 대화는 `threads` 에 있다.
+ * "무엇을 시험하는가"와 "어떻게 흘러갔는가"를 나눈 것이다.
+ */
 type Stage = StagePreset & {
   /** React key 전용. DOM에 넣지 않는다 */
   key: string;
@@ -47,25 +76,27 @@ type Stage = StagePreset & {
   model: string;
   /** 비우면 기본 키 → 없으면 서버의 GEMINI_API_KEY */
   apiKey: string;
-  input: string;
   /** 화면 입력값. 빈 문자열이면 해당 파라미터를 보내지 않는다 */
   temperature: string;
   maxTokens: string;
   topP: string;
-  /** 다음 호출에 함께 보낼 이미지. 보내고 나면 비운다 */
-  images: Attachment[];
-  /**
-   * 평문 입력 단계의 대화 기록. 화면에만 쓴다.
-   *
-   * JSON 입력 단계는 입력 JSON 안의 배열이 곧 대화 기록이라 별도 상태가
-   * 없다. 평문 단계는 담을 곳이 없어 여기 둔다.
-   */
-  transcript: Turn[];
   useCommonPrompt: boolean;
   forceJsonMimeType: boolean;
-  result: RunResult | null;
-  running: boolean;
+  threads: Thread[];
+  activeThread: number;
 };
+
+function newThread(key: string, name: string, input: string): Thread {
+  return {
+    key,
+    name,
+    input,
+    transcript: [],
+    images: [],
+    result: null,
+    running: false,
+  };
+}
 
 type Props = {
   preset: StagePreset[];
@@ -80,16 +111,13 @@ function toStage(base: StagePreset, key: string): Stage {
     provider: 'gemini',
     model: '',
     apiKey: '',
-    input: base.sampleInput,
     temperature: '',
     maxTokens: '',
     topP: '',
-    images: [],
-    transcript: [],
     useCommonPrompt: true,
     forceJsonMimeType: false,
-    result: null,
-    running: false,
+    threads: [newThread(`${key}-t0`, '대화 1', base.sampleInput)],
+    activeThread: 0,
   };
 }
 
@@ -123,6 +151,8 @@ type SavedStage = StagePreset & {
   topP: string;
   useCommonPrompt: boolean;
   forceJsonMimeType: boolean;
+  /** 대화는 이름과 입력만 남긴다. 결과는 다시 실행하면 되고 이미지는 무겁다 */
+  threads: { name: string; input: string }[];
 };
 
 function toSaved(stage: Stage): SavedStage {
@@ -130,7 +160,8 @@ function toSaved(stage: Stage): SavedStage {
     name: stage.name,
     note: stage.note,
     prompt: stage.prompt,
-    sampleInput: stage.input,
+    sampleInput: stage.threads[0]?.input ?? '',
+    threads: stage.threads.map((t) => ({ name: t.name, input: t.input })),
     inputMode: stage.inputMode,
     outputMode: stage.outputMode,
     checkRule: stage.checkRule,
@@ -157,7 +188,12 @@ function fromSaved(item: Partial<SavedStage>, key: string): Stage {
     topP: item.topP ?? '',
     useCommonPrompt: item.useCommonPrompt ?? true,
     forceJsonMimeType: item.forceJsonMimeType ?? false,
-    input: item.sampleInput ?? '',
+    // 예전 저장본에는 threads 가 없다. sampleInput 하나를 대화 1로 만든다.
+    threads: (Array.isArray(item.threads) && item.threads.length > 0
+      ? item.threads
+      : [{ name: '대화 1', input: item.sampleInput ?? '' }]
+    ).map((t, i) => newThread(`${key}-t${i}`, t.name ?? `대화 ${i + 1}`, t.input ?? '')),
+    activeThread: 0,
   };
 }
 
@@ -189,6 +225,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   /** 이번 세션 누적 비용. 새로고침하면 0 부터 다시 센다 */
   const [spentUsd, setSpentUsd] = useState(0);
   const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
+  /** 결과를 보낼 단계. null 이면 기본값(다음 단계, 마지막이면 처음) */
+  const [sendTarget, setSendTarget] = useState<number | null>(null);
   const [, startTransition] = useTransition();
 
   // 저장 여부. 키는 따로 관리한다.
@@ -305,11 +343,39 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   }, [restored, rememberKeys, defaultKeys, stages]);
 
   const active = stages[activeIndex];
+  /** 지금 보고 있는 대화 */
+  const thread: Thread | null = active?.threads[active.activeThread] ?? null;
 
   function patch(index: number, next: Partial<Stage>) {
     setStages((prev) =>
       prev.map((stage, i) => (i === index ? { ...stage, ...next } : stage)),
     );
+  }
+
+  /** 특정 단계의 특정 대화만 고친다. */
+  function patchThread(
+    stageIndex: number,
+    threadIndex: number,
+    next: Partial<Thread>,
+  ) {
+    setStages((prev) =>
+      prev.map((stage, i) =>
+        i !== stageIndex
+          ? stage
+          : {
+              ...stage,
+              threads: stage.threads.map((t, k) =>
+                k === threadIndex ? { ...t, ...next } : t,
+              ),
+            },
+      ),
+    );
+  }
+
+  /** 지금 단계의 지금 대화를 고친다. */
+  function patchActive(next: Partial<Thread>) {
+    if (!active) return;
+    patchThread(activeIndex, active.activeThread, next);
   }
 
   function addStage() {
@@ -367,11 +433,12 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
   /** 한 번 호출한다. onDone 으로 후처리를 넘긴다. */
   function execute(input: string, onDone?: (result: RunResult) => void) {
-    if (!active || active.running) return;
+    if (!active || !thread || thread.running) return;
     const params = readParams(active);
     if (params === null) return;
     const index = activeIndex;
-    patch(index, { running: true, result: null });
+    const threadIndex = active.activeThread;
+    patchThread(index, threadIndex, { running: true, result: null });
 
     const system = active.useCommonPrompt
       ? `${commonPrompt}\n\n---\n\n${active.prompt}`
@@ -391,9 +458,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         forceJsonMimeType: active.forceJsonMimeType,
         apiKey: active.apiKey.trim() || defaultKeys[active.provider].trim(),
         params,
-        images: active.images,
+        images: thread.images,
       });
-      patch(index, { running: false, result });
+      patchThread(index, threadIndex, { running: false, result });
 
       // 이번 호출 비용을 누적한다. 가격을 모르면 더하지 않는다.
       if (result.ok) {
@@ -407,8 +474,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   }
 
   function run() {
-    if (!active) return;
-    execute(active.input);
+    if (!thread) return;
+    execute(thread.input);
   }
 
   /** 지금 단계의 프로바이더에 실제 모델 목록을 물어본다. */
@@ -450,23 +517,16 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       });
     }
 
-    if (added.length > 0) {
-      setStages((prev) =>
-        prev.map((stage, i) =>
-          i === index ? { ...stage, images: [...stage.images, ...added] } : stage,
-        ),
-      );
+    if (added.length > 0 && thread) {
+      patchThread(index, active.activeThread, {
+        images: [...thread.images, ...added],
+      });
     }
   }
 
   function removeImage(imageIndex: number) {
-    setStages((prev) =>
-      prev.map((stage, i) =>
-        i === activeIndex
-          ? { ...stage, images: stage.images.filter((_, k) => k !== imageIndex) }
-          : stage,
-      ),
-    );
+    if (!thread) return;
+    patchActive({ images: thread.images.filter((_, k) => k !== imageIndex) });
   }
 
   /**
@@ -476,20 +536,21 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
    * text  보낸 글이 곧 입력이 된다. 기록은 화면(transcript)에만 남는다.
    */
   function send() {
-    if (!active || active.running) return;
+    if (!active || !thread || thread.running) return;
     const text = draft.trim();
     // 이미지만 붙여 보낼 수 있다. OCR 단계에서 자주 쓴다.
-    if (!text && active.images.length === 0) return;
+    if (!text && thread.images.length === 0) return;
 
     const index = activeIndex;
-    const names = active.images.map((image) => image.name);
+    const threadIndex = active.activeThread;
+    const names = thread.images.map((image) => image.name);
     setReplyNote(null);
 
     if (active.inputMode === 'text') {
       setDraft('');
-      patch(index, {
+      patchThread(index, threadIndex, {
         input: text,
-        transcript: [...active.transcript, { who: 'user', text, attachments: names }],
+        transcript: [...thread.transcript, { who: 'user', text, attachments: names }],
       });
 
       execute(text, (result) => {
@@ -499,23 +560,30 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         if (!pick.show) return;
         setStages((prev) =>
           prev.map((stage, i) =>
-            i === index
-              ? {
+            i !== index
+              ? stage
+              : {
                   ...stage,
-                  transcript: [
-                    ...stage.transcript,
-                    { who: 'ai', text: pick.text, attachments: [] },
-                  ],
-                }
-              : stage,
+                  threads: stage.threads.map((t, k) =>
+                    k !== threadIndex
+                      ? t
+                      : {
+                          ...t,
+                          transcript: [
+                            ...t.transcript,
+                            { who: 'ai' as const, text: pick.text, attachments: [] },
+                          ],
+                        },
+                  ),
+                },
           ),
         );
       });
-      patch(index, { images: [] });
+      patchThread(index, threadIndex, { images: [] });
       return;
     }
 
-    const withUser = appendUserTurn(active.input, active.historyKey, text, names);
+    const withUser = appendUserTurn(thread.input, active.historyKey, text, names);
     if (withUser === null) {
       window.alert(
         '입력 JSON을 파싱하지 못해 대화를 이어갈 수 없습니다. ' +
@@ -528,7 +596,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     const replyKey = active.replyKey;
 
     setDraft('');
-    patch(index, { input: withUser });
+    patchThread(index, threadIndex, { input: withUser });
 
     const outputMode = active.outputMode;
 
@@ -552,17 +620,28 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         parsed,
         pick.show ? pick.text : null,
       );
-      if (withAi !== null) patch(index, { input: withAi });
+      if (withAi !== null) patchThread(index, threadIndex, { input: withAi });
     });
 
     // 이미지는 그 턴에만 붙는다. 대화 기록에는 파일명만 남는다.
-    patch(index, { images: [] });
+    patchThread(index, threadIndex, { images: [] });
   }
 
-  function sendToNext() {
-    const nextIndex = activeIndex + 1;
-    const raw = active?.result?.raw;
-    if (!raw || nextIndex >= stages.length) return;
+  /**
+   * 결과를 다른 단계의 입력으로 보낸다.
+   *
+   * 다음 단계로만 갈 수 있으면 마지막 단계에서 막힌다. 학습은 한 바퀴를
+   * 돌아 다시 문제로 돌아오므로(06 → 02) 대상을 고를 수 있어야 한다.
+   */
+  function sendTo(nextIndex: number) {
+    const raw = thread?.result?.raw;
+    if (!active || !thread || !raw) return;
+    if (nextIndex < 0 || nextIndex >= stages.length) return;
+    if (nextIndex === activeIndex) return;
+
+    // 받는 쪽도 지금 보고 있는 대화에 넣는다.
+    const target = stages[nextIndex];
+    const targetThread = target.activeThread;
 
     let mapped: string | null = null;
     try {
@@ -570,15 +649,68 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       mapped = bridge(
         active.checkRule,
         JSON.parse(raw),
-        active.input,
-        stages[nextIndex].input,
+        thread.input,
+        target.threads[targetThread]?.input ?? '{}',
       );
     } catch {
       mapped = null;
     }
 
-    patch(nextIndex, { input: mapped ?? raw });
+    patchThread(nextIndex, targetThread, { input: mapped ?? raw });
     setActiveIndex(nextIndex);
+    setSendTarget(null);
+  }
+
+  /** 기본 대상. 다음 단계가 있으면 그쪽, 마지막이면 처음으로 돌아간다. */
+  const defaultTarget = activeIndex + 1 < stages.length ? activeIndex + 1 : 0;
+
+  // ── 대화 관리 ──────────────────────────────────────────────────────────
+
+  /** 빈 대화를 추가한다. 입력은 그 단계의 예시로 시작한다. */
+  function addThread() {
+    if (!active) return;
+    const next = newThread(
+      `${active.key}-t${keySeq}`,
+      `대화 ${active.threads.length + 1}`,
+      active.sampleInput,
+    );
+    setKeySeq((prev) => prev + 1);
+    patch(activeIndex, {
+      threads: [...active.threads, next],
+      activeThread: active.threads.length,
+    });
+  }
+
+  /**
+   * 지금 대화를 복제한다. 입력까지 그대로 가져가므로 같은 지점에서
+   * 다르게 답해보는 분기 시험에 쓴다. 결과는 가져가지 않는다.
+   */
+  function duplicateThread() {
+    if (!active || !thread) return;
+    const copy = newThread(
+      `${active.key}-t${keySeq}`,
+      `${thread.name} 사본`,
+      thread.input,
+    );
+    copy.transcript = [...thread.transcript];
+    setKeySeq((prev) => prev + 1);
+    patch(activeIndex, {
+      threads: [...active.threads, copy],
+      activeThread: active.threads.length,
+    });
+  }
+
+  function removeThread(index: number) {
+    if (!active || active.threads.length === 1) return;
+    const threads = active.threads.filter((_, i) => i !== index);
+    patch(activeIndex, {
+      threads,
+      activeThread: Math.min(active.activeThread, threads.length - 1),
+    });
+  }
+
+  function renameThread(index: number, name: string) {
+    patchThread(activeIndex, index, { name });
   }
 
   function exportConfig() {
@@ -591,7 +723,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         name: stage.name,
         note: stage.note,
         prompt: stage.prompt,
-        sampleInput: stage.input,
+        sampleInput: stage.threads[0]?.input ?? '',
+        threads: stage.threads.map((t) => ({ name: t.name, input: t.input })),
         inputMode: stage.inputMode,
         outputMode: stage.outputMode,
         checkRule: stage.checkRule,
@@ -925,7 +1058,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             }`}
           >
             <span className={`h-4 w-1 shrink-0 rounded ${stageColor(index).bar}`} />
-            <StatusDot result={stage.result} />
+            <StatusDot result={stage.threads[stage.activeThread]?.result ?? null} />
             <span className={index === activeIndex ? stageColor(index).text : undefined}>
               {stage.name || '(이름 없음)'}
             </span>
@@ -947,7 +1080,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         </button>
       </nav>
 
-      {active && (
+      {active && thread && (
         <div className="grid gap-4 lg:grid-cols-2">
           <section className="order-2 flex flex-col gap-3 lg:order-1">
             <Panel title="단계 설정" accent={accent}>
@@ -1218,6 +1351,55 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           </section>
 
           <section className="order-1 flex flex-col gap-3 lg:order-2">
+            {/* 같은 프롬프트로 여러 시나리오를 나란히 둔다. 프롬프트·모델은
+                단계에 있으므로 고치면 모든 대화에 함께 반영된다. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-neutral-500">대화</span>
+              {active.threads.map((t, index) => (
+                <button
+                  key={t.key}
+                  onClick={() => patch(activeIndex, { activeThread: index })}
+                  className={`flex items-center gap-2 rounded border px-2 py-1 ${
+                    index === active.activeThread
+                      ? 'border-neutral-900 dark:border-neutral-100'
+                      : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'
+                  }`}
+                >
+                  <StatusDot result={t.result} />
+                  {t.name || '(이름 없음)'}
+                </button>
+              ))}
+
+              <button
+                onClick={addThread}
+                className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
+              >
+                + 대화
+              </button>
+              <button
+                onClick={duplicateThread}
+                className="text-neutral-500 hover:underline"
+              >
+                복제
+              </button>
+              {active.threads.length > 1 && (
+                <button
+                  onClick={() => removeThread(active.activeThread)}
+                  className="text-red-600 hover:underline dark:text-red-400"
+                >
+                  삭제
+                </button>
+              )}
+
+              <input
+                value={thread.name}
+                onChange={(event) =>
+                  renameThread(active.activeThread, event.target.value)
+                }
+                className="ml-auto w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+              />
+            </div>
+
             {/* 대화창은 모든 단계에 있다. 입력 형식에 따라 기록이 쌓이는
                 곳만 다르다. JSON 이면 입력 JSON 안의 배열, 평문이면 화면
                 에만 남는다. */}
@@ -1225,15 +1407,15 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               accent={accent}
               turns={
                 active.inputMode === 'json'
-                  ? readTurns(active.input, active.historyKey)
-                  : active.transcript
+                  ? readTurns(thread.input, active.historyKey)
+                  : thread.transcript
               }
               draft={draft}
               onDraft={setDraft}
               onSend={send}
-              running={active.running}
-              lastChecks={active.result?.ok ? active.result.checks : null}
-              images={active.images}
+              running={thread.running}
+              lastChecks={thread.result?.ok ? thread.result.checks : null}
+              images={thread.images}
               onAttach={attachFiles}
               onRemoveImage={removeImage}
               hint={
@@ -1243,10 +1425,10 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               }
               note={replyNote}
               onClear={() =>
-                patch(activeIndex, {
+                patchActive({
                   transcript: [],
                   ...(active.inputMode === 'json'
-                    ? { input: clearHistory(active.input, active.historyKey) }
+                    ? { input: clearHistory(thread.input, active.historyKey) }
                     : {}),
                 })
               }
@@ -1260,11 +1442,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   ? '대화창과 같은 값이다. 여기서 고쳐도 된다'
                   : '평문 그대로 보낸다'
               }
-              onCopy={() => navigator.clipboard.writeText(active.input)}
+              onCopy={() => navigator.clipboard.writeText(thread.input)}
             >
               <textarea
-                value={active.input}
-                onChange={(event) => patch(activeIndex, { input: event.target.value })}
+                value={thread.input}
+                onChange={(event) => patchActive({ input: event.target.value })}
                 spellCheck={false}
                 className="h-[200px] w-full resize-y bg-transparent p-3 outline-none"
               />
@@ -1273,26 +1455,44 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={run}
-                disabled={active.running}
+                disabled={thread.running}
                 className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
               >
-                {active.running ? '실행 중…' : '입력 그대로 실행'}
+                {thread.running ? '실행 중…' : '입력 그대로 실행'}
               </button>
 
-              {active.result?.ok && activeIndex + 1 < stages.length && (
-                <button
-                  onClick={sendToNext}
-                  className={`flex items-center gap-2 rounded border border-l-4 border-neutral-400 px-3 py-2 dark:border-neutral-600 ${
-                    stageColor(activeIndex + 1).border
+              {thread.result?.ok && stages.length > 1 && (
+                <div
+                  className={`flex items-center gap-1 rounded border border-l-4 border-neutral-400 py-1 pl-2 dark:border-neutral-600 ${
+                    stageColor(sendTarget ?? defaultTarget).border
                   }`}
                 >
-                  → {stages[activeIndex + 1].name} 입력으로
-                </button>
+                  <span className="text-neutral-500">→</span>
+                  <select
+                    value={sendTarget ?? defaultTarget}
+                    onChange={(event) => setSendTarget(Number(event.target.value))}
+                    className="bg-transparent px-1 py-1 outline-none"
+                  >
+                    {stages.map((stage, index) =>
+                      index === activeIndex ? null : (
+                        <option key={stage.key} value={index}>
+                          {stage.name || '(이름 없음)'}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                  <button
+                    onClick={() => sendTo(sendTarget ?? defaultTarget)}
+                    className="px-2 py-1"
+                  >
+                    입력으로
+                  </button>
+                </div>
               )}
 
-              {active.result && (
+              {thread.result && (
                 <Meta
-                  result={active.result}
+                  result={thread.result}
                   model={activeModel}
                   price={activePrice}
                   krwRate={Number(krwRate) || 0}
@@ -1300,7 +1500,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               )}
             </div>
 
-            <ResultView result={active.result} accent={accent} />
+            <ResultView result={thread.result} accent={accent} />
           </section>
         </div>
       )}
