@@ -211,8 +211,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     anthropic: '',
   });
   const [commonPrompt, setCommonPrompt] = useState(COMMON_RULES);
-  const [panel, setPanel] = useState<'none' | 'common' | 'config' | 'price'>('none');
-  const [configText, setConfigText] = useState('');
+  const [panel, setPanel] = useState<'none' | 'common' | 'price' | 'keys'>('none');
   const [draft, setDraft] = useState('');
   // 프로바이더에서 받아온 실제 모델 목록. 코드의 후보보다 이쪽이 정확하다.
   const [liveModels, setLiveModels] = useState<Partial<Record<ProviderId, string[]>>>({});
@@ -713,68 +712,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     patchThread(activeIndex, index, { name });
   }
 
-  function exportConfig() {
-    // API 키는 내보내지 않는다.
-    const payload = {
-      commonPrompt,
-      prices,
-      krwRate,
-      stages: stages.map((stage) => ({
-        name: stage.name,
-        note: stage.note,
-        prompt: stage.prompt,
-        sampleInput: stage.threads[0]?.input ?? '',
-        threads: stage.threads.map((t) => ({ name: t.name, input: t.input })),
-        inputMode: stage.inputMode,
-        outputMode: stage.outputMode,
-        checkRule: stage.checkRule,
-        historyKey: stage.historyKey,
-        replyKey: stage.replyKey,
-        provider: stage.provider,
-        model: stage.model,
-        temperature: stage.temperature,
-        maxTokens: stage.maxTokens,
-        topP: stage.topP,
-        useCommonPrompt: stage.useCommonPrompt,
-        forceJsonMimeType: stage.forceJsonMimeType,
-      })),
-    };
-    const text = JSON.stringify(payload, null, 2);
-    setConfigText(text);
-    setPanel('config');
-    void navigator.clipboard.writeText(text);
-  }
-
-  function importConfig() {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(configText);
-    } catch {
-      window.alert('설정 JSON을 파싱하지 못했습니다.');
-      return;
-    }
-    const data = parsed as {
-      commonPrompt?: string;
-      prices?: Record<string, Price>;
-      krwRate?: string;
-      stages?: Partial<SavedStage>[];
-    };
-    if (data.prices && typeof data.prices === 'object') setPrices(data.prices);
-    if (typeof data.krwRate === 'string') setKrwRate(data.krwRate);
-    if (!Array.isArray(data.stages) || data.stages.length === 0) {
-      window.alert('stages 배열이 없습니다.');
-      return;
-    }
-
-    if (typeof data.commonPrompt === 'string') setCommonPrompt(data.commonPrompt);
-
-    setStages(
-      data.stages.map((item, index) => fromSaved(item, `s${keySeq + index}`)),
-    );
-    setKeySeq((prev) => prev + data.stages!.length);
-    setActiveIndex(0);
-    setPanel('none');
-  }
 
   const accent = stageColor(activeIndex).border;
   const activeModel = active
@@ -804,51 +741,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           <span className="text-neutral-500">단계별 프롬프트 실행·검증</span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2">
-            <span className="text-neutral-500">{providerLabel} 기본 키</span>
-            <input
-              type="password"
-              value={defaultKeys[activeProvider]}
-              onChange={(event) =>
-                setDefaultKeys((prev) => ({
-                  ...prev,
-                  [activeProvider]: event.target.value,
-                }))
-              }
-              placeholder={
-                activeProvider === 'gemini' && hasEnvApiKey
-                  ? '.env 값을 씁니다'
-                  : '키를 넣으세요'
-              }
-              className="w-56 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
-            />
-          </label>
-
-          <Toggle checked={remember} onChange={setRemember} label="설정 저장" />
-          <Toggle
-            checked={rememberKeys}
-            onChange={setRememberKeys}
-            label="키 저장"
-          />
-          <span className="text-[11px] text-neutral-500">
-            기본 키 + 단계별 키
-          </span>
-
-          <button
-            onClick={() => {
-              if (!window.confirm('단계를 기본 프리셋으로 되돌립니다. 계속할까요?'))
-                return;
-              setStages(preset.map((base, index) => toStage(base, `p${index}`)));
-              setKeySeq(preset.length);
-              setActiveIndex(0);
-              setCommonPrompt(COMMON_RULES);
-            }}
-            className="text-neutral-500 hover:underline"
-          >
-            초기화
-          </button>
-
+        {/* 헤더에는 비용과 저장만 둔다. 값을 편집하는 것들(키·가격표·
+            공통 프롬프트)은 패널로 내렸다. */}
+        <div className="flex flex-wrap items-center gap-4">
           <span className="text-neutral-500">
             이번 세션{' '}
             <b className="text-neutral-900 dark:text-neutral-100">
@@ -865,24 +760,77 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             </button>
           )}
 
-          <button
-            onClick={() => setPanel(panel === 'price' ? 'none' : 'price')}
-            className="text-neutral-500 hover:underline"
-          >
-            가격표
-          </button>
-
-          <button onClick={() => setPanel(panel === 'common' ? 'none' : 'common')} className="text-neutral-500 hover:underline">
-            공통 프롬프트
-          </button>
-          <button onClick={exportConfig} className="text-neutral-500 hover:underline">
-            내보내기
-          </button>
-          <button onClick={() => setPanel(panel === 'config' ? 'none' : 'config')} className="text-neutral-500 hover:underline">
-            불러오기
-          </button>
+          <Toggle checked={remember} onChange={setRemember} label="설정 저장" />
+          <Toggle checked={rememberKeys} onChange={setRememberKeys} label="키 저장" />
         </div>
       </header>
+
+      <nav className="flex flex-wrap items-center gap-3 text-neutral-500">
+        {(
+          [
+            ['keys', 'API 키'],
+            ['price', '가격표'],
+            ['common', '공통 프롬프트'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setPanel(panel === id ? 'none' : id)}
+            className={panel === id ? 'text-neutral-900 dark:text-neutral-100' : 'hover:underline'}
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          onClick={() => {
+            if (!window.confirm('단계를 기본 프리셋으로 되돌립니다. 계속할까요?')) return;
+            setStages(preset.map((base, index) => toStage(base, `p${index}`)));
+            setKeySeq(preset.length);
+            setActiveIndex(0);
+            setCommonPrompt(COMMON_RULES);
+          }}
+          className="hover:underline"
+        >
+          단계 초기화
+        </button>
+      </nav>
+
+      {panel === 'keys' && (
+        <Panel
+          title="API 키"
+          hint="이 브라우저에만 저장됩니다. 서버로 올라가지 않습니다"
+        >
+          <div className="flex flex-col gap-2 p-3">
+            {PROVIDERS.map((entry) => (
+              <label key={entry.id} className="flex items-center gap-2">
+                <span className="w-20 shrink-0 text-neutral-500">{entry.label}</span>
+                <input
+                  type="password"
+                  value={defaultKeys[entry.id]}
+                  onChange={(event) =>
+                    setDefaultKeys((prev) => ({
+                      ...prev,
+                      [entry.id]: event.target.value,
+                    }))
+                  }
+                  placeholder={
+                    entry.id === 'gemini' && hasEnvApiKey
+                      ? '.env 값을 씁니다'
+                      : '키를 넣으세요'
+                  }
+                  className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                />
+              </label>
+            ))}
+            <p className="text-[11px] text-neutral-500">
+              여기 넣은 값이 <b>기본 키</b>입니다. 특정 단계만 다른 계정으로
+              돌리려면 그 단계의 <b>API 키</b>에 따로 넣으세요. 우선순위는
+              이 단계 키 → 기본 키 순입니다. <b>키 저장</b>을 켜면 이 값과
+              단계별 키가 이 브라우저에 남고, 끄면 즉시 지워집니다.
+            </p>
+          </div>
+        </Panel>
+      )}
 
       {panel === 'common' && (
         <Panel
@@ -1026,25 +974,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         </Panel>
       )}
 
-      {panel === 'config' && (
-        <Panel title="설정 JSON" hint="API 키는 포함되지 않습니다">
-          <textarea
-            value={configText}
-            onChange={(event) => setConfigText(event.target.value)}
-            spellCheck={false}
-            placeholder="여기에 붙여넣고 불러오기를 누르세요"
-            className="h-56 w-full resize-y bg-transparent p-3 outline-none"
-          />
-          <div className="border-t border-neutral-200 px-3 py-2 dark:border-neutral-800">
-            <button
-              onClick={importConfig}
-              className="rounded border border-neutral-400 px-3 py-1 dark:border-neutral-600"
-            >
-              불러오기 — 현재 단계를 모두 교체합니다
-            </button>
-          </div>
-        </Panel>
-      )}
 
       <nav className="flex flex-wrap items-center gap-2">
         {stages.map((stage, index) => (
