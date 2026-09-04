@@ -58,6 +58,14 @@ export type RunResult = {
   checks: Check[];
   elapsed_ms: number;
   tokens: { prompt: number | null; output: number | null; total: number | null };
+  /**
+   * **서버가 실제로 받은 systemInstruction 전문.**
+   *
+   * 화면이 "보냈다고 믿는 것" 이 아니라 서버에 도착한 것을 그대로 돌려준다.
+   * 프롬프트를 고친 뒤 이 결과가 새 프롬프트로 나온 것인지 옛 것으로 나온
+   * 것인지 눈으로 확인할 수 있어야 하기 때문이다.
+   */
+  sentSystem: string;
 };
 
 /** 프로바이더에서 실제 모델 목록을 받아온다. 코드에 적힌 후보는 낡는다. */
@@ -87,6 +95,8 @@ export async function runStage(request: RunInput): Promise<RunResult> {
     tokens: { prompt: null, output: null, total: null },
     checks: [] as Check[],
     raw: '',
+    // 실패해도 무엇을 보냈는지는 보여준다. 프롬프트가 원인일 수 있다.
+    sentSystem: request.system,
   };
 
   // 입력을 JSON으로 다루는 단계면 호출 전에 파싱해 본다. 토큰을 낭비할
@@ -144,6 +154,7 @@ export async function runStage(request: RunInput): Promise<RunResult> {
     ok: true,
     raw: result.text,
     error: null,
+    sentSystem: request.system,
     checks: [...report.checks, ...custom],
     elapsed_ms: result.elapsed_ms,
     tokens: {
