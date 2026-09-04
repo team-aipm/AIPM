@@ -32,11 +32,19 @@ import {
 import {
   applyMapping,
   BLANK_MAP_ROW,
+  hasMapping,
   MAP_SOURCES,
   type MapRow,
   type MapSource,
 } from '../_mapping';
 import { stageColor } from '../_stage-colors';
+import {
+  applyVars,
+  BLANK_VARIABLE,
+  undefinedRefs,
+  usageOf,
+  type Variable,
+} from '../_vars';
 import {
   costOf,
   findPrice,
@@ -49,6 +57,7 @@ import {
 import {
   appendAiTurn,
   appendUserTurn,
+  parseOutput,
   pickReply,
   readTurns,
   type Turn,
@@ -86,8 +95,15 @@ type Thread = {
 type Stage = StagePreset & {
   /** React key 전용. DOM에 넣지 않는다 */
   key: string;
+  /**
+   * 켜면 아래 모델 설정을 쓰고, 끄면 공통 설정을 따른다.
+   *
+   * 상속을 숨기지 않으려고 명시적인 스위치로 뒀다. 화면에서 이 단계가
+   * 공통을 따르는 건지 직접 정한 건지 바로 보여야 한다.
+   */
+  ownSettings: boolean;
   provider: ProviderId;
-  /** 비우면 프로바이더 기본 모델 */
+  /** `ownSettings` 가 켜졌을 때만 쓴다. 비우면 프로바이더 기본 모델 */
   model: string;
   /** 비우면 기본 키 → 없으면 서버의 GEMINI_API_KEY */
   apiKey: string;
@@ -130,6 +146,8 @@ function toStage(base: StagePreset, key: string): Stage {
   return {
     ...base,
     key,
+    // 새 단계는 공통 설정을 따른다. 이게 이 구조의 요점이다.
+    ownSettings: false,
     provider: 'gemini',
     model: '',
     apiKey: '',
@@ -164,6 +182,50 @@ const KEY_STORAGE_KEY = 'prompt-lab:keys:v1';
 const PREF_STORAGE_KEY = 'prompt-lab:prefs:v1';
 
 /**
+ * 모든 단계가 기본으로 따르는 모델 설정.
+ *
+ * 단계마다 프로바이더·모델을 따로 두는 게 이 도구의 핵심이지만, 전체를
+ * 한 모델로 돌려 보는 일이 그만큼 잦다. 여기 한 번 넣으면 단계를 새로
+ * 추가해도 따라온다.
+ *
+ * API 키는 여기 없다. 프로바이더별 기본 키(`defaultKeys`)가 이미 같은
+ * 역할을 한다.
+ */
+export type CommonSettings = {
+  provider: ProviderId;
+  model: string;
+  temperature: string;
+  maxTokens: string;
+  topP: string;
+};
+
+const DEFAULT_COMMON: CommonSettings = {
+  provider: 'gemini',
+  model: '',
+  temperature: '',
+  maxTokens: '',
+  topP: '',
+};
+
+/**
+ * 이 단계가 **실제로 쓸** 모델 설정.
+ *
+ * `ownSettings` 가 꺼져 있으면 공통 설정을 그대로 쓴다. 화면에서도 이
+ * 값을 회색으로 보여준다. 빈칸으로 두면 "뭘 쓰는지 모르겠다" 가 다시
+ * 생기기 때문이다.
+ */
+function effective(stage: Stage, common: CommonSettings): CommonSettings {
+  if (!stage.ownSettings) return common;
+  return {
+    provider: stage.provider,
+    model: stage.model,
+    temperature: stage.temperature,
+    maxTokens: stage.maxTokens,
+    topP: stage.topP,
+  };
+}
+
+/**
  * 그 단계가 실제로 보낼 systemInstruction 전문.
  *
  * 실행할 때와 "지금 프롬프트와 같은가" 를 비교할 때 **같은 함수**를 쓴다.
@@ -187,6 +249,7 @@ type SavedKeys = {
 
 /** 저장되는 단계. 실행 결과·이미지·단계별 키는 저장하지 않는다. */
 type SavedStage = StagePreset & {
+  ownSettings: boolean;
   provider: ProviderId;
   model: string;
   temperature: string;
@@ -219,6 +282,7 @@ function toSaved(stage: Stage): SavedStage {
     topP: stage.topP,
     useCommonPrompt: stage.useCommonPrompt,
     forceJsonMimeType: stage.forceJsonMimeType,
+    ownSettings: stage.ownSettings,
     rules: stage.rules,
     mapping: stage.mapping,
   };
@@ -228,6 +292,9 @@ function fromSaved(item: Partial<SavedStage>, key: string): Stage {
   const base = { ...BLANK_STAGE, ...item } as StagePreset;
   return {
     ...toStage(base, key),
+    // 예전 저장본에는 이 값이 없다. 그때는 단계마다 값을 직접 넣었으므로
+    // 전부 `별도` 로 읽는다. 공통을 따르게 바꾸면 쓰던 설정이 사라진다.
+    ownSettings: item.ownSettings ?? true,
     provider: item.provider ?? 'gemini',
     model: item.model ?? '',
     temperature: item.temperature ?? '',
@@ -264,7 +331,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     anthropic: '',
   });
   const [commonPrompt, setCommonPrompt] = useState(COMMON_RULES);
-  const [panel, setPanel] = useState<'none' | 'common' | 'price' | 'keys'>('none');
+  const [common, setCommon] = useState<CommonSettings>(DEFAULT_COMMON);
+  const [vars, setVars] = useState<Variable[]>([]);
+  const [panel, setPanel] = useState<
+    'none' | 'prompt' | 'price' | 'settings' | 'vars'
+  >('none');
   const [draft, setDraft] = useState('');
   // 프로바이더에서 받아온 실제 모델 목록. 코드의 후보보다 이쪽이 정확하다.
   const [liveModels, setLiveModels] = useState<Partial<Record<ProviderId, string[]>>>({});
@@ -287,6 +358,19 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   /** 방금 옮긴 결과를 알린다. 어느 규칙으로 옮겼는지 보여야 한다 */
   const [sendNote, setSendNote] = useState<string | null>(null);
   /**
+   * 결과를 보낼 때 대화도 같이 옮길지.
+   *
+   * 기본 켜짐이다. 대화를 이어가는 쪽이 흔하다. 다만 매핑이나 검증
+   * 프리셋이 이미 대화를 다루면 그쪽이 이긴다 — 02 → 03 처럼 새 문제로
+   * 시작하느라 **일부러 비우는** 전이가 있기 때문이다.
+   */
+  const [carryConversation, setCarryConversation] = useState(true);
+  /** 방금 어느 단계에서 어디로 옮겼는지. 빈 대화창이 이유를 설명할 때 쓴다 */
+  const [lastTransfer, setLastTransfer] = useState<{
+    from: number;
+    to: number;
+  } | null>(null);
+  /**
    * 상단 설정 패널의 펼침 상태.
    *
    * 단계마다 두지 않는다. 단계를 옮길 때마다 접혔다 펴졌다 하면 오히려
@@ -295,9 +379,17 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [openPanel, setOpenPanel] = useState({
     setting: false,
     prompt: true,
-    rules: false,
-    mapping: false,
   });
+
+  /**
+   * 단계 설정 안의 탭.
+   *
+   * 셋 다 "이 단계의 설정" 이라 패널을 따로 두면 제목줄만 세 줄이 된다.
+   * 그렇다고 이어 붙이면 펼쳤을 때 너무 길다. 탭이 답이다.
+   */
+  const [settingTab, setSettingTab] = useState<'model' | 'rules' | 'mapping'>(
+    'model',
+  );
 
   function togglePanel(name: keyof typeof openPanel) {
     setOpenPanel((prev) => ({ ...prev, [name]: !prev[name] }));
@@ -311,6 +403,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [remember, setRemember] = useState(true);
   const [rememberKeys, setRememberKeys] = useState(false);
   const [restored, setRestored] = useState(false);
+  /**
+   * 마지막 저장이 어떻게 됐는지.
+   *
+   * 지금까지 `catch {}` 로 조용히 삼켰다. localStorage 용량을 넘기면
+   * (이미지 붙인 대화가 쌓이면 가능하다) 저장된 줄 알고 있다가
+   * 새로고침하면 날아간다.
+   */
+  const [saveState, setSaveState] = useState<'idle' | 'saved' | 'failed'>('idle');
 
   // 최초 1회 복원. SSR 결과와 어긋나지 않도록 mount 후에 읽는다.
   //
@@ -336,6 +436,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       const savedConfig = window.localStorage.getItem(CONFIG_STORAGE_KEY);
       if (savedConfig) {
         const parsed = JSON.parse(savedConfig) as {
+          vars?: Variable[];
+          common?: Partial<CommonSettings>;
           commonPrompt?: string;
           stages?: SavedStage[];
           prices?: Record<string, Price>;
@@ -345,6 +447,10 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           setPrices(parsed.prices);
         }
         if (typeof parsed.krwRate === 'string') setKrwRate(parsed.krwRate);
+        if (Array.isArray(parsed.vars)) setVars(parsed.vars);
+        if (parsed.common && typeof parsed.common === 'object') {
+          setCommon({ ...DEFAULT_COMMON, ...parsed.common });
+        }
         if (Array.isArray(parsed.stages) && parsed.stages.length > 0) {
           setStages(
             parsed.stages.map((item, index) =>
@@ -403,6 +509,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   }, [restored, remember, rememberKeys]);
 
   // 설정 저장. 키는 포함하지 않는다.
+  //
+  // 저장 결과를 화면에 알려야 해서 effect 안에서 setState 를 한다. 저장은
+  // localStorage 라는 React 밖의 부수효과이고, 그 성패는 렌더 중에 알 수
+  // 없다. 값이 그대로면 React 가 리렌더를 건너뛰므로 연쇄 렌더도 없다.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!restored) return;
     if (!remember) {
@@ -413,16 +524,21 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       window.localStorage.setItem(
         CONFIG_STORAGE_KEY,
         JSON.stringify({
+          vars,
+          common,
           commonPrompt,
           stages: stages.map(toSaved),
           prices,
           krwRate,
         }),
       );
+      setSaveState('saved');
     } catch {
-      // 용량 초과 등은 조용히 넘긴다. 화면 동작을 막지 않는다.
+      // 화면 동작은 막지 않되, 조용히 넘기지는 않는다.
+      setSaveState('failed');
     }
-  }, [restored, remember, commonPrompt, stages, prices, krwRate]);
+  }, [restored, remember, vars, common, commonPrompt, stages, prices, krwRate]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 키 저장은 따로 켠다. 기본은 꺼짐이다.
   // 기본 키와 단계별 개별 키를 함께 저장한다. 단계마다 다른 프로젝트·
@@ -454,6 +570,32 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
    * 서버가 돌려준 `sentSystem` 과 비교한다. 화면이 기억하는 값이 아니라
    * 서버에 실제로 도착했던 값이라, "고쳤는데 반영이 됐나" 를 여기서 끝낸다.
    */
+  /**
+   * 응답 필드가 아무 일도 하지 않는 상태.
+   *
+   * 출력이 평문이면 `pickReply` 가 응답 필드를 보지 않고 원문을 그대로
+   * 말풍선에 넣는다. 그런데 칸이 열려 있어서 값을 넣게 만들고, 넣어 놓고도
+   * 왜 안 먹는지 알 수가 없었다.
+   */
+  const replyKeyOff = active?.outputMode === 'text';
+
+  /** 이 단계가 쓰는데 정의되지 않은 변수. 조용히 빈칸으로 바꾸지 않는다 */
+  const missingVars = active
+    ? undefinedRefs(
+        [
+          active.prompt,
+          ...(active.useCommonPrompt ? [commonPrompt] : []),
+          ...(thread ? [thread.input] : []),
+        ],
+        vars,
+      )
+    : [];
+
+  /** 지금 단계가 실제로 쓸 모델 설정. 공통을 따를 수도, 직접 정했을 수도 */
+  const eff = active ? effective(active, common) : common;
+  /** 공통을 따르는 단계 수. 공통 설정 패널에서 보여준다 */
+  const followers = stages.filter((stage) => !stage.ownSettings).length;
+
   const promptChanged =
     active !== undefined &&
     thread?.result != null &&
@@ -490,43 +632,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   function patchActive(next: Partial<Thread>) {
     if (!active) return;
     patchThread(activeIndex, active.activeThread, next);
-  }
-
-  /**
-   * 지금 단계의 모델 설정을 나머지 단계에 그대로 복사한다.
-   *
-   * 단계마다 프로바이더·모델을 따로 두는 게 이 도구의 핵심이지만, 전체를
-   * 한 모델로 돌려 보는 일이 그만큼 잦다. 7단계를 손으로 일곱 번 고치게
-   * 두지 않는다.
-   *
-   * **프롬프트·검증 규칙·매핑은 건드리지 않는다.** 그건 단계마다 다르다.
-   */
-  function applyModelToAllStages() {
-    if (!active || stages.length < 2) return;
-    const label = active.model.trim() || DEFAULT_MODEL[active.provider];
-    const ok = window.confirm(
-      `${stages.length - 1}개 단계의 모델 설정을 이 단계와 같게 바꿉니다.\n\n` +
-        `프로바이더 ${active.provider}\n모델 ${label}\n` +
-        `생성 파라미터와 API 키도 함께 복사합니다.\n\n` +
-        '프롬프트와 검증 규칙은 그대로 둡니다.',
-    );
-    if (!ok) return;
-
-    setStages((prev) =>
-      prev.map((stage, i) =>
-        i === activeIndex
-          ? stage
-          : {
-              ...stage,
-              provider: active.provider,
-              model: active.model,
-              apiKey: active.apiKey,
-              temperature: active.temperature,
-              maxTokens: active.maxTokens,
-              topP: active.topP,
-            },
-      ),
-    );
   }
 
   // ── 검증 규칙 · 단계 연결 ──────────────────────────────────────────────
@@ -604,7 +709,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
    * 빈 문자열이면 null(=보내지 않음). 숫자가 아니면 실행을 막는다.
    * 사용자가 넣은 값을 조용히 무시하지 않기 위해서다.
    */
-  function readParams(stage: Stage): {
+  function readParams(stage: CommonSettings): {
     temperature: number | null;
     maxTokens: number | null;
     topP: number | null;
@@ -633,29 +738,35 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   /** 한 번 호출한다. onDone 으로 후처리를 넘긴다. */
   function execute(input: string, onDone?: (result: RunResult) => void) {
     if (!active || !thread || thread.running) return;
-    const params = readParams(active);
+    const settings = effective(active, common);
+    const params = readParams(settings);
     if (params === null) return;
     const index = activeIndex;
     const threadIndex = active.activeThread;
     patchThread(index, threadIndex, { running: true, result: null });
     setSendNote(null);
 
-    const system = buildSystem(active, commonPrompt);
+    // 변수는 **보낼 때만** 치환한다. 화면의 프롬프트와 입력에는
+    // {{이름}} 이 그대로 남아 재사용된다. 서버가 받은 값은
+    // [보낸 프롬프트] 에 나오므로 치환 결과를 눈으로 확인할 수 있다.
+    const system = applyVars(buildSystem(active, commonPrompt), vars);
 
-    const model = active.model.trim() || DEFAULT_MODEL[active.provider];
+    const model = settings.model.trim() || DEFAULT_MODEL[settings.provider];
 
     startTransition(async () => {
       const result = await runStage({
-        provider: active.provider,
+        provider: settings.provider,
         model,
         system,
-        input,
+        // JSON 파싱 전에 치환한다. 그래서 "grade": {{grade}} 는 숫자로,
+        // "name": "{{nickname}}" 은 문자로 들어간다.
+        input: applyVars(input, vars),
         inputMode: active.inputMode,
         outputMode: active.outputMode,
         checkRule: active.checkRule,
         rules: active.rules,
         forceJsonMimeType: active.forceJsonMimeType,
-        apiKey: active.apiKey.trim() || defaultKeys[active.provider].trim(),
+        apiKey: active.apiKey.trim() || defaultKeys[settings.provider].trim(),
         params,
         images: thread.images,
       });
@@ -686,7 +797,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   /** 지금 단계의 프로바이더에 실제 모델 목록을 물어본다. */
   async function loadModels() {
     if (!active || loadingModels) return;
-    const provider = active.provider;
+    const provider = effective(active, common).provider;
     const key = active.apiKey.trim() || defaultKeys[provider].trim();
 
     setLoadingModels(true);
@@ -807,12 +918,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
     execute(withUser, (result) => {
       if (!result.ok) return;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(result.raw);
-      } catch {
-        parsed = result.raw;
-      }
+      // 울타리를 벗기고 읽는다. 이게 없으면 stage_status 같은 상태가
+      // 조용히 안 옮겨진다.
+      const parsed = parseOutput(result.raw) ?? result.raw;
 
       const pick = pickReply(result.raw, outputMode, replyKey);
       setReplyNote(pick.show ? null : pick.reason);
@@ -849,12 +957,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     const targetThread = target.activeThread;
 
     const targetInput = target.threads[targetThread]?.input ?? '{}';
-    let output: unknown = null;
-    try {
-      output = JSON.parse(raw);
-    } catch {
-      // 평문 출력이면 매핑할 게 없다. 아래에서 원문을 그대로 넣는다.
-    }
+    // 평문 출력이거나 JSON 이 깨졌으면 null 이 된다. 아래에서 원문을
+    // 그대로 넣는다.
+    const output: unknown = parseOutput(raw);
 
     // 우선순위: 사용자가 적은 매핑 → AIPM 규칙 → 출력 원문.
     // 손으로 적은 것이 항상 이긴다. 도구가 몰래 다르게 옮기면 안 된다.
@@ -877,9 +982,122 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       );
     }
 
+    // 규칙이 대화를 다루지 않을 때만 체크박스가 일한다.
+    if (!conversationHandled && carryConversation) {
+      // patchThread 두 번이 같은 setState 큐에 쌓이므로, 위에서 넣은
+      // 입력 위에 이어서 덮인다.
+      window.setTimeout(() => copyConversation(activeIndex, nextIndex), 0);
+    }
+
+    setLastTransfer({ from: activeIndex, to: nextIndex });
     setActiveIndex(nextIndex);
     setSendTarget(null);
   }
+
+  /**
+   * 한 단계의 대화를 다른 단계의 입력에 옮긴다.
+   *
+   * 받는 쪽의 `대화 배열 키` 이름에 맞춰 넣는다. 이름이 서로 달라도 된다.
+   */
+  function copyConversation(fromIndex: number, toIndex: number): boolean {
+    const from = stages[fromIndex];
+    const to = stages[toIndex];
+    if (!from || !to) return false;
+
+    const source = from.threads[from.activeThread]?.input ?? '';
+    const turns = readTurns(source, from.historyKey);
+    if (turns.length === 0) return false;
+
+    const targetThread = to.activeThread;
+    const targetInput = to.threads[targetThread]?.input ?? '{}';
+    const result = applyMapping(
+      [{ source: 'input', from: from.historyKey, to: to.historyKey }],
+      null,
+      source,
+      targetInput,
+    );
+    if (result === null || result.applied === 0) return false;
+
+    patchThread(toIndex, targetThread, { input: result.json });
+    return true;
+  }
+
+  /**
+   * 매핑이나 검증 프리셋이 이미 대화를 다루는가.
+   *
+   * 그러면 체크박스를 잠근다. 규칙이 비우기로 정했는데 체크박스가 다시
+   * 채워 넣으면 어느 쪽이 이기는지 알 수 없게 된다.
+   */
+  const conversationHandled =
+    active !== undefined &&
+    (hasMapping(active.mapping) || active.checkRule !== null);
+
+  /**
+   * 대화가 비었을 때 보여줄 이유.
+   *
+   * 정상적으로 비는 경우도 있다. 그때 "잘못됐나" 하고 헤매지 않게 한다.
+   */
+  const emptyReason = (():
+    | { text: string; action?: { label: string; run: () => void } }
+    | undefined => {
+    if (!active || !thread) return undefined;
+    if (readTurns(thread.input, active.historyKey).length > 0) return undefined;
+    if (active.inputMode !== 'json') {
+      return {
+        text:
+          '이 단계는 입력이 평문이라 대화가 입력 JSON 에 쌓이지 않습니다.\n' +
+          '주고받은 내용은 화면에만 남습니다.',
+      };
+    }
+
+    const parsed = ((): Record<string, unknown> | null => {
+      try {
+        const value: unknown = JSON.parse(thread.input);
+        return typeof value === 'object' && value !== null && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    // 배열은 있는데 이름이 다른 경우. 가장 잦은 실수다.
+    const arrays = parsed
+      ? Object.keys(parsed).filter((key) => Array.isArray(parsed[key]))
+      : [];
+    const other = arrays.filter((key) => key !== active.historyKey);
+    if (other.length > 0) {
+      return {
+        text:
+          `입력에 ${other.map((key) => `${key}`).join(' · ')} 배열이 있는데 ` +
+          `대화 배열 키는 ${active.historyKey} 입니다.\n` +
+          '이름을 맞추면 대화가 보입니다.',
+      };
+    }
+
+    // 방금 이 단계로 넘어왔는데 대화가 안 왔다.
+    if (lastTransfer?.to === activeIndex) {
+      const from = stages[lastTransfer.from];
+      const fromName = from?.name || '이전 단계';
+      if (from && from.checkRule === 'aipm-problem') {
+        return {
+          text: `${fromName} 는 새 문제로 시작하는 단계라 대화를 비웠습니다.\n정상입니다.`,
+        };
+      }
+      return {
+        text: `${fromName} 에서 넘어왔지만 대화는 오지 않았습니다.`,
+        action: {
+          label: `${fromName} 의 대화 가져오기`,
+          run: () => {
+            const ok = copyConversation(lastTransfer.from, activeIndex);
+            if (!ok) window.alert('가져올 대화가 없습니다.');
+          },
+        },
+      };
+    }
+
+    return undefined;
+  })();
 
   /** 기본 대상. 다음 단계가 있으면 그쪽, 마지막이면 처음으로 돌아간다. */
   const defaultTarget = activeIndex + 1 < stages.length ? activeIndex + 1 : 0;
@@ -936,12 +1154,12 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
   const accent = stageColor(activeIndex).border;
   const activeModel = active
-    ? active.model.trim() || DEFAULT_MODEL[active.provider]
+    ? eff.model.trim() || DEFAULT_MODEL[eff.provider]
     : '';
   const activePrice = findPrice(prices, activeModel)?.price ?? null;
-  const activeProvider = active?.provider ?? 'gemini';
+  const activeProvider = eff.provider;
   const providerLabel =
-    PROVIDERS.find((entry) => entry.id === activeProvider)?.label ?? activeProvider;
+    PROVIDERS.find((entry) => entry.id === eff.provider)?.label ?? eff.provider;
 
   const keySource = active?.apiKey.trim()
     ? '이 단계 키'
@@ -990,7 +1208,18 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             </button>
           )}
 
-          <Toggle checked={remember} onChange={setRemember} label="설정 저장" />
+          <Toggle
+            checked={remember}
+            onChange={setRemember}
+            label={
+              !remember
+                ? '설정 저장'
+                : saveState === 'failed'
+                  ? '설정 저장 · 저장 실패'
+                  : '설정 저장 · 저장됨'
+            }
+            tone={remember && saveState === 'failed' ? 'danger' : undefined}
+          />
           <Toggle checked={rememberKeys} onChange={setRememberKeys} label="키 저장" />
         </div>
       </header>
@@ -998,9 +1227,10 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       <nav className="flex flex-wrap items-center gap-3 text-neutral-500">
         {(
           [
-            ['keys', 'API 키'],
+            ['settings', '공통 설정'],
+            ['vars', '변수'],
             ['price', '가격표'],
-            ['common', '공통 프롬프트'],
+            ['prompt', '공통 프롬프트'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -1025,44 +1255,198 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         </button>
       </nav>
 
-      {panel === 'keys' && (
+      {panel === 'settings' && (
         <Panel
-          title="API 키"
-          hint="이 브라우저에만 저장됩니다. 서버로 올라가지 않습니다"
+          title="공통 설정"
+          hint={`모든 단계의 기본값 · 지금 ${followers} / ${stages.length} 단계가 따릅니다`}
         >
-          <div className="flex flex-col gap-2 p-3">
-            {PROVIDERS.map((entry) => (
-              <label key={entry.id} className="flex items-center gap-2">
-                <span className="w-20 shrink-0 text-neutral-500">{entry.label}</span>
-                <input
-                  type="password"
-                  value={defaultKeys[entry.id]}
+          <div className="flex flex-col gap-3 p-3">
+            {/* 여기 한 번 넣으면 단계를 새로 추가해도 따라온다. 단계마다
+                일일이 고치지 않아도 되는 게 이 패널의 존재 이유다. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <label className="flex items-center gap-2">
+                <span className="shrink-0 text-neutral-500">프로바이더</span>
+                <select
+                  value={common.provider}
                   onChange={(event) =>
-                    setDefaultKeys((prev) => ({
+                    setCommon((prev) => ({
                       ...prev,
-                      [entry.id]: event.target.value,
+                      provider: event.target.value as ProviderId,
                     }))
                   }
-                  placeholder={
-                    entry.id === 'gemini' && hasEnvApiKey
-                      ? '.env 값을 씁니다'
-                      : '키를 넣으세요'
+                  className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                >
+                  {PROVIDERS.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex min-w-[15rem] flex-1 items-center gap-2">
+                <span className="shrink-0 text-neutral-500">모델</span>
+                <input
+                  value={common.model}
+                  onChange={(event) =>
+                    setCommon((prev) => ({ ...prev, model: event.target.value }))
                   }
-                  className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  placeholder={`직접 입력. 비우면 ${DEFAULT_MODEL[common.provider]}`}
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                 />
               </label>
+
+              <ParamField
+                label="temperature"
+                value={common.temperature}
+                onChange={(next) =>
+                  setCommon((prev) => ({ ...prev, temperature: next }))
+                }
+              />
+              <ParamField
+                label="max output"
+                value={common.maxTokens}
+                onChange={(next) => setCommon((prev) => ({ ...prev, maxTokens: next }))}
+                placeholder={common.provider === 'anthropic' ? '비우면 16000' : '미전송'}
+              />
+              <ParamField
+                label="top_p"
+                value={common.topP}
+                onChange={(next) => setCommon((prev) => ({ ...prev, topP: next }))}
+              />
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+              <span className="text-neutral-500">프로바이더별 기본 키</span>
+              {PROVIDERS.map((entry) => (
+                <label key={entry.id} className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-neutral-500">{entry.label}</span>
+                  <input
+                    type="password"
+                    value={defaultKeys[entry.id]}
+                    onChange={(event) =>
+                      setDefaultKeys((prev) => ({
+                        ...prev,
+                        [entry.id]: event.target.value,
+                      }))
+                    }
+                    placeholder={
+                      entry.id === 'gemini' && hasEnvApiKey
+                        ? '.env 값을 씁니다'
+                        : '키를 넣으세요'
+                    }
+                    className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-1 border-t border-neutral-200 pt-3 text-[11px] text-neutral-500 dark:border-neutral-800">
+              <p>
+                단계에서 <b>[이 단계는 따로 설정]</b>을 켜지 않으면 여기 값을
+                그대로 씁니다. 새로 만든 단계도 마찬가지입니다.
+              </p>
+              <p>
+                <b>키</b>는 이 브라우저에만 저장되고 서버로 올라가지 않습니다.
+                우선순위는 <b>이 단계 키 → 기본 키</b> 순입니다. 특정 단계만 다른
+                계정으로 돌리려면 그 단계의 API 키에 따로 넣으세요.
+              </p>
+            </div>
+          </div>
+        </Panel>
+      )}
+
+      {panel === 'vars' && (
+        <Panel
+          title="변수"
+          hint="프롬프트와 입력에서 {{이름}} 으로 씁니다"
+        >
+          <div className="flex flex-col gap-2 p-3">
+            {vars.length > 0 && (
+              <div className="hidden gap-1 text-[11px] text-neutral-500 md:flex">
+                <span className="w-40">이름</span>
+                <span className="w-56">값</span>
+                <span>쓰인 곳</span>
+              </div>
+            )}
+            {vars.map((item, index) => (
+              <div key={index} className="flex flex-wrap items-center gap-1">
+                <input
+                  value={item.name}
+                  onChange={(event) =>
+                    setVars((prev) =>
+                      prev.map((row, i) =>
+                        i === index ? { ...row, name: event.target.value } : row,
+                      ),
+                    )
+                  }
+                  placeholder="grade"
+                  spellCheck={false}
+                  className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                />
+                <input
+                  value={item.value}
+                  onChange={(event) =>
+                    setVars((prev) =>
+                      prev.map((row, i) =>
+                        i === index ? { ...row, value: event.target.value } : row,
+                      ),
+                    )
+                  }
+                  placeholder="4"
+                  className="w-56 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                />
+                <span className="px-2 text-[11px] text-neutral-500">
+                  {usageOf(item.name, [
+                    {
+                      label: '프롬프트',
+                      texts: [commonPrompt, ...stages.map((stage) => stage.prompt)],
+                    },
+                    {
+                      label: '입력',
+                      texts: stages.flatMap((stage) =>
+                        stage.threads.map((t) => t.input),
+                      ),
+                    },
+                  ])}
+                </span>
+                <button
+                  onClick={() =>
+                    setVars((prev) => prev.filter((_, i) => i !== index))
+                  }
+                  className="px-2 text-neutral-400 hover:text-red-600"
+                  title="이 줄 삭제"
+                >
+                  ×
+                </button>
+              </div>
             ))}
+            <div>
+              <button
+                onClick={() => setVars((prev) => [...prev, BLANK_VARIABLE])}
+                className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
+              >
+                + 변수
+              </button>
+            </div>
             <p className="text-[11px] text-neutral-500">
-              여기 넣은 값이 <b>기본 키</b>입니다. 특정 단계만 다른 계정으로
-              돌리려면 그 단계의 <b>API 키</b>에 따로 넣으세요. 우선순위는
-              이 단계 키 → 기본 키 순입니다. <b>키 저장</b>을 켜면 이 값과
-              단계별 키가 이 브라우저에 남고, 끄면 즉시 지워집니다.
+              보낼 때만 치환합니다. 프롬프트와 입력에는 <code>{'{{이름}}'}</code>이
+              그대로 남습니다. 치환된 결과는 답변 아래{' '}
+              <b>[보낸 프롬프트]</b>에서 확인하세요.
+            </p>
+            <p className="text-[11px] text-neutral-500">
+              따옴표는 직접 관리합니다. 파싱 전에 치환하므로{' '}
+              <code>&quot;grade&quot;: {'{{grade}}'}</code>는 숫자로,{' '}
+              <code>&quot;name&quot;: &quot;{'{{nickname}}'}&quot;</code>는 문자로
+              들어갑니다. <b>정의하지 않은 이름은 바꾸지 않고 그대로 둡니다.</b>
             </p>
           </div>
         </Panel>
       )}
 
-      {panel === 'common' && (
+      {panel === 'prompt' && (
         <Panel
           title="공통 프롬프트"
           hint="포함을 켠 단계의 프롬프트 앞에 붙습니다"
@@ -1250,21 +1634,94 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               accent={accent}
               open={openPanel.setting}
               onToggle={() => togglePanel('setting')}
-              hint={`${active.provider} · ${active.model.trim() || DEFAULT_MODEL[active.provider]}`}
+              hint={`${eff.provider} · ${eff.model.trim() || DEFAULT_MODEL[eff.provider]} · ${
+                active.ownSettings ? '별도' : '공통'
+              }`}
             >
+              {/* 탭에 개수를 붙인다. 접힌 제목줄만 보고도 상태를 알 수
+                  있던 정보를 합치면서 잃으면 안 된다. */}
+              <div className="flex flex-wrap items-center gap-1 border-b border-neutral-200 px-3 pt-2 dark:border-neutral-800">
+                {(
+                  [
+                    ['model', '모델 · 형식', ''],
+                    [
+                      'rules',
+                      '검증 규칙',
+                      active.rules.fields.length > 0 || active.rules.banned.trim() !== ''
+                        ? String(active.rules.fields.length)
+                        : '',
+                    ],
+                    [
+                      'mapping',
+                      '다음 단계',
+                      active.mapping.length > 0 ? String(active.mapping.length) : '',
+                    ],
+                  ] as const
+                ).map(([id, label, count]) => (
+                  <button
+                    key={id}
+                    onClick={() => setSettingTab(id)}
+                    className={`flex items-center gap-1.5 rounded-t border border-b-0 px-3 py-1.5 ${
+                      settingTab === id
+                        ? 'border-neutral-300 bg-white font-bold dark:border-neutral-700 dark:bg-neutral-900'
+                        : 'border-transparent text-neutral-500'
+                    }`}
+                  >
+                    {label}
+                    {count !== '' && (
+                      <span className="rounded bg-neutral-200 px-1 text-[10px] text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
               {/* 한 줄에 들어갈 것은 한 줄에 둔다. 항목마다 줄을 나누면
                   설정만으로 화면이 다 찬다. 성격이 같은 것끼리 묶었다. */}
-              <div className="flex flex-col gap-2 p-3">
-                {/* 어디로 · 무엇으로 · 누구 키로 보낼지 */}
+              <div hidden={settingTab !== 'model'} className="flex flex-col gap-2 p-3">
+                {/* 상속을 숨기지 않는다. 공통을 따르는지 직접 정했는지가
+                    스위치 하나로 보이고, 꺼져 있어도 실제 값은 회색으로
+                    그대로 보여준다. 빈칸이면 뭘 쓰는지 다시 모르게 된다. */}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <Toggle
+                    checked={active.ownSettings}
+                    onChange={(next) => {
+                      // 공통 → 별도로 켤 때 지금 쓰던 값을 그대로 물려준다.
+                      // 켜자마자 값이 바뀌면 놀란다.
+                      patch(
+                        activeIndex,
+                        next ? { ownSettings: true, ...eff } : { ownSettings: false },
+                      );
+                    }}
+                    label="이 단계는 따로 설정"
+                  />
+                  {active.ownSettings ? (
+                    <button
+                      type="button"
+                      onClick={() => patch(activeIndex, { ownSettings: false })}
+                      className="text-[11px] text-neutral-500 hover:underline"
+                    >
+                      공통값으로 되돌리기
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-neutral-500">
+                      공통 설정을 따릅니다
+                    </span>
+                  )}
+                </div>
+
+                {/* 어디로 · 무엇으로 · 누구 키로 보낼지 */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                   <label className="flex items-center gap-2">
                     <span className="shrink-0 text-neutral-500">프로바이더</span>
                     <select
-                      value={active.provider}
+                      value={eff.provider}
                       onChange={(event) =>
                         patch(activeIndex, { provider: event.target.value as ProviderId })
                       }
-                      className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                      disabled={!active.ownSettings}
+                      className="rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:text-neutral-400 dark:border-neutral-700"
                     >
                       {PROVIDERS.map((entry) => (
                         <option key={entry.id} value={entry.id}>
@@ -1277,12 +1734,13 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   <label className="flex min-w-[15rem] flex-1 items-center gap-2">
                     <span className="shrink-0 text-neutral-500">모델</span>
                     <input
-                      value={active.model}
+                      value={eff.model}
                       onChange={(event) => patch(activeIndex, { model: event.target.value })}
-                      placeholder={`직접 입력. 비우면 ${DEFAULT_MODEL[active.provider]}`}
+                      placeholder={`직접 입력. 비우면 ${DEFAULT_MODEL[eff.provider]}`}
                       spellCheck={false}
                       autoComplete="off"
-                      className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                      disabled={!active.ownSettings}
+                      className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:text-neutral-400 dark:border-neutral-700"
                     />
                   </label>
 
@@ -1293,6 +1751,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       value={active.apiKey}
                       onChange={(event) => patch(activeIndex, { apiKey: event.target.value })}
                       placeholder={`비우면 기본 ${providerLabel} 키`}
+                      // 키는 공통 설정과 무관하다. 단계마다 다른 계정으로
+                      // 돌리는 일이 있어서 항상 열어 둔다.
                       className="w-44 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                     />
                     <span className="shrink-0 text-[11px] text-neutral-500">
@@ -1300,23 +1760,15 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                     </span>
                   </label>
 
-                  {/* 전체를 한 모델로 돌려 보는 일이 잦다. 일곱 번 고치게
-                      두지 않는다. 프롬프트는 복사하지 않는다. */}
-                  {stages.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={applyModelToAllStages}
-                      className="shrink-0 rounded border border-neutral-400 px-2 py-1 text-[11px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300"
-                    >
-                      이 설정을 모든 단계에
-                    </button>
-                  )}
                 </div>
 
                 {/* 목록이 아니라 입력이 원칙이다. 아래는 자주 쓰는 이름을
                     한 번에 채워 넣는 단축키일 뿐이고, 여기 없는 이름도
                     그대로 입력해서 쓸 수 있다. */}
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div
+                  className="flex flex-wrap items-center gap-1.5"
+                  hidden={!active.ownSettings}
+                >
                   <button
                     type="button"
                     onClick={() => void loadModels()}
@@ -1325,18 +1777,18 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   >
                     {loadingModels ? '불러오는 중…' : '목록 불러오기'}
                   </button>
-                  {liveModels[active.provider] === undefined && (
+                  {liveModels[eff.provider] === undefined && (
                     <span className="text-[11px] text-neutral-500">
                       아래는 코드에 적힌 값이라 낡았을 수 있습니다
                     </span>
                   )}
-                  {(liveModels[active.provider] ?? MODEL_CANDIDATES[active.provider]).map((candidate) => (
+                  {(liveModels[eff.provider] ?? MODEL_CANDIDATES[eff.provider]).map((candidate) => (
                     <button
                       key={candidate}
                       type="button"
                       onClick={() => patch(activeIndex, { model: candidate })}
                       className={`rounded border px-1.5 py-0.5 text-[11px] ${
-                        active.model === candidate
+                        eff.model === candidate
                           ? 'border-neutral-900 dark:border-neutral-100'
                           : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'
                       }`}
@@ -1344,7 +1796,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       {candidate}
                     </button>
                   ))}
-                  {active.model !== '' && (
+                  {eff.model !== '' && (
                     <button
                       type="button"
                       onClick={() => patch(activeIndex, { model: '' })}
@@ -1392,19 +1844,22 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                   <ParamField
                     label="temperature"
-                    value={active.temperature}
+                    value={eff.temperature}
                     onChange={(next) => patch(activeIndex, { temperature: next })}
+                    disabled={!active.ownSettings}
                   />
                   <ParamField
                     label="max output"
-                    value={active.maxTokens}
+                    value={eff.maxTokens}
                     onChange={(next) => patch(activeIndex, { maxTokens: next })}
-                    placeholder={active.provider === 'anthropic' ? '비우면 16000' : '미전송'}
+                    placeholder={eff.provider === 'anthropic' ? '비우면 16000' : '미전송'}
+                    disabled={!active.ownSettings}
                   />
                   <ParamField
                     label="top_p"
-                    value={active.topP}
+                    value={eff.topP}
                     onChange={(next) => patch(activeIndex, { topP: next })}
+                    disabled={!active.ownSettings}
                   />
 
                   <label className="flex items-center gap-2">
@@ -1482,17 +1937,37 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       />
                     </label>
                   )}
+                  {/* 출력이 평문이면 응답 필드를 아예 보지 않는다. 칸을
+                      열어 두면 값을 넣게 만들고, 왜 안 먹는지 알 방법이
+                      없다. 대화 배열 키를 숨기는 것과 같은 규칙이다. */}
                   <label className="flex items-center gap-2">
-                    <span className="shrink-0 text-neutral-500">응답 필드</span>
+                    <span
+                      className={`shrink-0 ${
+                        replyKeyOff ? 'text-neutral-400' : 'text-neutral-500'
+                      }`}
+                    >
+                      응답 필드
+                    </span>
                     <input
                       value={active.replyKey}
                       onChange={(event) =>
                         patch(activeIndex, { replyKey: event.target.value })
                       }
-                      placeholder="비우면 표시 안 함"
-                      className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                      disabled={replyKeyOff}
+                      placeholder={replyKeyOff ? '해당 없음' : '비우면 표시 안 함'}
+                      title={
+                        replyKeyOff
+                          ? '출력이 텍스트라 원문을 그대로 보여줍니다'
+                          : undefined
+                      }
+                      className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-700 dark:disabled:bg-neutral-800"
                     />
                   </label>
+                  {replyKeyOff && (
+                    <span className="text-[11px] text-neutral-500">
+                      출력이 텍스트라 원문을 그대로 보여줍니다
+                    </span>
+                  )}
                 </div>
 
                 {/* 안내는 한 덩어리로 모은다. 컨트롤 사이사이에 끼우면
@@ -1501,7 +1976,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   <p>
                     <b>temperature · max output · top_p</b>는 비우면 아예 보내지
                     않습니다.
-                    {active.provider === 'anthropic' && (
+                    {eff.provider === 'anthropic' && (
                       <>
                         {' '}
                         Claude는 max output이 필수라 비우면 16000을 씁니다. 현재
@@ -1509,7 +1984,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                         temperature·top_p를 받으면 400입니다.
                       </>
                     )}
-                    {active.provider === 'openai' && (
+                    {eff.provider === 'openai' && (
                       <>
                         {' '}
                         추론 계열 모델은 temperature를 거부합니다. max output은{' '}
@@ -1524,53 +1999,16 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   </p>
                   <p>
                     <b>응답 필드</b>는 출력 중 말풍선에 보여줄 부분입니다.
-                    {active.replyKey.trim() === ''
-                      ? ' 지금은 비어 있어 아무것도 표시하지 않습니다. 데이터만 만드는 단계에 맞습니다.'
-                      : ' 보여줄 문장이 없는 단계(평가·기억 저장 등)는 비워 두세요.'}
+                    {replyKeyOff
+                      ? ' 출력이 JSON일 때만 씁니다. 지금은 출력이 텍스트라 원문이 그대로 나갑니다.'
+                      : active.replyKey.trim() === ''
+                        ? ' 지금은 비어 있어 아무것도 표시하지 않습니다. 데이터만 만드는 단계에 맞습니다.'
+                        : ' 보여줄 문장이 없는 단계(평가·기억 저장 등)는 비워 두세요.'}
                   </p>
                 </div>
               </div>
-            </Panel>
 
-            <Panel
-              title="프롬프트"
-              accent={accent}
-              open={openPanel.prompt}
-              onToggle={() => togglePanel('prompt')}
-              // 고쳐 놓고 안 보낸 상태를 여기서 먼저 알린다. 답변 아래까지
-              // 내려가야 알 수 있으면 늦다.
-              warn={promptChanged}
-              hint={
-                promptChanged
-                  ? '고친 뒤 아직 보내지 않았습니다'
-                  : `${active.prompt.length}자${active.useCommonPrompt ? ' · 공통 포함' : ''}`
-              }
-              onCopy={() => navigator.clipboard.writeText(active.prompt)}
-            >
-              <textarea
-                value={active.prompt}
-                onChange={(event) => patch(activeIndex, { prompt: event.target.value })}
-                spellCheck={false}
-                placeholder="이 단계의 system 프롬프트"
-                className="h-64 w-full resize-y bg-transparent p-3 outline-none"
-              />
-            </Panel>
-
-            {/* 여기부터가 이 도구를 다른 프로젝트에서도 쓰게 하는 부분이다.
-                위의 `검증` 목록은 이 프로젝트 전용이라 남에게는 소용이
-                없다. 아래 둘은 직접 적는다. */}
-            <Panel
-              title="검증 규칙"
-              accent={accent}
-              open={openPanel.rules}
-              onToggle={() => togglePanel('rules')}
-              hint={
-                active.rules.fields.length === 0 && active.rules.banned.trim() === ''
-                  ? '결과가 규격에 맞는지 자동으로 본다'
-                  : `${active.rules.fields.length}줄${active.rules.banned.trim() === '' ? '' : ' · 금지어 있음'}`
-              }
-            >
-              <div className="flex flex-col gap-2 p-3">
+              <div hidden={settingTab !== 'rules'} className="flex flex-col gap-2 p-3">
                 <p className="text-[11px] text-neutral-500">
                   실행할 때마다 아래 규칙을 봅니다. 필드가 빠졌는지, 값이
                   범위를 벗어났는지, 정해진 값 말고 다른 걸 냈는지 잡습니다.
@@ -1691,20 +2129,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   개수입니다. <b>null</b> 을 켜면 값이 비어 있어도 통과합니다.
                 </p>
               </div>
-            </Panel>
 
-            <Panel
-              title="다음 단계로 보낼 값"
-              accent={accent}
-              open={openPanel.mapping}
-              onToggle={() => togglePanel('mapping')}
-              hint={
-                active.mapping.length === 0
-                  ? '[입력으로] 를 눌렀을 때 무엇을 옮길지'
-                  : `${active.mapping.length}줄`
-              }
-            >
-              <div className="flex flex-col gap-2 p-3">
+              <div hidden={settingTab !== 'mapping'} className="flex flex-col gap-2 p-3">
                 <p className="text-[11px] text-neutral-500">
                   적어 두면 다음 단계 입력에서 <b>여기 적은 칸만</b> 덮어씁니다.
                   나머지는 건드리지 않습니다. 한 줄도 없으면 결과 원문을 그대로
@@ -1773,6 +2199,35 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 </p>
               </div>
             </Panel>
+
+            <Panel
+              title="프롬프트"
+              accent={accent}
+              open={openPanel.prompt}
+              onToggle={() => togglePanel('prompt')}
+              // 고쳐 놓고 안 보낸 상태를 여기서 먼저 알린다. 답변 아래까지
+              // 내려가야 알 수 있으면 늦다.
+              warn={promptChanged || missingVars.length > 0}
+              hint={
+                missingVars.length > 0
+                  ? `정의 안 된 변수 ${missingVars.length}개: ${missingVars
+                      .map((name) => `{{${name}}}`)
+                      .join(' ')}`
+                  : promptChanged
+                    ? '고친 뒤 아직 보내지 않았습니다'
+                    : `${active.prompt.length}자${active.useCommonPrompt ? ' · 공통 포함' : ''}`
+              }
+              onCopy={() => navigator.clipboard.writeText(active.prompt)}
+            >
+              <textarea
+                value={active.prompt}
+                onChange={(event) => patch(activeIndex, { prompt: event.target.value })}
+                spellCheck={false}
+                placeholder="이 단계의 system 프롬프트"
+                className="h-64 w-full resize-y bg-transparent p-3 outline-none"
+              />
+            </Panel>
+
           </section>
 
           {/* 실제로 손이 가는 곳. 왼쪽에서 대화하고 오른쪽에서 결과를 본다 */}
@@ -1851,6 +2306,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                     : '보낸 글이 곧 입력이 됩니다. 기록은 화면에만 남습니다'
                 }
                 note={replyNote}
+                emptyReason={emptyReason}
                 onClear={() =>
                   patchActive({
                     transcript: [],
@@ -1910,6 +2366,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                         ),
                       )}
                     </select>
+                    <span className="border-l border-neutral-300 px-2 dark:border-neutral-700">
+                      <Toggle
+                        checked={conversationHandled ? true : carryConversation}
+                        onChange={setCarryConversation}
+                        label={conversationHandled ? '규칙이 정합니다' : '대화도 함께'}
+                        disabled={conversationHandled}
+                      />
+                    </span>
                     <button
                       onClick={() => sendTo(sendTarget ?? defaultTarget)}
                       className="px-2 py-1"
@@ -1960,6 +2424,7 @@ function ChatPanel({
   hint,
   note,
   onClear,
+  emptyReason,
 }: {
   accent: string;
   turns: { who: 'user' | 'ai' | 'other'; text: string; attachments: string[] }[];
@@ -1974,6 +2439,8 @@ function ChatPanel({
   hint: string;
   note: string | null;
   onClear: () => void;
+  /** 대화가 비었을 때 왜 비었는지. 없으면 기본 문구를 쓴다 */
+  emptyReason?: { text: string; action?: { label: string; run: () => void } };
 }) {
   const failed = lastChecks?.filter((check) => check.level === 'fail') ?? [];
 
@@ -1997,10 +2464,24 @@ function ChatPanel({
       </div>
 
       <div className="flex max-h-[320px] flex-col gap-2 overflow-auto p-3">
+        {/* 비었을 때 왜 비었는지 말해 준다. 넘어왔는데 백지면 매핑을
+            안 적어서인지, 이름이 안 맞아서인지, 원래 비는 게 맞는지
+            알 수가 없었다. */}
         {turns.length === 0 && (
-          <p className="text-neutral-500">
-            아직 대화가 없습니다. 아래에 학생 답변을 입력해 보세요.
-          </p>
+          <div className="flex flex-col items-start gap-2">
+            <p className="whitespace-pre-wrap text-neutral-500">
+              {emptyReason?.text ??
+                '아직 대화가 없습니다. 아래에 학생 답변을 입력해 보세요.'}
+            </p>
+            {emptyReason?.action && (
+              <button
+                onClick={emptyReason.action.run}
+                className="rounded border border-neutral-400 px-2 py-1 text-neutral-600 dark:border-neutral-600 dark:text-neutral-300"
+              >
+                {emptyReason.action.label}
+              </button>
+            )}
+          </div>
         )}
 
         {turns.map((turn, index) => (
@@ -2398,21 +2879,27 @@ function ParamField({
   value,
   onChange,
   placeholder = '미전송',
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (next: string) => void;
   placeholder?: string;
+  /** 공통 설정을 따르는 단계에서는 잠근다. 값은 그대로 보여준다 */
+  disabled?: boolean;
 }) {
   return (
     <label className="flex items-center gap-1.5">
-      <span className="text-neutral-500">{label}</span>
+      <span className={disabled ? 'text-neutral-400' : 'text-neutral-500'}>
+        {label}
+      </span>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         inputMode="decimal"
-        className="w-24 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+        disabled={disabled}
+        className="w-24 rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:text-neutral-400 dark:border-neutral-700"
       />
     </label>
   );
@@ -2422,16 +2909,27 @@ function Toggle({
   checked,
   onChange,
   label,
+  disabled,
+  tone,
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   label: string;
+  /** 규칙이 이미 정한 값일 때 잠근다. 어느 쪽이 이기는지 헷갈리지 않게 */
+  disabled?: boolean;
+  /** 눈에 띄어야 할 때만 쓴다 */
+  tone?: 'danger';
 }) {
   return (
-    <label className="flex items-center gap-1.5">
+    <label
+      className={`flex items-center gap-1.5 ${
+        disabled ? 'text-neutral-400' : ''
+      } ${tone === 'danger' ? 'font-bold text-red-600 dark:text-red-400' : ''}`}
+    >
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
       />
       <span>{label}</span>
