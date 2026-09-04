@@ -340,6 +340,16 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   // 프로바이더에서 받아온 실제 모델 목록. 코드의 후보보다 이쪽이 정확하다.
   const [liveModels, setLiveModels] = useState<Partial<Record<ProviderId, string[]>>>({});
   const [loadingModels, setLoadingModels] = useState(false);
+  /**
+   * 모델 후보 목록을 펼쳐 둘지.
+   *
+   * 프로바이더에서 받아오면 수십 개가 온다. 접을 방법이 없으면 칩이
+   * 화면을 다 먹는다. 모델은 한 번 고르면 계속 안 바꾸므로 접어 두는
+   * 쪽이 기본이어야 맞지만, 방금 불러온 사람은 보고 싶어 한다.
+   */
+  const [showModels, setShowModels] = useState(false);
+  /** 목록이 길면 눈으로 훑기 어렵다. 이름 조각으로 거른다 */
+  const [modelFilter, setModelFilter] = useState('');
   /** 마지막 응답을 말풍선에 넣지 않은 이유. 데이터 단계에서 정상이다 */
   const [replyNote, setReplyNote] = useState<string | null>(null);
   // 모델 가격표. 화면에서 고치고 설정과 함께 저장한다.
@@ -593,6 +603,16 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
   /** 지금 단계가 실제로 쓸 모델 설정. 공통을 따를 수도, 직접 정했을 수도 */
   const eff = active ? effective(active, common) : common;
+  /** 지금 프로바이더의 모델 후보. 불러온 게 있으면 그쪽이 정확하다 */
+  const modelCandidates =
+    liveModels[eff.provider] ?? MODEL_CANDIDATES[eff.provider];
+  /** 거르기를 적용한 목록 */
+  const shownModels = ((): string[] => {
+    const needle = modelFilter.trim().toLowerCase();
+    if (needle === '') return modelCandidates;
+    return modelCandidates.filter((name) => name.toLowerCase().includes(needle));
+  })();
+
   /** 공통을 따르는 단계 수. 공통 설정 패널에서 보여준다 */
   const followers = stages.filter((stage) => !stage.ownSettings).length;
 
@@ -803,6 +823,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     setLoadingModels(true);
     const result = await fetchModels(provider, key);
     setLoadingModels(false);
+    // 방금 부른 사람은 보고 싶어 한다. 불러오면 펼친다.
+    setShowModels(true);
 
     if (!result.ok) {
       window.alert(result.error);
@@ -1771,6 +1793,13 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 >
                   <button
                     type="button"
+                    onClick={() => setShowModels((prev) => !prev)}
+                    className="text-[11px] text-neutral-500 hover:underline"
+                  >
+                    {showModels ? '▾' : '▸'} 모델 후보 {modelCandidates.length}개
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void loadModels()}
                     disabled={loadingModels}
                     className="rounded border border-neutral-400 px-1.5 py-0.5 text-[11px] disabled:opacity-40 dark:border-neutral-600"
@@ -1779,10 +1808,36 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   </button>
                   {liveModels[eff.provider] === undefined && (
                     <span className="text-[11px] text-neutral-500">
-                      아래는 코드에 적힌 값이라 낡았을 수 있습니다
+                      코드에 적힌 값이라 낡았을 수 있습니다
                     </span>
                   )}
-                  {(liveModels[eff.provider] ?? MODEL_CANDIDATES[eff.provider]).map((candidate) => (
+                  {eff.model !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => patch(activeIndex, { model: '' })}
+                      className="px-1.5 py-0.5 text-[11px] text-neutral-500 hover:underline"
+                    >
+                      모델 지우기
+                    </button>
+                  )}
+                </div>
+
+                {/* 불러오면 수십 개가 온다. 접을 수 있어야 하고, 길면
+                    걸러서 봐야 한다. */}
+                <div
+                  className="flex flex-wrap items-center gap-1.5"
+                  hidden={!active.ownSettings || !showModels}
+                >
+                  {modelCandidates.length > 12 && (
+                    <input
+                      value={modelFilter}
+                      onChange={(event) => setModelFilter(event.target.value)}
+                      placeholder="이름으로 거르기"
+                      spellCheck={false}
+                      className="w-36 rounded border border-neutral-300 bg-transparent px-2 py-0.5 text-[11px] dark:border-neutral-700"
+                    />
+                  )}
+                  {shownModels.map((candidate) => (
                     <button
                       key={candidate}
                       type="button"
@@ -1796,13 +1851,18 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       {candidate}
                     </button>
                   ))}
-                  {eff.model !== '' && (
+                  {shownModels.length === 0 && (
+                    <span className="text-[11px] text-neutral-500">
+                      {modelFilter.trim()} 에 맞는 모델이 없습니다
+                    </span>
+                  )}
+                  {modelFilter.trim() !== '' && (
                     <button
                       type="button"
-                      onClick={() => patch(activeIndex, { model: '' })}
+                      onClick={() => setModelFilter('')}
                       className="px-1.5 py-0.5 text-[11px] text-neutral-500 hover:underline"
                     >
-                      지우기
+                      거르기 지우기
                     </button>
                   )}
                 </div>
