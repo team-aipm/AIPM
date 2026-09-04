@@ -1258,7 +1258,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           <button
             key={id}
             onClick={() => setPanel(panel === id ? 'none' : id)}
-            className={panel === id ? 'text-neutral-900 dark:text-neutral-100' : 'hover:underline'}
+            className={`rounded border px-2 py-1 ${
+              panel === id
+                ? 'border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-100'
+                : 'border-neutral-300 dark:border-neutral-700'
+            }`}
           >
             {label}
           </button>
@@ -1271,7 +1275,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             setActiveIndex(0);
             setCommonPrompt(COMMON_RULES);
           }}
-          className="hover:underline"
+          className="rounded border border-dashed border-neutral-300 px-2 py-1 dark:border-neutral-700"
         >
           단계 초기화
         </button>
@@ -1471,7 +1475,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       {panel === 'prompt' && (
         <Panel
           title="공통 프롬프트"
-          hint="포함을 켠 단계의 프롬프트 앞에 붙습니다"
+          hint={`포함을 켠 단계의 프롬프트 앞에 붙습니다 · 지금 ${
+            stages.filter((stage) => stage.useCommonPrompt).length
+          } / ${stages.length} 단계`}
           onCopy={() => navigator.clipboard.writeText(commonPrompt)}
         >
           <textarea
@@ -1975,11 +1981,23 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
                 {/* 보낼 때 붙일 것과, 주고받은 것 중 어디를 볼지 */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
-                  <Toggle
-                    checked={active.useCommonPrompt}
-                    onChange={(next) => patch(activeIndex, { useCommonPrompt: next })}
-                    label="공통 프롬프트 포함"
-                  />
+                  {/* 토글은 여기 있는데 내용은 화면 맨 위에 있었다.
+                      둘 사이가 멀어 연결이 안 보였다. 길이를 붙이고
+                      바로 여는 링크를 둔다. */}
+                  <span className="flex items-center gap-2">
+                    <Toggle
+                      checked={active.useCommonPrompt}
+                      onChange={(next) => patch(activeIndex, { useCommonPrompt: next })}
+                      label={`공통 프롬프트 포함 (${commonPrompt.length}자)`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPanel('prompt')}
+                      className="text-[11px] text-neutral-500 hover:underline"
+                    >
+                      보기 · 편집
+                    </button>
+                  </span>
                   <Toggle
                     checked={active.forceJsonMimeType}
                     onChange={(next) => patch(activeIndex, { forceJsonMimeType: next })}
