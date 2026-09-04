@@ -491,7 +491,15 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function stripFence(text: string): string {
+/**
+ * 모델이 ```json 으로 감싼 출력에서 울타리를 벗긴다.
+ *
+ * **여기 말고 다른 데서 다시 만들지 말 것.** 한동안 이 함수가 이 파일
+ * 안에만 있어서, 검증 패널은 JSON 파싱에 성공하는데 대화창·상태 이월·
+ * 단계 매핑은 조용히 실패하는 일이 있었다. 모델 출력을 파싱하는 곳은
+ * 전부 이걸 거친다.
+ */
+export function stripFence(text: string): string {
   if (!text.startsWith('```')) return text;
   return text
     .replace(/^```[a-zA-Z]*\n?/, '')

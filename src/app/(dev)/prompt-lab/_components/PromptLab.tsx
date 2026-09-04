@@ -49,6 +49,7 @@ import {
 import {
   appendAiTurn,
   appendUserTurn,
+  parseOutput,
   pickReply,
   readTurns,
   type Turn,
@@ -454,6 +455,15 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
    * 서버가 돌려준 `sentSystem` 과 비교한다. 화면이 기억하는 값이 아니라
    * 서버에 실제로 도착했던 값이라, "고쳤는데 반영이 됐나" 를 여기서 끝낸다.
    */
+  /**
+   * 응답 필드가 아무 일도 하지 않는 상태.
+   *
+   * 출력이 평문이면 `pickReply` 가 응답 필드를 보지 않고 원문을 그대로
+   * 말풍선에 넣는다. 그런데 칸이 열려 있어서 값을 넣게 만들고, 넣어 놓고도
+   * 왜 안 먹는지 알 수가 없었다.
+   */
+  const replyKeyOff = active?.outputMode === 'text';
+
   const promptChanged =
     active !== undefined &&
     thread?.result != null &&
@@ -807,12 +817,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
     execute(withUser, (result) => {
       if (!result.ok) return;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(result.raw);
-      } catch {
-        parsed = result.raw;
-      }
+      // 울타리를 벗기고 읽는다. 이게 없으면 stage_status 같은 상태가
+      // 조용히 안 옮겨진다.
+      const parsed = parseOutput(result.raw) ?? result.raw;
 
       const pick = pickReply(result.raw, outputMode, replyKey);
       setReplyNote(pick.show ? null : pick.reason);
@@ -849,12 +856,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     const targetThread = target.activeThread;
 
     const targetInput = target.threads[targetThread]?.input ?? '{}';
-    let output: unknown = null;
-    try {
-      output = JSON.parse(raw);
-    } catch {
-      // 평문 출력이면 매핑할 게 없다. 아래에서 원문을 그대로 넣는다.
-    }
+    // 평문 출력이거나 JSON 이 깨졌으면 null 이 된다. 아래에서 원문을
+    // 그대로 넣는다.
+    const output: unknown = parseOutput(raw);
 
     // 우선순위: 사용자가 적은 매핑 → AIPM 규칙 → 출력 원문.
     // 손으로 적은 것이 항상 이긴다. 도구가 몰래 다르게 옮기면 안 된다.
@@ -1482,17 +1486,37 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       />
                     </label>
                   )}
+                  {/* 출력이 평문이면 응답 필드를 아예 보지 않는다. 칸을
+                      열어 두면 값을 넣게 만들고, 왜 안 먹는지 알 방법이
+                      없다. 대화 배열 키를 숨기는 것과 같은 규칙이다. */}
                   <label className="flex items-center gap-2">
-                    <span className="shrink-0 text-neutral-500">응답 필드</span>
+                    <span
+                      className={`shrink-0 ${
+                        replyKeyOff ? 'text-neutral-400' : 'text-neutral-500'
+                      }`}
+                    >
+                      응답 필드
+                    </span>
                     <input
                       value={active.replyKey}
                       onChange={(event) =>
                         patch(activeIndex, { replyKey: event.target.value })
                       }
-                      placeholder="비우면 표시 안 함"
-                      className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                      disabled={replyKeyOff}
+                      placeholder={replyKeyOff ? '해당 없음' : '비우면 표시 안 함'}
+                      title={
+                        replyKeyOff
+                          ? '출력이 텍스트라 원문을 그대로 보여줍니다'
+                          : undefined
+                      }
+                      className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-700 dark:disabled:bg-neutral-800"
                     />
                   </label>
+                  {replyKeyOff && (
+                    <span className="text-[11px] text-neutral-500">
+                      출력이 텍스트라 원문을 그대로 보여줍니다
+                    </span>
+                  )}
                 </div>
 
                 {/* 안내는 한 덩어리로 모은다. 컨트롤 사이사이에 끼우면
@@ -1524,9 +1548,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   </p>
                   <p>
                     <b>응답 필드</b>는 출력 중 말풍선에 보여줄 부분입니다.
-                    {active.replyKey.trim() === ''
-                      ? ' 지금은 비어 있어 아무것도 표시하지 않습니다. 데이터만 만드는 단계에 맞습니다.'
-                      : ' 보여줄 문장이 없는 단계(평가·기억 저장 등)는 비워 두세요.'}
+                    {replyKeyOff
+                      ? ' 출력이 JSON일 때만 씁니다. 지금은 출력이 텍스트라 원문이 그대로 나갑니다.'
+                      : active.replyKey.trim() === ''
+                        ? ' 지금은 비어 있어 아무것도 표시하지 않습니다. 데이터만 만드는 단계에 맞습니다.'
+                        : ' 보여줄 문장이 없는 단계(평가·기억 저장 등)는 비워 두세요.'}
                   </p>
                 </div>
               </div>
