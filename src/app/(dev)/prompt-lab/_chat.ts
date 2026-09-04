@@ -6,6 +6,8 @@
  * 어긋나지 않고, JSON을 직접 고치면 대화도 그대로 바뀐다.
  */
 
+import { stripFence } from '@/lib/ai/schema-check';
+
 export type Turn = {
   who: 'user' | 'ai' | 'other';
   text: string;
@@ -102,7 +104,7 @@ export function pickReply(
   const key = replyKey.trim();
   if (key === '') return { show: false, reason: '응답 필드가 비어 있어 표시하지 않습니다' };
 
-  const parsed = safeParse(raw);
+  const parsed = parseOutput(raw);
   // JSON 이어야 하는데 깨졌으면 원문을 보여준다. 디버깅에 필요하다.
   if (!isRecord(parsed)) return { show: true, text: raw };
 
@@ -184,9 +186,27 @@ function pick(item: Record<string, unknown>, keys: string[]): string | null {
   return null;
 }
 
+/**
+ * 입력 JSON 을 읽는다. 여긴 우리가 만든 값이라 울타리가 붙을 일이 없다.
+ */
 function safeParse(text: string): unknown {
   try {
     return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * **모델 출력**을 읽는다. ```json 울타리를 벗기고 파싱한다.
+ *
+ * 입력과 나눠 둔 이유는, 울타리는 모델이 붙이는 것이지 우리가 만든
+ * 입력에는 없기 때문이다. 같은 함수로 두면 어디서 벗겨야 하는지가
+ * 흐려진다.
+ */
+export function parseOutput(raw: string): unknown {
+  try {
+    return JSON.parse(stripFence(raw.trim()));
   } catch {
     return null;
   }
