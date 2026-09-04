@@ -155,6 +155,25 @@ function toStage(base: StagePreset, key: string): Stage {
  */
 const CONFIG_STORAGE_KEY = 'prompt-lab:config:v1';
 const KEY_STORAGE_KEY = 'prompt-lab:keys:v1';
+/**
+ * 저장할지 말지 자체를 기억하는 자리.
+ *
+ * 설정 저장이 기본 켜짐이라, 끈 상태도 남겨 두지 않으면 새로고침할 때마다
+ * 다시 켜진다. 저장을 끄면 설정은 지우되 "껐다"는 사실은 남긴다.
+ */
+const PREF_STORAGE_KEY = 'prompt-lab:prefs:v1';
+
+/**
+ * 그 단계가 실제로 보낼 systemInstruction 전문.
+ *
+ * 실행할 때와 "지금 프롬프트와 같은가" 를 비교할 때 **같은 함수**를 쓴다.
+ * 두 곳에서 따로 조립하면 곧 어긋난다.
+ */
+function buildSystem(stage: Stage, commonPrompt: string): string {
+  return stage.useCommonPrompt
+    ? `${commonPrompt}\n\n---\n\n${stage.prompt}`
+    : stage.prompt;
+}
 
 /**
  * 키 저장 묶음. 프로바이더별 기본 키와 **단계별 개별 키**를 함께 둔다.
@@ -286,7 +305,10 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   const [, startTransition] = useTransition();
 
   // 저장 여부. 키는 따로 관리한다.
-  const [remember, setRemember] = useState(false);
+  //
+  // 설정은 기본으로 저장한다. 새로고침할 때마다 프로바이더·모델·프롬프트를
+  // 다시 넣는 건 이 도구를 못 쓰게 만든다. 키는 민감하므로 기본 꺼짐이다.
+  const [remember, setRemember] = useState(true);
   const [rememberKeys, setRememberKeys] = useState(false);
   const [restored, setRestored] = useState(false);
 
@@ -298,6 +320,19 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
+      // 저장 여부를 먼저 읽는다. 껐다면 그 상태를 지켜야 한다.
+      const savedPrefs = window.localStorage.getItem(PREF_STORAGE_KEY);
+      if (savedPrefs) {
+        const prefs = JSON.parse(savedPrefs) as {
+          remember?: boolean;
+          rememberKeys?: boolean;
+        };
+        if (typeof prefs.remember === 'boolean') setRemember(prefs.remember);
+        if (typeof prefs.rememberKeys === 'boolean') {
+          setRememberKeys(prefs.rememberKeys);
+        }
+      }
+
       const savedConfig = window.localStorage.getItem(CONFIG_STORAGE_KEY);
       if (savedConfig) {
         const parsed = JSON.parse(savedConfig) as {
@@ -322,7 +357,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         if (typeof parsed.commonPrompt === 'string') {
           setCommonPrompt(parsed.commonPrompt);
         }
-        setRemember(true);
       }
 
       const savedKeys = window.localStorage.getItem(KEY_STORAGE_KEY);
@@ -347,7 +381,6 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             })),
           );
         }
-        setRememberKeys(true);
       }
     } catch {
       // 저장값이 깨졌으면 무시하고 기본값으로 연다.
@@ -355,6 +388,19 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     setRestored(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // 저장 여부 자체를 남긴다. 이게 없으면 끈 상태가 유지되지 않는다.
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      window.localStorage.setItem(
+        PREF_STORAGE_KEY,
+        JSON.stringify({ remember, rememberKeys }),
+      );
+    } catch {
+      // 무시
+    }
+  }, [restored, remember, rememberKeys]);
 
   // 설정 저장. 키는 포함하지 않는다.
   useEffect(() => {
@@ -402,6 +448,18 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   /** 지금 보고 있는 대화 */
   const thread: Thread | null = active?.threads[active.activeThread] ?? null;
 
+  /**
+   * 마지막 결과를 만든 프롬프트와 지금 화면의 프롬프트가 다른가.
+   *
+   * 서버가 돌려준 `sentSystem` 과 비교한다. 화면이 기억하는 값이 아니라
+   * 서버에 실제로 도착했던 값이라, "고쳤는데 반영이 됐나" 를 여기서 끝낸다.
+   */
+  const promptChanged =
+    active !== undefined &&
+    thread?.result != null &&
+    (thread.result.sentSystem ?? '') !== '' &&
+    thread.result.sentSystem !== buildSystem(active, commonPrompt);
+
   function patch(index: number, next: Partial<Stage>) {
     setStages((prev) =>
       prev.map((stage, i) => (i === index ? { ...stage, ...next } : stage)),
@@ -432,6 +490,43 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   function patchActive(next: Partial<Thread>) {
     if (!active) return;
     patchThread(activeIndex, active.activeThread, next);
+  }
+
+  /**
+   * 지금 단계의 모델 설정을 나머지 단계에 그대로 복사한다.
+   *
+   * 단계마다 프로바이더·모델을 따로 두는 게 이 도구의 핵심이지만, 전체를
+   * 한 모델로 돌려 보는 일이 그만큼 잦다. 7단계를 손으로 일곱 번 고치게
+   * 두지 않는다.
+   *
+   * **프롬프트·검증 규칙·매핑은 건드리지 않는다.** 그건 단계마다 다르다.
+   */
+  function applyModelToAllStages() {
+    if (!active || stages.length < 2) return;
+    const label = active.model.trim() || DEFAULT_MODEL[active.provider];
+    const ok = window.confirm(
+      `${stages.length - 1}개 단계의 모델 설정을 이 단계와 같게 바꿉니다.\n\n` +
+        `프로바이더 ${active.provider}\n모델 ${label}\n` +
+        `생성 파라미터와 API 키도 함께 복사합니다.\n\n` +
+        '프롬프트와 검증 규칙은 그대로 둡니다.',
+    );
+    if (!ok) return;
+
+    setStages((prev) =>
+      prev.map((stage, i) =>
+        i === activeIndex
+          ? stage
+          : {
+              ...stage,
+              provider: active.provider,
+              model: active.model,
+              apiKey: active.apiKey,
+              temperature: active.temperature,
+              maxTokens: active.maxTokens,
+              topP: active.topP,
+            },
+      ),
+    );
   }
 
   // ── 검증 규칙 · 단계 연결 ──────────────────────────────────────────────
@@ -545,9 +640,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     patchThread(index, threadIndex, { running: true, result: null });
     setSendNote(null);
 
-    const system = active.useCommonPrompt
-      ? `${commonPrompt}\n\n---\n\n${active.prompt}`
-      : active.prompt;
+    const system = buildSystem(active, commonPrompt);
 
     const model = active.model.trim() || DEFAULT_MODEL[active.provider];
 
@@ -1206,6 +1299,18 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       사용: {keySource}
                     </span>
                   </label>
+
+                  {/* 전체를 한 모델로 돌려 보는 일이 잦다. 일곱 번 고치게
+                      두지 않는다. 프롬프트는 복사하지 않는다. */}
+                  {stages.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={applyModelToAllStages}
+                      className="shrink-0 rounded border border-neutral-400 px-2 py-1 text-[11px] text-neutral-600 dark:border-neutral-600 dark:text-neutral-300"
+                    >
+                      이 설정을 모든 단계에
+                    </button>
+                  )}
                 </div>
 
                 {/* 목록이 아니라 입력이 원칙이다. 아래는 자주 쓰는 이름을
@@ -1432,7 +1537,14 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               accent={accent}
               open={openPanel.prompt}
               onToggle={() => togglePanel('prompt')}
-              hint={`${active.prompt.length}자${active.useCommonPrompt ? ' · 공통 포함' : ''}`}
+              // 고쳐 놓고 안 보낸 상태를 여기서 먼저 알린다. 답변 아래까지
+              // 내려가야 알 수 있으면 늦다.
+              warn={promptChanged}
+              hint={
+                promptChanged
+                  ? '고친 뒤 아직 보내지 않았습니다'
+                  : `${active.prompt.length}자${active.useCommonPrompt ? ' · 공통 포함' : ''}`
+              }
               onCopy={() => navigator.clipboard.writeText(active.prompt)}
             >
               <textarea
@@ -1821,7 +1933,11 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                 <p className="text-[11px] text-neutral-500">{sendNote}</p>
               )}
 
-              <ResultView result={thread.result} accent={accent} />
+                <ResultView
+                result={thread.result}
+                accent={accent}
+                currentSystem={buildSystem(active, commonPrompt)}
+              />
             </section>
           </div>
         </div>
@@ -2058,9 +2174,12 @@ function Meta({
 function ResultView({
   result,
   accent,
+  currentSystem,
 }: {
   result: RunResult | null;
   accent: string;
+  /** 지금 화면의 프롬프트. 결과가 옛 프롬프트로 나온 것인지 비교한다 */
+  currentSystem: string;
 }) {
   if (result === null) {
     return (
@@ -2073,13 +2192,18 @@ function ResultView({
     );
   }
 
+  const sent = <SentPrompt result={result} currentSystem={currentSystem} accent={accent} />;
+
   if (!result.ok) {
     return (
-      <Panel title="오류" accent={accent}>
-        <pre className="whitespace-pre-wrap p-3 text-red-600 dark:text-red-400">
-          {result.error}
-        </pre>
-      </Panel>
+      <>
+        <Panel title="오류" accent={accent}>
+          <pre className="whitespace-pre-wrap p-3 text-red-600 dark:text-red-400">
+            {result.error}
+          </pre>
+        </Panel>
+        {sent}
+      </>
     );
   }
 
@@ -2102,7 +2226,50 @@ function ResultView({
           {result.raw}
         </pre>
       </Panel>
+
+      {sent}
     </>
+  );
+}
+
+/**
+ * 이 결과를 만들 때 **서버가 실제로 받은 프롬프트**.
+ *
+ * 프롬프트를 고치고 다시 보내면 바뀐 게 갔는지 확인할 방법이 없었다.
+ * 화면이 "보냈다고 믿는 것"이 아니라 서버가 돌려준 것을 그대로 보여준다.
+ * 지금 화면의 프롬프트와 다르면 제목줄에서 알린다.
+ */
+function SentPrompt({
+  result,
+  currentSystem,
+  accent,
+}: {
+  result: RunResult;
+  currentSystem: string;
+  accent: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const sent = result.sentSystem ?? '';
+  const stale = sent !== '' && sent !== currentSystem;
+
+  return (
+    <Panel
+      title="보낸 프롬프트"
+      accent={accent}
+      open={open}
+      onToggle={() => setOpen((prev) => !prev)}
+      warn={stale}
+      hint={
+        stale
+          ? '지금 프롬프트와 다릅니다 — 고친 뒤 아직 안 보냈습니다'
+          : `지금 프롬프트와 같습니다 · ${sent.length}자`
+      }
+      onCopy={() => navigator.clipboard.writeText(sent)}
+    >
+      <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap p-3 text-neutral-600 dark:text-neutral-400">
+        {sent || '(비어 있음)'}
+      </pre>
+    </Panel>
   );
 }
 
@@ -2137,6 +2304,7 @@ function Panel({
   accent,
   open,
   onToggle,
+  warn,
   children,
 }: {
   title: string;
@@ -2147,6 +2315,8 @@ function Panel({
   /** `onToggle` 이 있을 때만 본다 */
   open?: boolean;
   onToggle?: () => void;
+  /** 켜면 hint 를 눈에 띄게 칠한다. 주의를 끌어야 할 때만 쓴다 */
+  warn?: boolean;
   children: React.ReactNode;
 }) {
   const collapsible = onToggle !== undefined;
@@ -2171,12 +2341,20 @@ function Panel({
           >
             <span className="text-neutral-400">{shown ? '▾' : '▸'}</span>
             <span className="font-bold">{title}</span>
-            {hint && <span className="text-neutral-500">{hint}</span>}
+            {hint && (
+              <span className={warn ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-neutral-500'}>
+                {hint}
+              </span>
+            )}
           </button>
         ) : (
           <div className="flex items-baseline gap-2">
             <span className="font-bold">{title}</span>
-            {hint && <span className="text-neutral-500">{hint}</span>}
+            {hint && (
+              <span className={warn ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-neutral-500'}>
+                {hint}
+              </span>
+            )}
           </div>
         )}
         {onCopy && (
