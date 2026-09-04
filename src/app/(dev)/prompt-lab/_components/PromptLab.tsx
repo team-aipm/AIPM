@@ -1285,6 +1285,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         <Panel
           title="공통 설정"
           hint={`모든 단계의 기본값 · 지금 ${followers} / ${stages.length} 단계가 따릅니다`}
+          onClose={() => setPanel('none')}
         >
           <div className="flex flex-col gap-3 p-3">
             {/* 여기 한 번 넣으면 단계를 새로 추가해도 따라온다. 단계마다
@@ -1388,6 +1389,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         <Panel
           title="변수"
           hint="프롬프트와 입력에서 {{이름}} 으로 씁니다"
+          onClose={() => setPanel('none')}
         >
           <div className="flex flex-col gap-2 p-3">
             {vars.length > 0 && (
@@ -1479,6 +1481,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             stages.filter((stage) => stage.useCommonPrompt).length
           } / ${stages.length} 단계`}
           onCopy={() => navigator.clipboard.writeText(commonPrompt)}
+          onClose={() => setPanel('none')}
         >
           <textarea
             value={commonPrompt}
@@ -1493,6 +1496,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         <Panel
           title="모델 가격표"
           hint="100만 토큰당 USD. 각 사 요금 페이지에서 확인해 넣으세요"
+          onClose={() => setPanel('none')}
         >
           <div className="p-3">
             <p className="mb-3 text-[11px] text-neutral-500">
@@ -2864,6 +2868,7 @@ function Panel({
   open,
   onToggle,
   warn,
+  onClose,
   children,
 }: {
   title: string;
@@ -2876,6 +2881,13 @@ function Panel({
   onToggle?: () => void;
   /** 켜면 hint 를 눈에 띄게 칠한다. 주의를 끌어야 할 때만 쓴다 */
   warn?: boolean;
+  /**
+   * 닫기 버튼. 상단 버튼으로 여는 패널에 준다.
+   *
+   * 같은 버튼을 다시 눌러도 닫히지만, 그걸 알 방법이 없었다. 패널 안에
+   * 닫는 길이 있어야 한다.
+   */
+  onClose?: () => void;
   children: React.ReactNode;
 }) {
   const collapsible = onToggle !== undefined;
@@ -2916,11 +2928,22 @@ function Panel({
             )}
           </div>
         )}
-        {onCopy && (
-          <button onClick={onCopy} className="text-neutral-500 hover:underline">
-            복사
-          </button>
-        )}
+        <span className="flex shrink-0 items-center gap-3">
+          {onCopy && (
+            <button onClick={onCopy} className="text-neutral-500 hover:underline">
+              복사
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="닫기"
+              className="px-1 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+            >
+              ✕
+            </button>
+          )}
+        </span>
       </div>
       {/* 접어도 상태는 그대로 둔다. 다시 펴면 쓰던 값이 그대로 있어야 한다 */}
       <div hidden={!shown}>{children}</div>
