@@ -26,6 +26,22 @@ export type Variable = {
 
 export const BLANK_VARIABLE: Variable = { name: '', value: '' };
 
+/**
+ * 변수 묶음 하나. **세트가 곧 테스트 케이스다.**
+ *
+ * 말투 블록처럼 통째로 갈아끼우는 값이 있다. 빌런과 친구를 오가며 비교하려면
+ * 두 벌을 나란히 둘 곳이 필요하다. 값 하나를 고치는 게 아니라 묶음을 바꾼다.
+ *
+ * 세트마다 이름 목록이 독립이다. 어긋나면 "정의 안 된 변수" 경고가 잡아 주므로
+ * 굳이 묶지 않는다.
+ */
+export type VarSet = {
+  name: string;
+  vars: Variable[];
+};
+
+export const DEFAULT_VAR_SET: VarSet = { name: '기본', vars: [] };
+
 /** `{{이름}}` 을 찾는다. 이름은 공백 없이 한 덩어리 */
 const REF = /\{\{\s*([^{}\s]+)\s*\}\}/g;
 
