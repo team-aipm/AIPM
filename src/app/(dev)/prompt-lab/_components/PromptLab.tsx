@@ -41,9 +41,11 @@ import { stageColor } from '../_stage-colors';
 import {
   applyVars,
   BLANK_VARIABLE,
+  DEFAULT_VAR_SET,
   undefinedRefs,
   usageOf,
   type Variable,
+  type VarSet,
 } from '../_vars';
 import {
   costOf,
@@ -332,7 +334,18 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
   });
   const [commonPrompt, setCommonPrompt] = useState(COMMON_RULES);
   const [common, setCommon] = useState<CommonSettings>(DEFAULT_COMMON);
-  const [vars, setVars] = useState<Variable[]>([]);
+  /**
+   * 변수 세트.
+   *
+   * 말투 블록처럼 통째로 갈아끼우는 값이 있다. 빌런과 친구를 오가며
+   * 비교하려면 두 벌을 나란히 둘 곳이 필요하다. 세트가 곧 테스트
+   * 케이스다.
+   *
+   * 세트마다 이름 목록이 독립이다. 어긋나면 "정의 안 된 변수" 경고가
+   * 잡아 주므로 굳이 묶지 않는다.
+   */
+  const [varSets, setVarSets] = useState<VarSet[]>([DEFAULT_VAR_SET]);
+  const [activeSet, setActiveSet] = useState(0);
   const [panel, setPanel] = useState<
     'none' | 'prompt' | 'price' | 'settings' | 'vars'
   >('none');
@@ -446,7 +459,10 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       const savedConfig = window.localStorage.getItem(CONFIG_STORAGE_KEY);
       if (savedConfig) {
         const parsed = JSON.parse(savedConfig) as {
+          /** 예전 저장본. 세트 없이 배열 하나였다 */
           vars?: Variable[];
+          varSets?: VarSet[];
+          activeSet?: number;
           common?: Partial<CommonSettings>;
           commonPrompt?: string;
           stages?: SavedStage[];
@@ -457,7 +473,17 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           setPrices(parsed.prices);
         }
         if (typeof parsed.krwRate === 'string') setKrwRate(parsed.krwRate);
-        if (Array.isArray(parsed.vars)) setVars(parsed.vars);
+        // 예전 저장본은 세트가 없다. 통째로 `기본` 세트로 옮긴다.
+        if (Array.isArray(parsed.varSets) && parsed.varSets.length > 0) {
+          setVarSets(parsed.varSets);
+          if (typeof parsed.activeSet === 'number') {
+            setActiveSet(
+              Math.min(Math.max(0, parsed.activeSet), parsed.varSets.length - 1),
+            );
+          }
+        } else if (Array.isArray(parsed.vars) && parsed.vars.length > 0) {
+          setVarSets([{ name: '기본', vars: parsed.vars }]);
+        }
         if (parsed.common && typeof parsed.common === 'object') {
           setCommon({ ...DEFAULT_COMMON, ...parsed.common });
         }
@@ -534,7 +560,8 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       window.localStorage.setItem(
         CONFIG_STORAGE_KEY,
         JSON.stringify({
-          vars,
+          varSets,
+          activeSet,
           common,
           commonPrompt,
           stages: stages.map(toSaved),
@@ -547,7 +574,17 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       // 화면 동작은 막지 않되, 조용히 넘기지는 않는다.
       setSaveState('failed');
     }
-  }, [restored, remember, vars, common, commonPrompt, stages, prices, krwRate]);
+  }, [
+    restored,
+    remember,
+    varSets,
+    activeSet,
+    common,
+    commonPrompt,
+    stages,
+    prices,
+    krwRate,
+  ]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // 키 저장은 따로 켠다. 기본은 꺼짐이다.
@@ -589,6 +626,16 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
    */
   const replyKeyOff = active?.outputMode === 'text';
 
+  /** 지금 고른 세트의 변수들. 실행과 경고가 모두 이걸 본다 */
+  const vars = varSets[activeSet]?.vars ?? [];
+
+  /** 지금 세트의 변수 목록만 고친다 */
+  function setVars(next: (prev: Variable[]) => Variable[]) {
+    setVarSets((prev) =>
+      prev.map((set, i) => (i === activeSet ? { ...set, vars: next(set.vars) } : set)),
+    );
+  }
+
   /** 이 단계가 쓰는데 정의되지 않은 변수. 조용히 빈칸으로 바꾸지 않는다 */
   const missingVars = active
     ? undefinedRefs(
@@ -603,6 +650,37 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
 
   /** 지금 단계가 실제로 쓸 모델 설정. 공통을 따를 수도, 직접 정했을 수도 */
   const eff = active ? effective(active, common) : common;
+  function addVarSet(from?: VarSet) {
+    const name = window.prompt(
+      from ? '복제할 세트의 새 이름' : '새 세트 이름',
+      from ? `${from.name} 복사본` : `세트 ${varSets.length + 1}`,
+    );
+    if (name === null || name.trim() === '') return;
+    setVarSets((prev) => [
+      ...prev,
+      { name: name.trim(), vars: from ? from.vars.map((v) => ({ ...v })) : [] },
+    ]);
+    setActiveSet(varSets.length);
+  }
+
+  function renameVarSet() {
+    const current = varSets[activeSet];
+    if (!current) return;
+    const name = window.prompt('세트 이름', current.name);
+    if (name === null || name.trim() === '') return;
+    setVarSets((prev) =>
+      prev.map((set, i) => (i === activeSet ? { ...set, name: name.trim() } : set)),
+    );
+  }
+
+  function removeVarSet() {
+    if (varSets.length === 1) return;
+    const current = varSets[activeSet];
+    if (!window.confirm(`세트 "${current?.name}" 을 지웁니다. 계속할까요?`)) return;
+    setVarSets((prev) => prev.filter((_, i) => i !== activeSet));
+    setActiveSet((prev) => (prev > 0 ? prev - 1 : 0));
+  }
+
   /** 지금 프로바이더의 모델 후보. 불러온 게 있으면 그쪽이 정확하다 */
   const modelCandidates =
     liveModels[eff.provider] ?? MODEL_CANDIDATES[eff.provider];
@@ -1388,19 +1466,65 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
       {panel === 'vars' && (
         <Panel
           title="변수"
-          hint="프롬프트와 입력에서 {{이름}} 으로 씁니다"
+          hint={`프롬프트와 입력에서 {{이름}} 으로 씁니다 · 세트 ${varSets.length}개`}
           onClose={() => setPanel('none')}
         >
           <div className="flex flex-col gap-2 p-3">
+            {/* 세트가 곧 테스트 케이스다. 빌런/친구처럼 말투 블록을
+                통째로 갈아끼울 때 값을 다시 붙여넣지 않아도 된다. */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 pb-3 dark:border-neutral-800">
+              <span className="text-neutral-500">세트</span>
+              <select
+                value={activeSet}
+                onChange={(event) => setActiveSet(Number(event.target.value))}
+                className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+              >
+                {varSets.map((set, index) => (
+                  <option key={index} value={index}>
+                    {set.name || '(이름 없음)'}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => addVarSet()}
+                className="rounded border border-dashed border-neutral-400 px-2 py-1 text-[11px] text-neutral-500 dark:border-neutral-600"
+              >
+                + 세트
+              </button>
+              <button
+                onClick={() => addVarSet(varSets[activeSet])}
+                className="text-[11px] text-neutral-500 hover:underline"
+              >
+                복제
+              </button>
+              <button
+                onClick={renameVarSet}
+                className="text-[11px] text-neutral-500 hover:underline"
+              >
+                이름 바꾸기
+              </button>
+              {varSets.length > 1 && (
+                <button
+                  onClick={removeVarSet}
+                  className="text-[11px] text-red-600 hover:underline dark:text-red-400"
+                >
+                  삭제
+                </button>
+              )}
+              <span className="ml-auto text-[11px] text-neutral-500">
+                세트를 바꾸면 값이 통째로 바뀝니다. 프롬프트는 그대로입니다
+              </span>
+            </div>
+
             {vars.length > 0 && (
               <div className="hidden gap-1 text-[11px] text-neutral-500 md:flex">
                 <span className="w-40">이름</span>
-                <span className="w-56">값</span>
+                <span className="w-72">값 · 여러 줄 가능</span>
                 <span>쓰인 곳</span>
               </div>
             )}
             {vars.map((item, index) => (
-              <div key={index} className="flex flex-wrap items-center gap-1">
+              <div key={index} className="flex flex-wrap items-start gap-1">
                 <input
                   value={item.name}
                   onChange={(event) =>
@@ -1414,7 +1538,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   spellCheck={false}
                   className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                 />
-                <input
+                {/* 말투 블록처럼 문단짜리 값이 들어온다. 한 줄 칸에는
+                    넣을 수도 고칠 수도 없다. */}
+                <textarea
                   value={item.value}
                   onChange={(event) =>
                     setVars((prev) =>
@@ -1423,10 +1549,12 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       ),
                     )
                   }
-                  placeholder="4"
-                  className="w-56 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  rows={item.value.includes('\n') ? 4 : 1}
+                  placeholder="4 또는 여러 줄짜리 말투 블록"
+                  spellCheck={false}
+                  className="w-72 resize-y rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                 />
-                <span className="px-2 text-[11px] text-neutral-500">
+                <span className="px-2 py-1.5 text-[11px] text-neutral-500">
                   {usageOf(item.name, [
                     {
                       label: '프롬프트',
@@ -1444,7 +1572,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                   onClick={() =>
                     setVars((prev) => prev.filter((_, i) => i !== index))
                   }
-                  className="px-2 text-neutral-400 hover:text-red-600"
+                  className="px-2 py-1 text-neutral-400 hover:text-red-600"
                   title="이 줄 삭제"
                 >
                   ×
@@ -1469,6 +1597,12 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               <code>&quot;grade&quot;: {'{{grade}}'}</code>는 숫자로,{' '}
               <code>&quot;name&quot;: &quot;{'{{nickname}}'}&quot;</code>는 문자로
               들어갑니다. <b>정의하지 않은 이름은 바꾸지 않고 그대로 둡니다.</b>
+            </p>
+            <p className="text-[11px] text-neutral-500">
+              말투처럼 문단짜리 값도 됩니다. 공통 프롬프트에{' '}
+              <code>{'{{persona_tone}}'}</code>만 써 두고, 빌런 세트와 친구 세트를
+              만들어 오가며 비교하세요. <b>[복제]</b>로 베낀 뒤 그 값만 고치면
+              됩니다.
             </p>
           </div>
         </Panel>
