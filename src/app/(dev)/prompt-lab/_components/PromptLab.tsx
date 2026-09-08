@@ -39,6 +39,14 @@ import {
 } from '../_mapping';
 import { stageColor } from '../_stage-colors';
 import {
+  toCasesJson,
+  toRulesTs,
+  toSpecMd,
+  toStagesTs,
+  type ExportStage,
+  type GoldenCase,
+} from '../_export';
+import {
   applyVars,
   BLANK_VARIABLE,
   DEFAULT_VAR_SET,
@@ -344,11 +352,21 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
    * 세트마다 이름 목록이 독립이다. 어긋나면 "정의 안 된 변수" 경고가
    * 잡아 주므로 굳이 묶지 않는다.
    */
+  /**
+   * 잘 나온 호출을 남긴 것. 회귀 테스트의 재료다.
+   *
+   * 좋은 결과가 나왔을 때 그 자리에서 버튼 하나로 남길 수 있어야 실제로
+   * 쌓인다. 나중에 손으로 옮기려면 아무도 안 한다.
+   */
+  const [cases, setCases] = useState<GoldenCase[]>([]);
   const [varSets, setVarSets] = useState<VarSet[]>([DEFAULT_VAR_SET]);
   const [activeSet, setActiveSet] = useState(0);
   const [panel, setPanel] = useState<
-    'none' | 'prompt' | 'price' | 'settings' | 'vars'
+    'none' | 'prompt' | 'price' | 'settings' | 'vars' | 'export'
   >('none');
+  const [exportKind, setExportKind] = useState<
+    'stages' | 'cases' | 'rules' | 'spec'
+  >('stages');
   const [draft, setDraft] = useState('');
   // 프로바이더에서 받아온 실제 모델 목록. 코드의 후보보다 이쪽이 정확하다.
   const [liveModels, setLiveModels] = useState<Partial<Record<ProviderId, string[]>>>({});
@@ -462,6 +480,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
           /** 예전 저장본. 세트 없이 배열 하나였다 */
           vars?: Variable[];
           varSets?: VarSet[];
+          cases?: GoldenCase[];
           activeSet?: number;
           common?: Partial<CommonSettings>;
           commonPrompt?: string;
@@ -474,6 +493,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         }
         if (typeof parsed.krwRate === 'string') setKrwRate(parsed.krwRate);
         // 예전 저장본은 세트가 없다. 통째로 `기본` 세트로 옮긴다.
+        if (Array.isArray(parsed.cases)) setCases(parsed.cases);
         if (Array.isArray(parsed.varSets) && parsed.varSets.length > 0) {
           setVarSets(parsed.varSets);
           if (typeof parsed.activeSet === 'number') {
@@ -562,6 +582,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         JSON.stringify({
           varSets,
           activeSet,
+          cases,
           common,
           commonPrompt,
           stages: stages.map(toSaved),
@@ -579,6 +600,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     remember,
     varSets,
     activeSet,
+    cases,
     common,
     commonPrompt,
     stages,
@@ -679,6 +701,96 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
     if (!window.confirm(`세트 "${current?.name}" 을 지웁니다. 계속할까요?`)) return;
     setVarSets((prev) => prev.filter((_, i) => i !== activeSet));
     setActiveSet((prev) => (prev > 0 ? prev - 1 : 0));
+  }
+
+  /**
+   * 지금 결과를 케이스로 남긴다.
+   *
+   * `note` 를 사람이 적게 하는 게 중요하다. "이 케이스가 무엇을 지키는
+   * 건지" 를 나중에 알 수 없으면 테스트가 쓸모없어진다.
+   */
+  function saveCase() {
+    if (!active || !thread?.result?.ok) return;
+    const note = window.prompt(
+      '이 케이스가 무엇을 지키는지 한 줄로 적으세요.\n' +
+        '예: 빌런 말투로 3턴째, 학생이 규칙을 못 찾는 경우',
+      '',
+    );
+    if (note === null) return;
+
+    setCases((prev) => [
+      ...prev,
+      {
+        stage: active.name,
+        model: activeModel,
+        params: {
+          temperature: eff.temperature,
+          maxTokens: eff.maxTokens,
+          topP: eff.topP,
+        },
+        system: thread.result?.sentSystem ?? '',
+        input: thread.input,
+        output: thread.result?.raw ?? '',
+        checks: thread.result?.checks ?? [],
+        note: note.trim(),
+        at: new Date().toISOString(),
+      },
+    ]);
+  }
+
+  /** 내보내기가 필요로 하는 만큼만 단계에서 뽑는다 */
+  function exportStages(): ExportStage[] {
+    return stages.map((stage) => {
+      const settings = effective(stage, common);
+      return {
+        name: stage.name,
+        note: stage.note,
+        prompt: stage.prompt,
+        sampleInput: stage.threads[0]?.input ?? stage.sampleInput,
+        inputMode: stage.inputMode,
+        outputMode: stage.outputMode,
+        checkRule: stage.checkRule,
+        historyKey: stage.historyKey,
+        replyKey: stage.replyKey,
+        useCommonPrompt: stage.useCommonPrompt,
+        forceJsonMimeType: stage.forceJsonMimeType,
+        provider: settings.provider,
+        model: settings.model,
+        temperature: settings.temperature,
+        maxTokens: settings.maxTokens,
+        topP: settings.topP,
+        ownSettings: stage.ownSettings,
+        rules: stage.rules,
+        mapping: stage.mapping,
+      };
+    });
+  }
+
+  /** 고른 종류의 내보내기 결과 */
+  const exportText = ((): string => {
+    if (panel !== 'export') return '';
+    const list = exportStages();
+    if (exportKind === 'stages') return toStagesTs(list, commonPrompt, vars);
+    if (exportKind === 'cases') return toCasesJson(cases);
+    if (exportKind === 'rules') return toRulesTs(list);
+    return toSpecMd(list, commonPrompt);
+  })();
+
+  const exportFile = {
+    stages: 'stages.ts',
+    cases: 'golden-cases.json',
+    rules: 'stage-rules.ts',
+    spec: 'pipeline-spec.md',
+  }[exportKind];
+
+  function downloadExport() {
+    const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = exportFile;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   /** 지금 프로바이더의 모델 후보. 불러온 게 있으면 그쪽이 정확하다 */
@@ -1331,6 +1443,7 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
             ['vars', '변수'],
             ['price', '가격표'],
             ['prompt', '공통 프롬프트'],
+            ['export', '내보내기'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -1604,6 +1717,99 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
               만들어 오가며 비교하세요. <b>[복제]</b>로 베낀 뒤 그 값만 고치면
               됩니다.
             </p>
+          </div>
+        </Panel>
+      )}
+
+      {panel === 'export' && (
+        <Panel
+          title="내보내기"
+          hint={`코드로 옮길 자료 · 케이스 ${cases.length}개`}
+          onCopy={() => navigator.clipboard.writeText(exportText)}
+          onClose={() => setPanel('none')}
+        >
+          <div className="flex flex-col gap-2 p-3">
+            <div className="flex flex-wrap items-center gap-1">
+              {(
+                [
+                  ['stages', '파이프라인 설정', 'stages.ts'],
+                  ['cases', '골든 케이스', `${cases.length}개`],
+                  ['rules', '검증 규칙', 'stage-rules.ts'],
+                  ['spec', '실행 명세', '빈칸 있음'],
+                ] as const
+              ).map(([id, label, tag]) => (
+                <button
+                  key={id}
+                  onClick={() => setExportKind(id)}
+                  className={`flex items-center gap-1.5 rounded border px-2 py-1 ${
+                    exportKind === id
+                      ? 'border-neutral-900 font-bold dark:border-neutral-100'
+                      : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'
+                  }`}
+                >
+                  {label}
+                  <span className="text-[10px] text-neutral-500">{tag}</span>
+                </button>
+              ))}
+              <button
+                onClick={downloadExport}
+                className="ml-auto rounded border border-neutral-400 px-2 py-1 dark:border-neutral-600"
+              >
+                {exportFile} 내려받기
+              </button>
+            </div>
+
+            <p className="text-[11px] text-neutral-500">
+              {exportKind === 'stages' &&
+                '프롬프트 · 모델 · 파라미터 · 입출력 형식을 한 번에. lib/ai/prompts/stages.ts 를 갈아끼울 수 있습니다.'}
+              {exportKind === 'cases' &&
+                '회귀 테스트의 재료입니다. 출력 문자열을 비교하지 마세요 — LLM 은 같은 입력에도 매번 다르게 답합니다. 검증 규칙을 통과하는지로 봅니다.'}
+              {exportKind === 'rules' &&
+                '규칙 데이터만 뽑습니다. 검사 로직은 checkFieldRules 를 그대로 쓰면 됩니다. 두 벌 만들 이유가 없습니다.'}
+              {exportKind === 'spec' &&
+                '빈칸이 있습니다. 화면에서 [입력으로] 를 손으로 누르며 내리던 판단이라 도구가 채울 수 없습니다. 이게 안 채워지면 코드를 쓸 때 지어내게 됩니다.'}
+            </p>
+
+            {exportKind === 'cases' && cases.length > 0 && (
+              <div className="flex flex-col gap-1 border-y border-neutral-200 py-2 dark:border-neutral-800">
+                {cases.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2 text-[11px]">
+                    <span className="w-32 shrink-0 truncate text-neutral-500">
+                      {item.stage}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {item.note || '(설명 없음)'}
+                    </span>
+                    <span className="shrink-0 text-neutral-500">
+                      {item.at.slice(5, 16).replace('T', ' ')}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCases((prev) => prev.filter((_, i) => i !== index))
+                      }
+                      className="px-1 text-neutral-400 hover:text-red-600"
+                      title="이 케이스 삭제"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {exportKind === 'cases' && cases.length === 0 && (
+              <p className="text-[11px] text-neutral-500">
+                아직 없습니다. 좋은 결과가 나왔을 때 답변 옆{' '}
+                <b>[케이스로 저장]</b>을 누르세요.
+              </p>
+            )}
+
+            <textarea
+              value={exportText}
+              readOnly
+              spellCheck={false}
+              className="h-72 w-full resize-y rounded border border-neutral-200 bg-transparent p-3 font-mono text-[11px] dark:border-neutral-800"
+            />
           </div>
         </Panel>
       )}
@@ -2597,6 +2803,16 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
                       입력으로
                     </button>
                   </div>
+                )}
+
+                {thread.result?.ok && (
+                  <button
+                    onClick={saveCase}
+                    className="rounded border border-neutral-400 px-2 py-1 dark:border-neutral-600"
+                    title="이 호출을 회귀 테스트 재료로 남깁니다"
+                  >
+                    케이스로 저장
+                  </button>
                 )}
 
                 {thread.result && (
