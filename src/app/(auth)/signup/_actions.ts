@@ -16,13 +16,16 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 
+/**
+ * **이 파일에서 상수를 내보내면 안 된다.** `'use server'` 파일은 async
+ * 함수만 내보낼 수 있다. 타입은 지워지므로 괜찮지만, 값은 실행할 때
+ * 터진다 — 빌드는 통과한다. 처음 값은 부르는 쪽에서 만든다.
+ */
 export type SignUpState =
   | { status: 'idle' }
   | { status: 'error'; message: string }
   /** 확인 메일을 보냈다. 링크를 눌러야 로그인된다(DEV-003 §4-4) */
   | { status: 'sent'; email: string };
-
-export const SIGN_UP_IDLE: SignUpState = { status: 'idle' };
 
 const text = (form: FormData, key: string): string =>
   String(form.get(key) ?? '').trim();
