@@ -3047,18 +3047,32 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   <button
                     onClick={runAuto}
                     className="rounded bg-neutral-900 px-4 py-2 text-white dark:bg-white dark:text-neutral-900"
+                    title="지금 고른 상대로 딱 한 번 돌립니다. 걸음이 화면에 그대로 쌓입니다"
                   >
                     한 번
                   </button>
+                  {/* 버튼의 숫자는 **몇 번 도는지의 합**이다. 옆의 [반복]
+                      과 이름이 같으면 둘이 다른 숫자인 이유를 알 수 없다.
+                      그렇다고 숫자를 지우면 돈이 얼마나 나갈지 안 보인다. */}
                   <button
                     onClick={repeatAuto}
                     className="rounded border border-neutral-400 px-4 py-2 dark:border-neutral-600"
-                    title={`${(autoAll ? profiles.length : 1) * Math.max(1, autoRepeat)}회 돌립니다`}
+                    title={
+                      autoAll
+                        ? `반복 ${Math.max(1, autoRepeat)} × 상대 ${profiles.length}명 = ${profiles.length * Math.max(1, autoRepeat)}회`
+                        : `지금 고른 상대로 ${Math.max(1, autoRepeat)}회`
+                    }
                   >
-                    반복 {(autoAll ? profiles.length : 1) * Math.max(1, autoRepeat)}회
+                    모두 돌리기 ·{' '}
+                    {(autoAll ? profiles.length : 1) * Math.max(1, autoRepeat)}회
                   </button>
-                  <label className="flex items-center gap-2">
-                    <span className="shrink-0 text-neutral-500">회차</span>
+                  <label
+                    className="flex items-center gap-2"
+                    title="상대 한 명을 몇 번씩 돌릴지. 모델은 매번 다르게 답하므로 여러 번 돌려야 통과율이 나옵니다"
+                  >
+                    <span className="shrink-0 cursor-help border-b border-dotted border-neutral-400 text-neutral-500">
+                      반복
+                    </span>
                     <input
                       value={String(autoRepeat)}
                       onChange={(event) =>
