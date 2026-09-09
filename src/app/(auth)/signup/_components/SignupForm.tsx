@@ -7,7 +7,9 @@
 
 import { useActionState } from 'react';
 import Link from 'next/link';
-import { signUp, SIGN_UP_IDLE, type SignUpState } from '../_actions';
+import { signUp, type SignUpState } from '../_actions';
+
+const IDLE: SignUpState = { status: 'idle' };
 
 const field =
   'rounded-xl border border-black/10 bg-white px-3.5 py-3 text-[15px] outline-none focus:border-meti';
@@ -35,7 +37,7 @@ function Row({
 export function SignupForm() {
   const [state, action, pending] = useActionState<SignUpState, FormData>(
     signUp,
-    SIGN_UP_IDLE,
+    IDLE,
   );
 
   if (state.status === 'sent') {
