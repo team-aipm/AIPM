@@ -38,6 +38,8 @@ import {
   type MapRow,
   type MapSource,
   defaultMapping,
+  resetWritten,
+  writtenPaths,
 } from '../_mapping';
 import {
   BLANK_ROUTE_ROW,
@@ -243,6 +245,17 @@ function pickComparable(
     limitKey: from.limitKey,
     resetKey: from.resetKey,
   };
+}
+
+/**
+ * 한 단계를 "처음" 으로 되돌린 입력.
+ *
+ * 대화와 횟수를 비우고, **실행하면서 매핑이 덮어쓴 칸**을 예시 값으로
+ * 돌린다. 학년이나 학생 id 처럼 손으로 고친 칸은 그대로 둔다.
+ */
+function freshInput(stage: Stage, input: string, written: string[]): string {
+  if (stage.inputMode !== 'json') return input;
+  return resetConversation(resetWritten(input, stage.sampleInput, written), shapeOf(stage));
 }
 
 /** 단계에서 대화 모양만 뽑는다 */
@@ -1646,7 +1659,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     let laps = 0;
     let at = start;
     let input = stages[at].threads[stages[at].activeThread]?.input ?? '';
-    if (autoFresh) input = resetConversation(input, shapeOf(stages[at]));
+    const written = writtenPaths(stages.map((stage) => stage.mapping));
+    if (autoFresh) input = freshInput(stages[at], input, written);
     let n = 0;
     let students = 0;
     let moves = 0;
@@ -1766,7 +1780,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         // 받는 쪽 입력에 남아 있던 대화도 지운다. 옮겨온 대화가 그
         // 위에 얹히면 두 번 나온다.
         const cleanTarget = autoFresh
-          ? resetConversation(targetInput, shapeOf(target))
+          ? freshInput(target, targetInput, written)
           : targetInput;
         input =
           applyMapping(stage.mapping, parsed, input, cleanTarget)?.json ??
@@ -2502,12 +2516,15 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
             if (
               !window.confirm(
                 '모든 단계의 대화와 응답 횟수를 비웁니다.\n' +
-                  '프롬프트 · 설정 · student_id · grade · turn_limit 은 그대로 둡니다.\n\n' +
+                  '실행하면서 쌓인 값(session_phase · mode_status 등)도\n' +
+                  '단계의 예시 값으로 되돌립니다.\n\n' +
+                  '프롬프트 · 설정 · 직접 고친 입력 칸은 그대로 둡니다.\n\n' +
                   '계속할까요?',
               )
             ) {
               return;
             }
+            const written = writtenPaths(stages.map((stage) => stage.mapping));
             setStages((prev) =>
               prev.map((stage) => ({
                 ...stage,
@@ -2516,10 +2533,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   transcript: [],
                   result: null,
                   images: [],
-                  input:
-                    stage.inputMode === 'json'
-                      ? resetConversation(t.input, shapeOf(stage))
-                      : t.input,
+                  input: freshInput(stage, t.input, written),
                 })),
               })),
             );
