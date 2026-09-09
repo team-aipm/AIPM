@@ -75,17 +75,16 @@ AI 생각 중 · 힌트 · 문제 완료 · 한 번 더 도전 · AI 오류 · �
 
 ---
 
-## 5. PAR · 보호자 (3)
+## 5. PAR · 보호자 (1)
 
 | Screen ID | 화면명 | Route | 파일 |
 |---|---|---|---|
-| `PAR-001` | 보호자 PIN | `/parent/pin` | `(parent)/pin/page.tsx` |
-| `PAR-002` | 부모 HOME | `/parent` | `(parent)/page.tsx` |
-| `PAR-003` | 보호자 PIN 설정/변경 | `/parent/pin/settings` | `(parent)/pin/settings/page.tsx` |
+| `PAR-002` | 부모 HOME | `/parent` | `(parent)/parent/page.tsx` |
 
-- 학생 영역 → 부모 영역 진입 시 `/parent/pin`을 거친다. 게이트는
-  `src/middleware.ts`가 담당한다. (COM-003 §11)
-- 부모 → 학생 이동은 PIN 재입력 없이 `/students`로 간다.
+- 학생 영역 ↔ 부모 영역은 별도 확인 없이 오간다.
+- **괄호 폴더는 경로에 들어가지 않는다.** `(parent)/page.tsx` 는 `/parent`
+  가 아니라 `/` 다. 실제 파일은 `(parent)/parent/page.tsx` 이며 아래 표의
+  파일 경로도 그 기준이다.
 
 ---
 
@@ -226,4 +225,5 @@ Studio에서의 직접 데이터 수정은 하지 않고, 상태 변경이 필�
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| — | 2026-09-10 | **보호자 PIN 삭제** (PAR-001 · PAR-003). 괄호 폴더가 경로에 들어가지 않는다는 점을 명시하고 PAR-002 파일 경로를 실제와 맞춤 | — |
 | 1.0 | 2026-08-28 | 최초 작성. COM-003 35개 Screen의 Route 매핑 확정 | — |
