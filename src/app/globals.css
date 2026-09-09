@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/**
+ * 메티 색. 프로토타입(METI)에서 가져왔다.
+ *
+ * 화면마다 #ddf4f6 을 적으면 색을 바꿀 때 전부 찾아다녀야 한다.
+ * `bg-meti-bg` · `text-meti-sub` 처럼 이름으로 쓴다.
+ */
+@theme {
+  --color-meti: #1f6f78;
+  --color-meti-bg: #ddf4f6;
+  --color-meti-ink: #12343b;
+  --color-meti-sub: #718087;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
