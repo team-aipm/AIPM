@@ -36,7 +36,8 @@ export type StageName =
   | '03 MODE B'
   | '04 HINT'
   | '05 EVALUATOR'
-  | '06 DAILY ANALYZER';
+  | '06 DAILY ANALYZER'
+  | '07 WEEKLY REPORT';
 
 export type RunResult =
   | { ok: true; output: Record<string, unknown>; raw: string; elapsedMs: number }
