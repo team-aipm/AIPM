@@ -330,6 +330,7 @@ function toSaved(stage: Stage): SavedStage {
     turnCountKey: stage.turnCountKey,
     remainingKey: stage.remainingKey,
     limitKey: stage.limitKey,
+    resetKey: stage.resetKey,
     provider: stage.provider,
     model: stage.model,
     temperature: stage.temperature,
@@ -435,6 +436,7 @@ function upgradeStage(
     'turnCountKey',
     'remainingKey',
     'limitKey',
+    'resetKey',
   ] as const;
   for (const field of untouched) {
     if (next[field] === undefined || next[field] === BLANK_STAGE[field]) {
@@ -828,6 +830,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     turnCountKey: active?.turnCountKey ?? '',
     remainingKey: active?.remainingKey ?? '',
     limitKey: active?.limitKey ?? '',
+    resetKey: active?.resetKey ?? '',
   };
 
   /** 지금 단계가 실제로 쓸 모델 설정. 공통을 따를 수도, 직접 정했을 수도 */
@@ -2304,7 +2307,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     [
                       'chat',
                       '대화 모양',
-                      active.latestKey.trim() !== '' ? '고급' : '',
+                      active.latestKey.trim() !== '' || active.resetKey.trim() !== ''
+                        ? '고급'
+                        : '',
                     ],
                     [
                       'rules',
@@ -2797,6 +2802,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       ['turnCountKey', '학생 발화 수', '비우면 안 씀'],
                       ['limitKey', '한도', '비우면 안 씀'],
                       ['remainingKey', '남은 횟수', '한도가 있어야 계산'],
+                      ['resetKey', '문제 바뀜 기준', '비우면 안 씀'],
                     ] as const
                   ).map(([key, label, ph]) => (
                     <label key={key} className="flex min-w-[16rem] flex-1 items-center gap-2">
@@ -2858,6 +2864,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     <b>남은 횟수</b>는 <b>한도 − 학생 발화 수</b>로 도구가
                     계산합니다. 모델에게 숫자를 비교시키지 않으려고 두는 값이라
                     도구가 채우는 게 맞습니다.
+                  </p>
+                  <p>
+                    <b>문제 바뀜 기준</b>은 새 문제가 시작된 것을 알아보는
+                    자리입니다. 결과의 이 값이 입력과 달라지면 대화 기록과
+                    횟수를 <b>0부터 다시</b> 시작합니다 — COM-001 §7의 5회는
+                    한 문제 기준이기 때문입니다. 화면의 말풍선은 따로 쌓이므로
+                    지워지지 않습니다.
                   </p>
                   <p>
                     <b>AI 턴 모양</b>을 비우면 AI 응답을 대화 배열에 남기지

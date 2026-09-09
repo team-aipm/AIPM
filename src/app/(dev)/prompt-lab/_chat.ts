@@ -62,6 +62,19 @@ export type ChatShape = {
   /** 남은 횟수. turnCountKey 와 limitKey 가 함께 있어야 계산한다 */
   remainingKey: string;
   limitKey: string;
+  /**
+   * **문제가 바뀐 것을 알아보는 자리.** 비우면 쓰지 않는다.
+   *
+   * COM-001 §7 은 학생 응답 5회를 "한 문제에서" 로 정한다. 그런데
+   * 도구는 배열에 쌓인 학생 턴을 전부 세고 있었다. 새 문제가 나와도
+   * 숫자가 안 줄어서, 두 번째 문제는 시작부터 남은 횟수가 모자랐다.
+   *
+   * 결과의 이 값이 입력의 값과 다르면 새 문제로 본다. 그때 대화
+   * 기록과 마지막 발화를 비우고 횟수를 0 부터 다시 센다. 화면의
+   * 말풍선은 따로 쌓이므로 지워지지 않는다 — 모델에게 보내는 기록만
+   * 새 문제부터 시작한다.
+   */
+  resetKey: string;
 };
 
 export const DEFAULT_CHAT_SHAPE: ChatShape = {
@@ -74,6 +87,7 @@ export const DEFAULT_CHAT_SHAPE: ChatShape = {
   turnCountKey: '',
   remainingKey: '',
   limitKey: '',
+  resetKey: '',
 };
 
 export type Turn = {
@@ -318,8 +332,18 @@ export function appendAiTurn(
 
   let next: Record<string, unknown> = { ...root };
 
+  // 새 문제면 기록을 비우고 시작한다. 앞 문제의 턴이 남아 있으면
+  // 이번 문제의 남은 횟수가 그만큼 깎인다.
+  const restarted = startsNewProblem(root, output, shape.resetKey);
+  if (restarted) {
+    next = writeAt(next, shape.historyKey, []) as Record<string, unknown>;
+    if (shape.latestKey.trim() !== '') {
+      next = writeAt(next, shape.latestKey, null) as Record<string, unknown>;
+    }
+  }
+
   if (replyText !== null) {
-    const current = readAt(root, shape.historyKey);
+    const current = readAt(next, shape.historyKey);
     const history = Array.isArray(current) ? [...current] : [];
     const turn = makeTurn(shape.aiTurn, shape.aiField, replyText);
     // AI 턴 템플릿을 비우면 배열에 남기지 않는다. 학생 응답만 기록하는
@@ -400,4 +424,27 @@ function stringify(value: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 결과가 앞과 다른 문제를 내놓았는가.
+ *
+ * 양쪽에 값이 다 있고 서로 다를 때만 참이다. 결과에 그 칸이 없으면
+ * (같은 문제를 이어가는 턴) 건드리지 않는다. 입력에 없으면 첫 문제라
+ * 비울 것도 없다.
+ */
+function startsNewProblem(
+  root: Record<string, unknown>,
+  output: unknown,
+  resetKey: string,
+): boolean {
+  const path = resetKey.trim();
+  if (path === '' || !isRecord(output)) return false;
+
+  const before = readAt(root, path);
+  const after = readAt(output, path);
+  if (before === undefined || after === undefined) return false;
+  if (before === null || after === null) return false;
+
+  return JSON.stringify(before) !== JSON.stringify(after);
 }
