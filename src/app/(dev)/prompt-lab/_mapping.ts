@@ -268,3 +268,65 @@ export function defaultMapping(name: string): MapRow[] {
   // 얕은 복사. 화면에서 고친 값이 프리셋에 스며들면 안 된다.
   return (AIPM_MAPS[name] ?? []).map((row) => ({ ...row }));
 }
+
+/**
+ * 매핑이 덮어쓰는 칸 전부.
+ *
+ * **실행하면서 쌓이는 값이 정확히 여기다.** 단계를 옮길 때마다
+ * 매핑이 이 칸들에 값을 써 넣는다. `session_phase` 가 CONTINUE 로
+ * 바뀌고 `mode_a_count` 가 하나씩 는다.
+ *
+ * 대화를 비워도 이건 남아 있었다. 그래서 새로 시작한 첫 발화가
+ * "벌써 두 문제나 풀었네!" 였다 — 대화는 없는데 기록은 남은 것이다.
+ */
+export function writtenPaths(all: MapRow[][]): string[] {
+  const out = new Set<string>();
+  for (const rows of all) {
+    for (const row of rows) {
+      const to = row.to.trim();
+      const from = row.from.trim();
+      if (to === '') continue;
+
+      // **그냥 옮겨 나르는 칸은 빼야 한다.**
+      //
+      // `student → student` 는 단계를 옮길 때 학생 정보를 들려 보내는
+      // 줄이지, 실행이 만들어 내는 값이 아니다. 이걸 되돌리면 학년을
+      // 6 으로 고쳐 둔 것까지 예시의 5 로 돌아간다.
+      //
+      // 같은 자리에서 같은 자리로 옮기는 줄이 그 표시다.
+      if (row.source === 'input' && from === to) continue;
+
+      out.add(to);
+    }
+  }
+  return [...out];
+}
+
+/**
+ * 매핑이 덮어쓴 칸을 예시 값으로 되돌린다.
+ *
+ * 입력을 통째로 예시로 갈아치우지 않는다. 학년이나 학생 id 를 고쳐
+ * 두었을 수 있다. **실행이 건드리는 칸만** 손댄다.
+ *
+ * 예시에 없는 칸은 그냥 둔다. 되돌릴 값을 모르는데 지우면 프롬프트가
+ * 읽을 게 없어진다.
+ */
+export function resetWritten(
+  inputJson: string,
+  sampleJson: string,
+  paths: string[],
+): string {
+  const root = safeParse(inputJson);
+  const sample = safeParse(sampleJson);
+  if (!isRecord(root) || !isRecord(sample)) return inputJson;
+
+  let next: unknown = root;
+  for (const path of paths) {
+    const segments = parsePath(path);
+    if (segments === null || path.includes('[]')) continue;
+    const found = getPath(sample, segments);
+    if (!found.exists) continue;
+    next = setPath(next, segments, found.value);
+  }
+  return JSON.stringify(next, null, 2);
+}
