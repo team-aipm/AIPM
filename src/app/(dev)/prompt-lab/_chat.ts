@@ -448,3 +448,25 @@ function startsNewProblem(
 
   return JSON.stringify(before) !== JSON.stringify(after);
 }
+
+/**
+ * 대화를 지우고 처음 상태로 되돌린다. **자동 실행이 시작할 때 쓴다.**
+ *
+ * 손으로 대화하던 입력이나 앞 회차의 끝 상태에서 시작하면, 학생이
+ * 이미 다섯 번 말한 자리에서 출발한다. 모델은 예전 대화를 이어받아
+ * 없던 문제를 다시 꺼내고, 남은 횟수는 처음부터 0 이다.
+ *
+ * **대화만 지운다.** student_id · grade · turn_limit 같은 설정은
+ * 그대로 둔다. 그건 실행에 필요한 값이지 대화가 아니다.
+ */
+export function resetConversation(inputJson: string, shape: ChatShape): string {
+  const root = safeParse(inputJson);
+  if (!isRecord(root)) return inputJson;
+
+  let next: Record<string, unknown> = { ...root };
+  next = writeAt(next, shape.historyKey, []) as Record<string, unknown>;
+  if (shape.latestKey.trim() !== '') {
+    next = writeAt(next, shape.latestKey, null) as Record<string, unknown>;
+  }
+  return stringify(syncCounters(next, shape, 0));
+}
