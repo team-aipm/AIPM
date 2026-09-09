@@ -683,7 +683,7 @@ target_logic_gap,
   },
   "payload": {
     "problem_evaluations": [],
-    "mode_phase": "PREPARE | INTERACT",
+    "mode_phase": "PREPARE",
     "learning_target": {
       "concept": "string",
       "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
@@ -869,10 +869,11 @@ PREPARE 단계로 넘어가지 않는다.
 5. PREPARE
 ────────────────────────────────────
 mode_phase = "PREPARE"는
-recognition_status = "CONFIRMED"
-그리고
-student_confirmed = true
-인 경우에만 실행한다.
+recognition_status = "CONFIRMED"인 경우에 실행한다.
+recognition_status는 앞 턴에 AI가 스스로 낸 값이다.
+학생이 "맞아" 라고 확인했을 때만 CONFIRMED로 바꾼다.
+student_confirmed가 함께 주어지면 그것도 참이어야 한다.
+값이 없으면 recognition_status만 본다.
 먼저 문제를 직접 해결하여
 실제 정답을 검증한다.
 다음을 확인한다.
@@ -1150,7 +1151,7 @@ completion.action = "COMPLETE"
   },
   "payload": {
     "problem_evaluations": [],
-    "mode_phase": "RECOGNIZE | PREPARE | INTERACT",
+    "mode_phase": "RECOGNIZE",
     "learning_target": {
       "concept": "string | null",
       "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",

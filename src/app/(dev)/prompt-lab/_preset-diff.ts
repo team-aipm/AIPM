@@ -50,6 +50,7 @@ export type Comparable = {
   resetKey: string;
   routing: Routing;
   mapping: MapRow[];
+  carry: MapRow[];
 };
 
 export type FieldId = keyof Comparable;
@@ -61,6 +62,7 @@ export const GROUPS: Group[] = [
   { id: 'prompt', label: '프롬프트', fields: ['prompt'] },
   { id: 'routing', label: '분기', fields: ['routing'] },
   { id: 'mapping', label: '다음 단계로 보낼 값', fields: ['mapping'] },
+  { id: 'carry', label: '이어지는 값', fields: ['carry'] },
   {
     id: 'chat',
     label: '대화 모양',
