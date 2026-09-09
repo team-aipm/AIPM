@@ -19,8 +19,15 @@ import { parseOutput } from '@/lib/ai/pipeline/chat';
  *
  * 도구에서는 단계마다 고를 수 있지만 제품은 하나로 간다. 바꿀 일이 생기면
  * 여기 한 줄이다.
+ *
+ * 단가는 100만 토큰당 입력 $0.25 · 출력 $1.5 다(2026-09-01 확인).
+ * `gemini-3.6-flash` 의 1/6 · 1/5 다.
+ *
+ * **프롬프트는 `gemini-3.6-flash` 로 다듬었다.** 같은 프롬프트라도 모델이
+ * 바뀌면 지키는 정도가 달라진다 — 특히 JSON 형식과 "보기를 네 개 낸다"
+ * 같은 세부 규칙이다. 이상하게 굴면 프롬프트가 아니라 이 줄을 먼저 의심한다.
  */
-export const MODEL = 'gemini-3.6-flash';
+export const MODEL = 'gemini-3.1-flash-lite';
 
 export type StageName =
   | '01 SESSION HOST'
