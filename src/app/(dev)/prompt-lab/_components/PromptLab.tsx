@@ -37,6 +37,7 @@ import {
   MAP_SOURCES,
   type MapRow,
   type MapSource,
+  defaultMapping,
 } from '../_mapping';
 import {
   BLANK_ROUTE_ROW,
@@ -220,7 +221,9 @@ const LOG_LABEL: Record<AutoStep['kind'], string> = {
 };
 
 /** 견줄 칸만 뽑는다. routing 은 프리셋 쪽 출처가 달라 부르는 쪽이 붙인다 */
-function pickComparable(from: Omit<Comparable, 'routing'>): Omit<Comparable, 'routing'> {
+function pickComparable(
+  from: Omit<Comparable, 'routing' | 'mapping'>,
+): Omit<Comparable, 'routing' | 'mapping'> {
   return {
     prompt: from.prompt,
     inputMode: from.inputMode,
@@ -274,7 +277,8 @@ function toStage(base: StagePreset, key: string): Stage {
     useCommonPrompt: true,
     forceJsonMimeType: false,
     rules: EMPTY_RULES,
-    mapping: [],
+    // 이름으로 찾는다. AIPM 프리셋이 아니면 빈 값이다.
+    mapping: defaultMapping(base.name),
     // 이름으로 찾는다. AIPM 프리셋이 아니면 빈 값이다.
     routing: defaultRouting(base.name),
     threads: [newThread(`${key}-t0`, '대화 1', base.sampleInput)],
@@ -467,7 +471,8 @@ function fromSaved(
       fields: Array.isArray(item.rules?.fields) ? item.rules.fields : [],
       banned: typeof item.rules?.banned === 'string' ? item.rules.banned : '',
     },
-    mapping: Array.isArray(item.mapping) ? item.mapping : [],
+    // 예전 저장본에는 없다. 이름이 프리셋과 같으면 기본 매핑을 준다.
+    mapping: Array.isArray(item.mapping) ? item.mapping : defaultMapping(item.name ?? ''),
     // 예전 저장본에는 없다. 이름이 프리셋과 같으면 기본 분기를 준다.
     routing:
       typeof item.routing?.from === 'string' && Array.isArray(item.routing.rows)
@@ -1037,9 +1042,16 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     if (active === undefined) return null;
     const found = preset.find((item) => item.name === active.name);
     if (found === undefined) return null;
-    const base: Comparable = { ...pickComparable(found), routing: defaultRouting(found.name) };
+    const base: Comparable = {
+      ...pickComparable(found),
+      routing: defaultRouting(found.name),
+      mapping: defaultMapping(found.name),
+    };
     const mine = pickComparable(active);
-    const diffs = diffAgainst({ ...mine, routing: active.routing }, base);
+    const diffs = diffAgainst(
+      { ...mine, routing: active.routing, mapping: active.mapping },
+      base,
+    );
     return diffs.length === 0 ? null : { diffs, base };
   })();
 
@@ -3458,7 +3470,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                         patch(
                           activeIndex,
                           pull(
-                            { ...pickComparable(active), routing: active.routing },
+                            {
+                              ...pickComparable(active),
+                              routing: active.routing,
+                              mapping: active.mapping,
+                            },
                             drift.base,
                             [group.id],
                           ),
@@ -3489,7 +3505,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       patch(
                         activeIndex,
                         pull(
-                          { ...pickComparable(active), routing: active.routing },
+                          {
+                            ...pickComparable(active),
+                            routing: active.routing,
+                            mapping: active.mapping,
+                          },
                           drift.base,
                           drift.diffs.map(({ group }) => group.id),
                         ),
