@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 import { BLANK_STAGE, type StagePreset } from '@/lib/ai/prompts/stages';
 import { COMMON_RULES } from '@/lib/ai/prompts/common-rules';
@@ -42,10 +42,23 @@ import {
   BLANK_ROUTE_ROW,
   defaultRouting,
   hasRouting,
+  matchRoute,
   pickRoute,
   type RouteRow,
   type Routing,
 } from '../_routing';
+import {
+  cleanStudentReply,
+  DEFAULT_LIMITS,
+  DEFAULT_STUDENT_PROMPT,
+  FINISH,
+  STAY,
+  STOP_TEXT,
+  studentInput,
+  type AutoLimits,
+  type AutoStep,
+  type StopReason,
+} from '../_autorun';
 import { parsePath, setPath } from '../_paths';
 import { stageColor } from '../_stage-colors';
 import {
@@ -170,6 +183,14 @@ type Props = {
    */
   varPreset: VarSet[];
   hasEnvApiKey: boolean;
+};
+
+const LOG_LABEL: Record<AutoStep['kind'], string> = {
+  ai: 'AI',
+  student: '학생',
+  move: '이동',
+  end: '끝',
+  error: '오류',
 };
 
 /** 프리셋 한 줄을 화면 상태로 바꾼다. key는 React 전용이며 DOM에 넣지 않는다. */
@@ -504,7 +525,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   );
   const [activeSet, setActiveSet] = useState(0);
   const [panel, setPanel] = useState<
-    'none' | 'prompt' | 'price' | 'settings' | 'vars' | 'export'
+    'none' | 'prompt' | 'price' | 'settings' | 'vars' | 'export' | 'auto'
   >('none');
   const [exportKind, setExportKind] = useState<
     'stages' | 'cases' | 'rules' | 'spec'
@@ -536,6 +557,20 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    */
   const [spentTokens, setSpentTokens] = useState({ prompt: 0, output: 0 });
   const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
+  /**
+   * 자동 실행. AI 가 학생 자리에 앉아 끝까지 돌린다.
+   *
+   * 중지는 ref 로 본다. 루프가 도는 동안 state 는 옛 값이 잡혀 있어
+   * 버튼을 눌러도 루프가 못 본다.
+   */
+  const [autoPrompt, setAutoPrompt] = useState(DEFAULT_STUDENT_PROMPT);
+  const [autoLimits, setAutoLimits] = useState<AutoLimits>(DEFAULT_LIMITS);
+  const [autoStart, setAutoStart] = useState(0);
+  const [autoLog, setAutoLog] = useState<AutoStep[]>([]);
+  const [autoRunning, setAutoRunning] = useState(false);
+  const [autoStop, setAutoStop] = useState<StopReason | null>(null);
+  const stopFlag = useRef(false);
+
   /** 결과를 보낼 단계. null 이면 기본값(다음 단계, 마지막이면 처음) */
   const [sendTarget, setSendTarget] = useState<number | null>(null);
   /** 방금 옮긴 결과를 알린다. 어느 규칙으로 옮겼는지 보여야 한다 */
@@ -630,11 +665,17 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           stages?: SavedStage[];
           prices?: Record<string, Price>;
           krwRate?: string;
+          autoPrompt?: string;
+          autoLimits?: Partial<AutoLimits>;
         };
         if (parsed.prices && typeof parsed.prices === 'object') {
           setPrices(parsed.prices);
         }
         if (typeof parsed.krwRate === 'string') setKrwRate(parsed.krwRate);
+        if (typeof parsed.autoPrompt === 'string') setAutoPrompt(parsed.autoPrompt);
+        if (parsed.autoLimits && typeof parsed.autoLimits === 'object') {
+          setAutoLimits({ ...DEFAULT_LIMITS, ...parsed.autoLimits });
+        }
         // 예전 저장본은 세트가 없다. 통째로 `기본` 세트로 옮긴다.
         if (Array.isArray(parsed.cases)) setCases(parsed.cases);
         if (Array.isArray(parsed.varSets) && parsed.varSets.length > 0) {
@@ -737,6 +778,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           stages: stages.map(toSaved),
           prices,
           krwRate,
+          autoPrompt,
+          autoLimits,
         }),
       );
       setSaveState('saved');
@@ -755,6 +798,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     stages,
     prices,
     krwRate,
+    autoPrompt,
+    autoLimits,
   ]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -1189,6 +1234,238 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   function run() {
     if (!thread) return;
     execute(thread.input);
+  }
+
+  /**
+   * 단계 하나를 부른다. 화면 상태를 안 건드리고 결과만 준다.
+   *
+   * `execute` 는 지금 보고 있는 단계에 묶여 있어 루프에서 못 쓴다.
+   */
+  async function callStage(stage: Stage, input: string): Promise<RunResult | null> {
+    const settings = effective(stage, common);
+    const params = readParams(settings);
+    if (params === null) return null;
+    const model = settings.model.trim() || DEFAULT_MODEL[settings.provider];
+    const result = await runStage({
+      provider: settings.provider,
+      model,
+      system: applyVars(buildSystem(stage, commonPrompt), vars),
+      input: applyVars(input, vars),
+      inputMode: stage.inputMode,
+      outputMode: stage.outputMode,
+      checkRule: stage.checkRule,
+      rules: stage.rules,
+      forceJsonMimeType: stage.forceJsonMimeType,
+      apiKey: stage.apiKey.trim() || defaultKeys[settings.provider].trim(),
+      params,
+      images: [],
+    });
+    countSpend(model, result);
+    return result;
+  }
+
+  /** 학생 역할 모델. 공통 설정을 쓰고 평문으로 주고받는다 */
+  async function callStudent(text: string): Promise<RunResult> {
+    const model = common.model.trim() || DEFAULT_MODEL[common.provider];
+    const result = await runStage({
+      provider: common.provider,
+      model,
+      system: autoPrompt,
+      input: text,
+      inputMode: 'text',
+      outputMode: 'text',
+      checkRule: null,
+      rules: EMPTY_RULES,
+      forceJsonMimeType: false,
+      apiKey: defaultKeys[common.provider].trim(),
+      params: { temperature: null, maxTokens: null, topP: null },
+      images: [],
+    });
+    countSpend(model, result);
+    return result;
+  }
+
+  function countSpend(model: string, result: RunResult) {
+    if (!result.ok) return;
+    setSpentTokens((prev) => ({
+      prompt: prev.prompt + (result.tokens.prompt ?? 0),
+      output: prev.output + (result.tokens.output ?? 0),
+    }));
+    const found = findPrice(prices, model);
+    const cost = costOf(found?.price ?? null, result.tokens);
+    if (cost !== null) setSpentUsd((prev) => prev + cost);
+  }
+
+  /**
+   * 한 바퀴 돌린다.
+   *
+   * 단계 실행 → 학생에게 보일 말 → 학생 모델 → 학생 발화 → 다시 실행.
+   * 분기 규칙이 `(끝)` 을 내면 마치고, 다른 단계를 내면 옮긴다.
+   *
+   * 입력 JSON 은 루프가 손에 들고 다닌다. 화면 상태로 오가면 렌더를
+   * 기다려야 해서 옛 값을 읽는다. 화면에는 매 걸음 결과만 적어 준다.
+   */
+  async function runAuto() {
+    if (autoRunning || stages.length === 0) return;
+    stopFlag.current = false;
+    setAutoRunning(true);
+    setAutoStop(null);
+    setAutoLog([]);
+    setPanel('auto');
+
+    const names = stages.map((stage) => stage.name);
+    let at = Math.min(Math.max(0, autoStart), stages.length - 1);
+    let input = stages[at].threads[stages[at].activeThread]?.input ?? '';
+    let n = 0;
+    let students = 0;
+    let moves = 0;
+    let calls = 0;
+    let reason: StopReason = 'finished';
+
+    const add = (step: Omit<AutoStep, 'n'>) => {
+      n += 1;
+      setAutoLog((prev) => [...prev, { ...step, n }]);
+    };
+
+    // 한 바퀴가 끝날 때까지 순서대로 부른다. 병렬로 돌 수 없는 일이다.
+    for (;;) {
+      if (stopFlag.current) {
+        reason = 'stopped';
+        break;
+      }
+      if (calls >= autoLimits.calls) {
+        reason = 'call-limit';
+        break;
+      }
+
+      const stage = stages[at];
+      const shape: ChatShape = {
+        historyKey: stage.historyKey,
+        studentTurn: stage.studentTurn,
+        studentField: stage.studentField,
+        aiTurn: stage.aiTurn,
+        aiField: stage.aiField,
+        latestKey: stage.latestKey,
+        turnCountKey: stage.turnCountKey,
+        remainingKey: stage.remainingKey,
+        limitKey: stage.limitKey,
+        resetKey: stage.resetKey,
+      };
+
+      calls += 1;
+      const result = await callStage(stage, input);
+      if (result === null || !result.ok) {
+        add({
+          stage: at,
+          kind: 'error',
+          text: result?.error ?? '설정값을 읽지 못했습니다.',
+          raw: result?.raw,
+        });
+        reason = 'error';
+        break;
+      }
+
+      const failed = result.checks.filter((check) => check.level === 'fail');
+      const parsed = parseOutput(result.raw) ?? result.raw;
+      const pick = pickReply(result.raw, stage.outputMode, stage.replyKey);
+      const narrow =
+        stage.recordKey.trim() === ''
+          ? null
+          : pickReply(result.raw, stage.outputMode, stage.recordKey);
+      const recorded = narrow !== null && narrow.show ? narrow : pick;
+
+      add({
+        stage: at,
+        kind: 'ai',
+        text: pick.show ? pick.text : '(보여줄 말 없음)',
+        note: failed.length > 0 ? `검증 실패 ${failed.length}건` : undefined,
+        raw: result.raw,
+      });
+
+      const withAi = appendAiTurn(
+        input,
+        shape,
+        stage.replyKey,
+        parsed,
+        recorded.show ? recorded.text : null,
+      );
+      if (withAi !== null) input = withAi;
+      // 화면에도 남긴다. 끝나고 단계를 열면 마지막 상태가 보인다.
+      patchThread(at, stage.activeThread, { input, result });
+
+      // ── 어디로 갈지 ──────────────────────────────────────────────
+      const matched = matchRoute(stage.routing, parsed);
+      const to = matched?.to ?? STAY;
+
+      if (to === FINISH) {
+        add({ stage: at, kind: 'end', text: matched?.note ?? '' });
+        reason = 'finished';
+        break;
+      }
+
+      if (to !== STAY && to !== names[at]) {
+        const next = names.indexOf(to);
+        if (next === -1) {
+          add({ stage: at, kind: 'error', text: `"${to}" 라는 단계가 없습니다.` });
+          reason = 'error';
+          break;
+        }
+        if (moves >= autoLimits.moves) {
+          reason = 'move-limit';
+          break;
+        }
+        moves += 1;
+
+        const target = stages[next];
+        const targetInput = target.threads[target.activeThread]?.input ?? '{}';
+        const carried =
+          applyMapping(stage.mapping, parsed, input, targetInput) ??
+          (bridge(stage.checkRule, parsed, input, targetInput) === null
+            ? null
+            : { json: bridge(stage.checkRule, parsed, input, targetInput) as string });
+        input = carried?.json ?? mergeOutput(targetInput, parsed) ?? result.raw;
+
+        add({ stage: next, kind: 'move', text: `${names[at]} → ${to}`, note: matched?.note });
+        at = next;
+        patchThread(at, target.activeThread, { input });
+        setActiveIndex(at);
+        continue;
+      }
+
+      // ── 학생이 한 번 더 말한다 ──────────────────────────────────
+      if (students >= autoLimits.students) {
+        reason = 'student-limit';
+        break;
+      }
+      if (!pick.show) {
+        add({ stage: at, kind: 'error', text: '학생에게 보여줄 말이 없어 대화를 이어갈 수 없습니다.' });
+        reason = 'error';
+        break;
+      }
+
+      students += 1;
+      calls += 1;
+      const said = await callStudent(studentInput(readTurns(input, stage.historyKey), pick.text));
+      if (!said.ok) {
+        add({ stage: at, kind: 'error', text: said.error ?? '학생 모델 호출 실패' });
+        reason = 'error';
+        break;
+      }
+      const text = cleanStudentReply(said.raw);
+      add({ stage: at, kind: 'student', text });
+
+      const withUser = appendUserTurn(input, shape, text);
+      if (withUser === null) {
+        add({ stage: at, kind: 'error', text: '입력 JSON을 읽지 못해 학생 발화를 넣을 수 없습니다.' });
+        reason = 'error';
+        break;
+      }
+      input = withUser;
+      patchThread(at, stage.activeThread, { input });
+    }
+
+    setAutoStop(reason);
+    setAutoRunning(false);
   }
 
   /** 지금 단계의 프로바이더에 실제 모델 목록을 물어본다. */
@@ -1714,6 +1991,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
             ['price', '가격표'],
             ['prompt', '공통 프롬프트'],
             ['export', '내보내기'],
+            ['auto', '자동 실행'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -2005,6 +2283,149 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
               만들어 오가며 비교하세요. <b>[복제]</b>로 베낀 뒤 그 값만 고치면
               됩니다.
             </p>
+          </div>
+        </Panel>
+      )}
+
+      {panel === 'auto' && (
+        <Panel
+          title="자동 실행"
+          hint={
+            autoRunning
+              ? '도는 중… 아래 [중지]로 멈춥니다'
+              : 'AI가 학생 자리에 앉아 끝까지 돌립니다'
+          }
+          onClose={() => setPanel('none')}
+        >
+          <div className="flex flex-col gap-3 p-3">
+            <p className="text-[11px] text-neutral-500">
+              단계를 실행하고, 학생에게 보일 말을 <b>학생 역할 모델</b>에 넘기고,
+              그 답을 다시 단계에 넣습니다. 어디로 갈지는 각 단계의{' '}
+              <b>[분기]</b> 표가 정합니다 — 거기서 <code>{STAY}</code> 와{' '}
+              <code>{FINISH}</code> 를 고를 수 있습니다. 규칙이 없으면 학생 발화
+              상한에 걸릴 때까지 대화를 이어갑니다.
+            </p>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex items-center gap-2">
+                <span className="shrink-0 text-neutral-500">시작 단계</span>
+                <select
+                  value={autoStart}
+                  onChange={(event) => setAutoStart(Number(event.target.value))}
+                  disabled={autoRunning}
+                  className="rounded border border-neutral-300 bg-transparent px-1 py-1 dark:border-neutral-700"
+                >
+                  {stages.map((stage, index) => (
+                    <option key={stage.key} value={index}>
+                      {stage.name || '(이름 없음)'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {(
+                [
+                  ['students', '학생 발화'],
+                  ['moves', '단계 이동'],
+                  ['calls', '호출'],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2">
+                  <span className="shrink-0 text-neutral-500">{label} 상한</span>
+                  <input
+                    value={String(autoLimits[key])}
+                    onChange={(event) =>
+                      setAutoLimits((prev) => ({
+                        ...prev,
+                        [key]: Math.max(1, Number(event.target.value) || 1),
+                      }))
+                    }
+                    disabled={autoRunning}
+                    inputMode="numeric"
+                    className="w-16 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  />
+                </label>
+              ))}
+
+              {autoRunning ? (
+                <button
+                  onClick={() => {
+                    stopFlag.current = true;
+                  }}
+                  className="rounded bg-red-600 px-4 py-2 text-white"
+                >
+                  중지
+                </button>
+              ) : (
+                <button
+                  onClick={runAuto}
+                  className="rounded bg-neutral-900 px-4 py-2 text-white dark:bg-white dark:text-neutral-900"
+                >
+                  실행
+                </button>
+              )}
+            </div>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-neutral-500">
+                학생 역할 프롬프트{' '}
+                <span className="text-[11px]">
+                  · 공통 설정의 모델을 씁니다 · 평문으로 주고받습니다
+                </span>
+              </span>
+              <textarea
+                value={autoPrompt}
+                onChange={(event) => setAutoPrompt(event.target.value)}
+                disabled={autoRunning}
+                spellCheck={false}
+                className="h-40 w-full resize-y rounded border border-neutral-300 bg-transparent p-2 outline-none dark:border-neutral-700"
+              />
+            </label>
+
+            {(autoLog.length > 0 || autoStop !== null) && (
+              <div className="flex flex-col gap-1 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                {autoLog.map((step) => (
+                  <div key={step.n} className="flex gap-2 border-b border-dashed border-neutral-200 py-1 last:border-0 dark:border-neutral-800">
+                    <span className="w-6 shrink-0 text-right text-[11px] text-neutral-400">
+                      {step.n}
+                    </span>
+                    <span
+                      className={`w-24 shrink-0 text-[11px] ${
+                        stageColor(step.stage).text
+                      }`}
+                    >
+                      {stages[step.stage]?.name ?? '?'}
+                    </span>
+                    <span className="w-12 shrink-0 text-[11px] text-neutral-500">
+                      {LOG_LABEL[step.kind]}
+                    </span>
+                    <span
+                      className={`min-w-0 flex-1 whitespace-pre-wrap ${
+                        step.kind === 'error' ? 'text-red-600 dark:text-red-400' : ''
+                      }`}
+                    >
+                      {step.text}
+                      {step.note !== undefined && (
+                        <span className="text-[11px] text-neutral-500"> · {step.note}</span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+
+                {autoStop !== null && (
+                  <p
+                    className={`pt-1 text-[11px] ${
+                      autoStop === 'finished'
+                        ? 'text-neutral-500'
+                        : 'text-amber-700 dark:text-amber-500'
+                    }`}
+                  >
+                    {STOP_TEXT[autoStop]} 각 단계를 열면 마지막 입력과 결과가
+                    그대로 남아 있습니다.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </Panel>
       )}
@@ -3110,6 +3531,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       {/* 저장해 둔 이름의 단계가 지금 없을 수도 있다. 그때도
                           고른 값이 보이게 빈 칸을 맨 앞에 둔다. */}
                       <option value="">(고르세요)</option>
+                      {/* 자동 실행 전용. 손으로 보낼 때는 못 고른 것으로 본다 */}
+                      <option value={STAY}>{STAY} · 학생이 한 번 더</option>
+                      <option value={FINISH}>{FINISH} · 실행을 마친다</option>
                       {stages.map((stage, i) =>
                         i === activeIndex ? null : (
                           <option key={stage.key} value={stage.name}>
@@ -3117,9 +3541,12 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                           </option>
                         ),
                       )}
-                      {row.to !== '' && !stages.some((stage) => stage.name === row.to) && (
-                        <option value={row.to}>{row.to} (없는 단계)</option>
-                      )}
+                      {row.to !== '' &&
+                        row.to !== STAY &&
+                        row.to !== FINISH &&
+                        !stages.some((stage) => stage.name === row.to) && (
+                          <option value={row.to}>{row.to} (없는 단계)</option>
+                        )}
                     </select>
                     <button
                       onClick={() => removeRouteRow(index)}
@@ -3139,6 +3566,12 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     + 분기
                   </button>
                 </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  <b>{STAY}</b> 와 <b>{FINISH}</b> 는 <b>[자동 실행]</b> 에서만
+                  씁니다. 손으로 <b>[입력으로]</b> 를 누를 때는 못 고른 것으로 보고
+                  기본 대상으로 갑니다.
+                </p>
 
                 <p className="text-[11px] text-neutral-500">
                   위에서부터 먼저 맞는 줄이 이깁니다. 대소문자는 가리지 않고,

@@ -63,20 +63,57 @@ export function pickRoute(
   names: string[],
   self: number,
 ): RoutePick | null {
+  const matched = matchRoute(routing, output);
+  if (matched === null) return null;
+  // 손으로 보낼 때는 못 고르면 기본 대상으로 간다. 그 사실까지 알려 준다.
+  if (matched.to === null) {
+    return { index: null, note: `${matched.note} 기본 대상으로 둡니다.` };
+  }
+
+  const to = matched.to;
+  const index = names.findIndex((name) => name === to);
+  if (index === -1) {
+    return { index: null, note: `${matched.shown} → "${to}" 라는 단계가 없습니다.` };
+  }
+  if (index === self) {
+    return { index: null, note: `${matched.shown} → 자기 자신이라 보낼 수 없습니다.` };
+  }
+
+  return { index, note: matched.note };
+}
+
+/** 규칙이 고른 대상 이름. 단계 이름일 수도, 예약 대상일 수도 있다 */
+export type RouteMatch = {
+  /** 고른 대상. 못 골랐으면 null */
+  to: string | null;
+  /** 읽은 값을 보기 좋게 줄인 것 */
+  shown: string;
+  note: string;
+};
+
+/**
+ * 결과에서 값을 읽어 맞는 줄을 찾는다. **이름 해석은 하지 않는다.**
+ *
+ * 손으로 보낼 때는 대상이 반드시 단계여야 하지만, 자동 실행에서는
+ * `(계속)` · `(끝)` 같은 예약 대상도 나온다. 그래서 이름을 자리로
+ * 바꾸는 일은 부르는 쪽에 맡긴다.
+ */
+export function matchRoute(routing: Routing, output: unknown): RouteMatch | null {
   if (!hasRouting(routing)) return null;
 
   const from = routing.from.trim();
   const segments = parsePath(from);
   if (segments === null) {
-    return { index: null, note: `${from} → 읽을 경로가 올바르지 않습니다.` };
+    return { to: null, shown: '', note: `${from} → 읽을 경로가 올바르지 않습니다.` };
   }
 
   const found = getPath(output, segments);
   if (!found.exists) {
-    return { index: null, note: `결과에 ${from} 가 없어 기본 대상으로 둡니다.` };
+    return { to: null, shown: '', note: `결과에 ${from} 가 없습니다.` };
   }
 
   const value = asText(found.value);
+  const shown = preview(found.value);
   const row = routing.rows.find((candidate) => {
     if (candidate.to.trim() === '') return false;
     const want = candidate.equals.trim();
@@ -85,21 +122,12 @@ export function pickRoute(
     return want.toLowerCase() === value.toLowerCase();
   });
 
-  const shown = preview(found.value);
   if (row === undefined) {
-    return { index: null, note: `${from} 가 ${shown} 인데 맞는 줄이 없습니다.` };
+    return { to: null, shown, note: `${from} 가 ${shown} 인데 맞는 줄이 없습니다.` };
   }
 
   const to = row.to.trim();
-  const index = names.findIndex((name) => name === to);
-  if (index === -1) {
-    return { index: null, note: `${shown} → "${to}" 라는 단계가 없습니다.` };
-  }
-  if (index === self) {
-    return { index: null, note: `${shown} → 자기 자신이라 보낼 수 없습니다.` };
-  }
-
-  return { index, note: `${from} 가 ${shown} 이라 ${to} 로 정했습니다.` };
+  return { to, shown, note: `${from} 가 ${shown} 이라 ${to} 로 정했습니다.` };
 }
 
 /**
@@ -138,6 +166,26 @@ export const AIPM_ROUTES: Record<string, Routing> = {
       { equals: 'A', to: '02 MODE A' },
       { equals: 'B', to: '03 MODE B' },
     ],
+  },
+  // 자동 실행이 어디서 멈출지를 정한다. 손으로 누를 때는 (계속)·(끝)이
+  // 못 고른 것으로 읽히므로 예전과 똑같이 다음 단계가 기본이다.
+  '02 MODE A': {
+    from: 'completion.status',
+    rows: [
+      { equals: 'CONTINUE', to: '(계속)' },
+      { equals: '', to: '05 EVALUATOR' },
+    ],
+  },
+  '03 MODE B': {
+    from: 'completion.status',
+    rows: [
+      { equals: 'CONTINUE', to: '(계속)' },
+      { equals: '', to: '05 EVALUATOR' },
+    ],
+  },
+  '05 EVALUATOR': {
+    from: 'module',
+    rows: [{ equals: '', to: '(끝)' }],
   },
 };
 
