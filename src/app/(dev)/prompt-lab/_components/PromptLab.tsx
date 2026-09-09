@@ -2840,6 +2840,35 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
               <code>turn_limit</code> 같은 설정은 어느 쪽이든 그대로 둡니다.
             </p>
 
+            <div className="flex flex-col gap-1 rounded border border-neutral-200 p-2 text-[11px] text-neutral-500 dark:border-neutral-800">
+              {(
+                [
+                  ['학생 발화 상한', '한 회차에서 학생이 말한 총 횟수', '종료 분기가 없다는 뜻'],
+                  ['단계 이동 상한', '단계를 옮긴 총 횟수', '분기가 돌고 있다는 뜻'],
+                  ['호출 상한', '모델을 부른 총 횟수 · 단계 + 학생 + 재시도', '요금 안전장치'],
+                  ['재시도', '일시적 오류일 때 다시 부르는 횟수', '3 · 8 · 20 · 45초 쉬고'],
+                  ['바퀴', '시작 단계로 돌아온 횟수', 'AIPM 에서는 한 바퀴가 한 문제'],
+                ] as const
+              ).map(([name, what, when]) => (
+                <div key={name} className="flex flex-wrap gap-x-2">
+                  <b className="w-24 shrink-0">{name}</b>
+                  <span className="min-w-0 flex-1">{what}</span>
+                  <span className="text-neutral-400">{when}</span>
+                </div>
+              ))}
+              <p className="pt-1">
+                <b>앞의 셋은 &ldquo;이러면 뭔가 잘못된 것&rdquo;</b>이고, 바퀴는
+                &ldquo;여기까지만 보자&rdquo;입니다. 그래서 멈춘 이유도 다르게
+                적습니다.
+              </p>
+              <p>
+                프롬프트의 <code>turn_limit</code>(한 문제 5회)와는 다른 숫자입니다.
+                그건 <b>한 문제 안</b>에서 학생이 답한 횟수고, 여기 <b>학생 발화</b>는
+                01 에서 모드 고르는 대화까지 <b>한 회차 전체</b>를 셉니다. 로그에
+                학생 걸음이 7개여도 01 에서 2번 + 02 에서 5번이면 정상입니다.
+              </p>
+            </div>
+
             <p className="text-[11px] text-neutral-500">
               <b>503</b> 같은 일시적 오류는 <b>3 · 8 · 20 · 45초</b> 를 쉬며 다시
               해 봅니다. 붐빌 때 바로 다시 부르면 더 붐빕니다. 반면{' '}
