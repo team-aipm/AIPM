@@ -18,6 +18,7 @@ import { findTodaySession, countCompleted, today } from '@/lib/services/learning
 import { findDailyReport, saveDailyReport } from '@/lib/services/learning-report';
 import { createProblem, findActiveProblem, finishProblem } from '@/lib/services/problem';
 import { appendMessage, listMessages } from '@/lib/services/message';
+import { pickConcept } from '@/lib/services/concept';
 import { EVENT, record } from '@/lib/analytics/events';
 import { saveEvaluation, saveLogicGaps } from '@/lib/services/evaluation';
 import { Constants, type Database } from '@/types/database';
@@ -199,6 +200,8 @@ function buildModeAInput(args: {
   studentTexts: string[];
   supportLevel: number;
   latest: string | null;
+  /** COM-001 §9 로 고른 개념. 없으면 02 가 학년에 맞춰 알아서 낸다 */
+  concept?: string | null;
 }): string {
   const stage = stageOf('02 MODE A');
   let input: unknown = JSON.parse(stage.sampleInput);
@@ -295,13 +298,20 @@ export async function startProblem(): Promise<ProblemReply> {
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
   const { supabase, student, session } = ctx;
 
+  const problemNumber = session.completed_problem_count + 1;
+  const picked = await pickConcept(supabase, student.student_id, problemNumber);
+  if (picked.concept !== null) {
+    console.log(`[mission] 개념 선정: ${picked.concept} (${picked.reason})`);
+  }
+
   const input = buildModeAInput({
     studentId: student.student_id,
     grade: student.grade,
     persona: student.persona_type,
     sessionId: session.session_id,
-    problemNumber: session.completed_problem_count + 1,
+    problemNumber,
     totalProblems: session.target_problem_count,
+    concept: picked.concept,
     phase: 'PREPARE',
     problem: null,
     studentTexts: [],
@@ -330,8 +340,9 @@ export async function startProblem(): Promise<ProblemReply> {
     studentId: student.student_id,
     problemSource: 'ai',
     problemText,
-    // 개념 선정(COM-001 §9)이 아직 없다. 지어낸 이름을 넣지 않는다.
-    concept: '미지정',
+    // 고른 개념을 그대로 남긴다. 못 골랐으면(첫날) 05 가 이 문제에서
+    // 개념을 정해 주므로, 그때까지는 '미지정' 이다.
+    concept: picked.concept ?? '미지정',
     difficulty: student.current_difficulty,
     learningMode: 'mode_a',
     verifiedAnswer: verified ?? null,
@@ -677,10 +688,27 @@ async function evaluateProblem(
       finalAccuracy: args.correct,
     });
 
+    // 첫날에는 고를 개념이 없어서 '미지정' 으로 문제를 만든다. 05 가
+    // 이름을 붙여 주면 그때 채운다 — 그래야 다음 문제부터 §9 의 비율
+    // (취약 4 · 현재 4 · 복습 2)이 돌기 시작한다.
+    //
+    // 교육과정 taxonomy 가 정해지면(COM-002 §20) 그 목록에서 고르는 것으로
+    // 바꾼다. 지금은 이 학생이 지나온 이름만 쓴다.
+    const named = str(read(result.output, 'next_learning.target_concept'));
+    if (named !== '' && args.problem.concept === '미지정') {
+      const { error: nameError } = await supabase
+        .from('problem')
+        .update({ concept: named })
+        .eq('problem_id', args.problem.problem_id);
+      if (nameError !== null) {
+        console.error(`[mission] 개념 이름 저장 실패: ${nameError.message}`);
+      }
+    }
+
     await saveLogicGaps(supabase, {
       problemId: args.problem.problem_id,
       studentId: args.student.student_id,
-      concept: str(read(result.output, 'next_learning.target_concept')) || args.problem.concept,
+      concept: named || args.problem.concept,
       gaps: [
         gapOf(read(evaluation, 'primary_logic_gap')),
         gapOf(read(evaluation, 'secondary_logic_gap')),
@@ -977,12 +1005,15 @@ export async function confirmSourceProblem(
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
   const { supabase, student, session } = ctx;
 
+  const problemNumber = session.completed_problem_count + 1;
+  const picked = await pickConcept(supabase, student.student_id, problemNumber);
+
   const input = buildModeBInput({
     studentId: student.student_id,
     grade: student.grade,
     persona: student.persona_type,
     sessionId: session.session_id,
-    problemNumber: session.completed_problem_count + 1,
+    problemNumber,
     totalProblems: session.target_problem_count,
     phase: 'PREPARE',
     rawText: recognized,
@@ -1021,7 +1052,9 @@ export async function confirmSourceProblem(
     studentId: student.student_id,
     problemSource: fromPhoto ? 'photo' : 'text',
     problemText,
-    concept: '미지정',
+    // 학생이 가져온 문제라 개념을 우리가 정하지 않는다. 05 가 이름을
+    // 붙여 주면 그때 채운다.
+    concept: picked.concept ?? '미지정',
     difficulty: student.current_difficulty,
     learningMode: 'mode_b',
     verifiedAnswer: verified,
