@@ -171,7 +171,8 @@ export const AIPM_ROUTES: Record<string, Routing> = {
     rows: [
       { equals: 'MODE_A', to: '02 MODE A' },
       { equals: 'MODE_B', to: '03 MODE B' },
-      { equals: 'END', to: FINISH },
+      // 하루가 끝나면 종합으로 간다. 거기서 끝난다.
+      { equals: 'END', to: '06 DAILY ANALYZER' },
       // SESSION_HOST — 아직 안 골랐다. 학생이 말할 차례다.
       { equals: '', to: STAY },
     ],
@@ -198,6 +199,10 @@ export const AIPM_ROUTES: Record<string, Routing> = {
   '05 EVALUATOR': {
     from: 'module',
     rows: [{ equals: '', to: '01 SESSION HOST' }],
+  },
+  '06 DAILY ANALYZER': {
+    from: 'module',
+    rows: [{ equals: '', to: FINISH }],
   },
 };
 

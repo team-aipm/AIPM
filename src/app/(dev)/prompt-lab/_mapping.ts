@@ -20,7 +20,7 @@
 
 import { getPath, isRecord, parsePath, setPath } from './_paths';
 
-export type MapSource = 'output' | 'input' | 'literal' | 'increment';
+export type MapSource = 'output' | 'input' | 'literal' | 'increment' | 'append';
 
 export const MAP_SOURCES: { id: MapSource; label: string; hint: string }[] = [
   { id: 'output', label: '이 단계 결과', hint: '예: evaluation.reasoning_score' },
@@ -30,6 +30,11 @@ export const MAP_SOURCES: { id: MapSource; label: string; hint: string }[] = [
     id: 'increment',
     label: '1 더하기',
     hint: '예: payload.mode_status.mode_a_count',
+  },
+  {
+    id: 'append',
+    label: '배열에 쌓기',
+    hint: '결과에서 가져올 경로. 예: evaluation',
   },
 ];
 
@@ -85,6 +90,34 @@ export function applyMapping(
 
     if (row.source === 'literal') {
       next = setPath(next, target, parseLiteral(from));
+      applied += 1;
+      continue;
+    }
+
+    // 결과를 배열에 쌓는다.
+    //
+    // 06 DAILY ANALYZER 는 하루치 문제 **열 개의 평가**를 배열로 받는다.
+    // 한 문제를 풀 때마다 하나씩 붙여 두지 않으면, 06 을 시험하려고
+    // 열 바퀴를 다 돌리거나 손으로 배열을 채워야 한다.
+    //
+    // 붙일 배열은 **이 단계 입력**에서 읽는다. 받는 쪽 입력은 새로
+    // 비워진 상태라 거기서 읽으면 매번 하나짜리 배열이 된다.
+    if (row.source === 'append') {
+      const source = parsePath(from);
+      const list = parsePath(to);
+      if (source === null || list === null) {
+        notes.push(`${from} → 쌓을 경로가 올바르지 않습니다.`);
+        continue;
+      }
+      const found = getPath(output, source);
+      if (!found.exists) {
+        notes.push(`${from} → 결과에 그 값이 없어서 안 쌓았습니다.`);
+        continue;
+      }
+      const before = getPath(fromInput, list);
+      const rows = Array.isArray(before.value) ? [...before.value] : [];
+      rows.push(found.value);
+      next = setPath(next, target, rows);
       applied += 1;
       continue;
     }
@@ -208,6 +241,8 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
     { source: 'input', from: 'student', to: 'student' },
     { source: 'input', from: 'session', to: 'session' },
+    // 쌓아 둔 평가가 한 바퀴를 함께 돌아야 계속 붙는다.
+    { source: 'input', from: 'payload.problem_evaluations', to: 'payload.problem_evaluations' },
   ],
   // 문제 하나가 끝났다. 결과를 평가 단계가 읽는 자리에 옮긴다.
   '02 MODE A': [
@@ -229,6 +264,11 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     { source: 'input', from: 'payload.interaction.turn_limit', to: 'payload.problem_result.turn_limit' },
     { source: 'input', from: 'student', to: 'student' },
     { source: 'input', from: 'session', to: 'session' },
+    // session 을 옮긴 **뒤에** 센다. 앞에 두면 통째 이월이 도로 덮는다.
+    // 이게 total_problems 에 닿으면 01 이 하루를 끝낸다.
+    { source: 'increment', from: 'session.problem_number', to: 'session.problem_number' },
+    // 쌓아 둔 평가가 한 바퀴를 함께 돌아야 계속 붙는다.
+    { source: 'input', from: 'payload.problem_evaluations', to: 'payload.problem_evaluations' },
   ],
   '03 MODE B': [
     { source: 'literal', from: 'B', to: 'payload.learning_mode' },
@@ -247,6 +287,11 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     { source: 'input', from: 'payload.interaction.turn_limit', to: 'payload.problem_result.turn_limit' },
     { source: 'input', from: 'student', to: 'student' },
     { source: 'input', from: 'session', to: 'session' },
+    // session 을 옮긴 **뒤에** 센다. 앞에 두면 통째 이월이 도로 덮는다.
+    // 이게 total_problems 에 닿으면 01 이 하루를 끝낸다.
+    { source: 'increment', from: 'session.problem_number', to: 'session.problem_number' },
+    // 쌓아 둔 평가가 한 바퀴를 함께 돌아야 계속 붙는다.
+    { source: 'input', from: 'payload.problem_evaluations', to: 'payload.problem_evaluations' },
   ],
   // 평가가 끝났다. 01 이 "이번엔 어떤 방식으로 할래?" 를 물을 수 있게
   // 세션 단계를 CONTINUE 로 바꾸고 다음 모드 추천을 넘긴다.
@@ -256,9 +301,15 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     // 두면 방금 채운 preferred_mode · last_mode 를 도로 덮는다.
     { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
     { source: 'output', from: 'next_learning.recommended_mode', to: 'payload.mode_status.preferred_mode' },
+    // 06 DAILY ANALYZER 가 읽을 자리에 문제마다 하나씩 쌓는다.
+    { source: 'append', from: 'evaluation', to: 'payload.problem_evaluations' },
     { source: 'input', from: 'payload.learning_mode', to: 'payload.mode_status.last_mode' },
     { source: 'input', from: 'student', to: 'student' },
     { source: 'input', from: 'session', to: 'session' },
+    // 여기에는 problem_evaluations 이월 줄을 두지 않는다. 위의 `쌓기` 가
+    // 이미 앞의 것에 하나를 더해 넘긴다. 이월 줄을 뒤에 두면 방금 쌓은
+    // 것을 도로 덮어 배열이 영영 안 는다.
+    //
     // 새 문제로 가므로 앞 문제의 대화는 안 넘긴다.
     { source: 'literal', from: '[]', to: 'conversation' },
   ],

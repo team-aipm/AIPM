@@ -291,6 +291,7 @@ END:
   "latest_response": null,
   "payload": {
     "session_phase": "START",
+    "problem_evaluations": [],
     "is_first_use": false,
     "student_memory": null,
     "previous_daily_summary": null,
@@ -681,6 +682,7 @@ target_logic_gap,
     "total_problems": 10
   },
   "payload": {
+    "problem_evaluations": [],
     "mode_phase": "PREPARE | INTERACT",
     "learning_target": {
       "concept": "string",
@@ -1147,6 +1149,7 @@ completion.action = "COMPLETE"
     "total_problems": 10
   },
   "payload": {
+    "problem_evaluations": [],
     "mode_phase": "RECOGNIZE | PREPARE | INTERACT",
     "learning_target": {
       "concept": "string | null",
@@ -1434,6 +1437,7 @@ action = "DAILY_ANALYSIS"
     "total_problems": 10
   },
   "payload": {
+    "problem_evaluations": [],
     "learning_mode": "A | B",
     "problem_result": {
       "problem_text": "string",
@@ -1590,25 +1594,7 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
     "total_problems": 10
   },
   "payload": {
-    "problem_evaluations": [
-      {
-        "problem_number": 1,
-        "learning_mode": "A | B",
-        "concept": "string",
-        "evaluation": {
-          "initial_accuracy": "true | false | null",
-          "reasoning_score": "0 | 1 | 2 | null",
-          "rule_score": "0 | 1 | 2 | null",
-          "self_correction": "true | false | null",
-          "transfer_score": "0 | 1 | 2 | null",
-          "reflection_score": "0 | 1 | 2 | null",
-          "support_level": 0,
-          "primary_logic_gap": "string | null",
-          "secondary_logic_gap": "string | null"
-        },
-        "hint_count": 0
-      }
-    ],
+    "problem_evaluations": [],
     "mode_status": {
       "mode_a_count": 5,
       "mode_b_count": 5
