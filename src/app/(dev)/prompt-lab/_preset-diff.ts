@@ -37,6 +37,7 @@ export type Comparable = {
   historyKey: string;
   replyKey: string;
   recordKey: string;
+  choicesKey: string;
   studentTurn: string;
   studentField: string;
   aiTurn: string;
@@ -73,7 +74,11 @@ export const GROUPS: Group[] = [
       'resetKey',
     ],
   },
-  { id: 'reply', label: '응답·기록 필드', fields: ['replyKey', 'recordKey'] },
+  {
+    id: 'reply',
+    label: '응답·기록·보기 필드',
+    fields: ['replyKey', 'recordKey', 'choicesKey'],
+  },
   { id: 'io', label: '입출력 형식', fields: ['inputMode', 'outputMode', 'checkRule'] },
 ];
 

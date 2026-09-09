@@ -113,6 +113,8 @@ import {
   appendAiTurn,
   appendUserTurn,
   DEFAULT_CHAT_SHAPE,
+  readChoices,
+  type Choice,
   resetConversation,
   parseOutput,
   pickReply,
@@ -227,6 +229,7 @@ function pickComparable(from: Omit<Comparable, 'routing'>): Omit<Comparable, 'ro
     historyKey: from.historyKey,
     replyKey: from.replyKey,
     recordKey: from.recordKey,
+    choicesKey: from.choicesKey,
     studentTurn: from.studentTurn,
     studentField: from.studentField,
     aiTurn: from.aiTurn,
@@ -405,6 +408,7 @@ function toSaved(stage: Stage): SavedStage {
     historyKey: stage.historyKey,
     replyKey: stage.replyKey,
     recordKey: stage.recordKey,
+    choicesKey: stage.choicesKey,
     studentTurn: stage.studentTurn,
     studentField: stage.studentField,
     aiTurn: stage.aiTurn,
@@ -511,6 +515,7 @@ function upgradeStage(
   const untouched = [
     'historyKey',
     'recordKey',
+    'choicesKey',
     'studentTurn',
     'studentField',
     'aiTurn',
@@ -673,6 +678,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
             name: stage.name,
             turnCountKey: stage.turnCountKey,
             limitKey: stage.limitKey,
+            choicesKey: stage.choicesKey,
           })),
         );
 
@@ -1037,6 +1043,17 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     return diffs.length === 0 ? null : { diffs, base };
   })();
 
+  /**
+   * 방금 답에 들어 있던 보기.
+   *
+   * 대화창에 버튼으로 띄운다. 누르면 그 글이 곧 학생의 말이 된다 —
+   * 학생이 자유서술로 답하기 어려울 때 쓰라고 프롬프트가 내는 것이다.
+   */
+  const choices: Choice[] =
+    active !== undefined && thread?.result?.ok
+      ? readChoices(thread.result.raw, active.outputMode, active.choicesKey)
+      : [];
+
   /** 지금 단계의 대화 모양. 여러 곳에서 쓰므로 한 번만 만든다 */
   const chatShape: ChatShape = active === undefined ? DEFAULT_CHAT_SHAPE : shapeOf(active);
 
@@ -1123,6 +1140,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         historyKey: stage.historyKey,
         replyKey: stage.replyKey,
         recordKey: stage.recordKey,
+        choicesKey: stage.choicesKey,
         useCommonPrompt: stage.useCommonPrompt,
         forceJsonMimeType: stage.forceJsonMimeType,
         provider: settings.provider,
@@ -1686,7 +1704,16 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       calls += 1;
       const said = await withRetry(
         () =>
-          callStudent(prompt, studentInput(readTurns(input, stage.historyKey), pick.text)),
+          callStudent(
+            prompt,
+            studentInput(
+              readTurns(input, stage.historyKey),
+              pick.text,
+              readChoices(result.raw, stage.outputMode, stage.choicesKey).map(
+                (choice) => choice.label,
+              ),
+            ),
+          ),
         autoLimits.retries,
         (attempt, seconds, error) =>
           add({
@@ -1757,6 +1784,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       name: stage.name,
       turnCountKey: stage.turnCountKey,
       limitKey: stage.limitKey,
+      choicesKey: stage.choicesKey,
     }));
 
     const got: Trial[] = [];
@@ -1850,9 +1878,10 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * json  입력 JSON 안의 배열에 학생 턴 -> 응답 턴을 붙인다.
    * text  보낸 글이 곧 입력이 된다. 기록은 화면(transcript)에만 남는다.
    */
-  function send() {
+  /** `picked` 를 주면 입력칸 대신 그 글을 보낸다. 보기 버튼이 쓴다 */
+  function send(picked?: string) {
     if (!active || !thread || thread.running) return;
-    const text = draft.trim();
+    const text = (picked ?? draft).trim();
     // 이미지만 붙여 보낼 수 있다. OCR 단계에서 자주 쓴다.
     if (!text && thread.images.length === 0) return;
 
@@ -3895,6 +3924,24 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-700 dark:disabled:bg-neutral-800"
                     />
                   </label>
+                  <label className="flex items-center gap-2">
+                    <span
+                      className={`shrink-0 ${
+                        replyKeyOff ? 'text-neutral-400' : 'text-neutral-500'
+                      }`}
+                    >
+                      보기 필드
+                    </span>
+                    <input
+                      value={active.choicesKey}
+                      onChange={(event) =>
+                        patch(activeIndex, { choicesKey: event.target.value })
+                      }
+                      disabled={replyKeyOff}
+                      placeholder={replyKeyOff ? '해당 없음' : '예: ui.choices'}
+                      className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-700 dark:disabled:bg-neutral-800"
+                    />
+                  </label>
                   {replyKeyOff && (
                     <span className="text-[11px] text-neutral-500">
                       출력이 텍스트라 원문을 그대로 보여줍니다
@@ -3946,6 +3993,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     넣으면 같은 문단이 열 번 쌓입니다. 모델은 문제를{' '}
                     <code>problem_state</code> 에서 읽으므로 기록에는 말풍선만
                     남기면 됩니다. 비우면 응답 필드와 같습니다.
+                  </p>
+                  <p>
+                    <b>보기 필드</b>는 학생에게 <b>버튼으로 보여줄 선택지</b>가 담긴
+                    자리입니다. v3.0 은 <code>ui.choices</code> 에 냅니다. 누르면 그
+                    글이 학생의 말로 들어가고, 자동 실행의 학생 모델도 같은 보기를
+                    받습니다. <code>{'{ label, value }'}</code> 목록도, 글자만 있는
+                    목록도 읽습니다.
                   </p>
                 </div>
               </div>
@@ -4512,6 +4566,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     : '보낸 글이 곧 입력이 됩니다. 기록은 화면에만 남습니다'
                 }
                 note={replyNote}
+                choices={choices}
+                onChoice={(text) => send(text)}
                 emptyReason={emptyReason}
                 onClear={() =>
                   patchActive({
@@ -4654,6 +4710,8 @@ function ChatPanel({
   onRemoveImage,
   hint,
   note,
+  choices,
+  onChoice,
   onClear,
   emptyReason,
 }: {
@@ -4669,6 +4727,9 @@ function ChatPanel({
   onRemoveImage: (index: number) => void;
   hint: string;
   note: string | null;
+  /** 방금 답이 낸 보기. 비어 있으면 안 그린다 */
+  choices: Choice[];
+  onChoice: (text: string) => void;
   onClear: () => void;
   /** 대화가 비었을 때 왜 비었는지. 없으면 기본 문구를 쓴다 */
   emptyReason?: { text: string; action?: { label: string; run: () => void } };
@@ -4742,6 +4803,30 @@ function ChatPanel({
 
         {running && <p className="text-neutral-500">응답을 기다리는 중…</p>}
       </div>
+
+      {choices.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1 border-t border-neutral-200 p-2 dark:border-neutral-800">
+          <span className="mr-1 text-[11px] text-neutral-500">보기</span>
+          {choices.map((choice) => (
+            <button
+              key={choice.id}
+              onClick={() => onChoice(choice.label)}
+              disabled={running}
+              className="rounded-full border border-neutral-300 px-3 py-1 disabled:opacity-40 dark:border-neutral-700"
+              title={
+                choice.value === choice.label
+                  ? undefined
+                  : `보내는 값: ${choice.label} (value=${choice.value})`
+              }
+            >
+              {choice.label}
+            </button>
+          ))}
+          <span className="text-[11px] text-neutral-500">
+            · 누르면 그 글이 학생의 말로 들어갑니다. 직접 써도 됩니다
+          </span>
+        </div>
+      )}
 
       {note && (
         <div className="border-t border-neutral-200 px-3 py-1.5 text-[11px] text-neutral-500 dark:border-neutral-800">
