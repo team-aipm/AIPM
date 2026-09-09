@@ -14,7 +14,8 @@
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { getStudent } from '@/lib/services/student';
-import { findTodaySession, countCompleted } from '@/lib/services/learning-session';
+import { findTodaySession, countCompleted, today } from '@/lib/services/learning-session';
+import { findDailyReport, saveDailyReport } from '@/lib/services/learning-report';
 import { createProblem, findActiveProblem, finishProblem } from '@/lib/services/problem';
 import { appendMessage, listMessages } from '@/lib/services/message';
 import { EVENT, record } from '@/lib/analytics/events';
@@ -396,25 +397,51 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     supportLevel,
   });
 
-  const input = buildModeAInput({
+  // 같은 화면에서 두 모드가 이어진다. 어느 단계를 부를지는 문제가 안다.
+  const isModeB = problem.learning_mode === 'mode_b';
+  const common = {
     studentId: student.student_id,
     grade: student.grade,
     persona: student.persona_type,
     sessionId: session.session_id,
     problemNumber: session.completed_problem_count + 1,
     totalProblems: session.target_problem_count,
-    phase: 'INTERACT',
-    problem: {
-      text: problem.problem_text,
-      verifiedAnswer: problem.verified_answer,
-      locked: problem.answer_lock_status === 'locked',
-    },
     studentTexts: [...studentTexts, said],
     supportLevel,
     latest: said,
-  });
+  };
 
-  const result = await runStage('02 MODE A', input, student.persona_type);
+  const input = isModeB
+    ? buildModeBInput({
+        ...common,
+        phase: 'INTERACT',
+        rawText: problem.problem_text,
+        recognized: problem.problem_text,
+        confirmed: true,
+        problem: {
+          verifiedAnswer: problem.verified_answer,
+          locked: problem.answer_lock_status === 'locked',
+          // **어제 잃어버렸던 값이다.** 이게 없으면 AI 가 자기 오답을 잊는다.
+          wrongAnswer: problem.ai_wrong_answer,
+          wrongReasoning: problem.ai_wrong_reasoning,
+          misconception: problem.target_misconception,
+        },
+      })
+    : buildModeAInput({
+        ...common,
+        phase: 'INTERACT',
+        problem: {
+          text: problem.problem_text,
+          verifiedAnswer: problem.verified_answer,
+          locked: problem.answer_lock_status === 'locked',
+        },
+      });
+
+  const result = await runStage(
+    isModeB ? '03 MODE B' : '02 MODE A',
+    input,
+    student.persona_type,
+  );
   if (!result.ok) {
     console.error(`[mission] 02 INTERACT 실패: ${result.error}`);
     return { ok: false, message: '잠깐 멈췄어. 다시 한 번 말해줄래?' };
@@ -455,8 +482,9 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
 
   // 맞혀서 끝난 것과 횟수에 걸려 끝난 것을 구분한다. 뒤엣것은 "실패" 가
   // 아니라 **한 번 더 도전**이다(COM-003 · copy.ts).
-  const correct = status === 'CORRECT_COMPLETE';
-  const errored = status === 'PROBLEM_ERROR';
+  // MODE B 는 "AI 의 오류를 학생이 잡아냈다" 가 성공이다.
+  const correct = status === 'CORRECT_COMPLETE' || status === 'ERROR_CORRECTED_COMPLETE';
+  const errored = status === 'PROBLEM_ERROR' || status === 'RECOGNITION_ERROR';
 
   await finishProblem(
     supabase,
@@ -506,7 +534,20 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
   await record(supabase, correct ? EVENT.problemCompleted : EVENT.problemNeedsReview, who);
 
   const { sessionCompleted } = await countCompleted(supabase, session);
-  if (sessionCompleted) await record(supabase, EVENT.sessionCompleted, who);
+  if (sessionCompleted) {
+    await record(supabase, EVENT.sessionCompleted, who);
+    await summarizeDay(supabase, {
+      student: {
+        student_id: student.student_id,
+        grade: student.grade,
+        persona_type: student.persona_type,
+      },
+      session: {
+        session_id: session.session_id,
+        target_problem_count: session.target_problem_count,
+      },
+    });
+  }
 
   return {
     ok: true,
@@ -648,4 +689,366 @@ async function evaluateProblem(
   } catch (error) {
     console.error(`[mission] 평가 저장 실패: ${String(error)}`);
   }
+}
+
+// ============================================================
+// 06 DAILY ANALYZER · 하루를 마무리한다
+// ============================================================
+
+/**
+ * 오늘 몫을 다 채웠을 때 하루 총평을 만든다.
+ *
+ * **한 번만 만든다.** 화면을 열 때마다 부르면 새로고침마다 돈이 나가고,
+ * 같은 하루의 총평이 매번 다른 말로 바뀐다. `learning_report` 에 남기고
+ * 오늘의 기록 화면은 그걸 읽는다.
+ *
+ * 실패해도 던지지 않는다. 총평이 없으면 화면이 그 자리를 안 그릴 뿐이다.
+ */
+async function summarizeDay(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  args: {
+    student: { student_id: string; grade: number; persona_type: 'friend' | 'villain' };
+    session: { session_id: string; target_problem_count: number };
+  },
+): Promise<void> {
+  const date = today();
+
+  try {
+    const already = await findDailyReport(supabase, args.student.student_id, date);
+    if (already !== null) return;
+  } catch (error) {
+    console.error(`[mission] 06 중복 확인 실패: ${String(error)}`);
+    return;
+  }
+
+  // 오늘 푼 문제와 그 평가를 모은다. 06 은 이것만 보고 하루를 읽는다.
+  const { data: rows, error } = await supabase
+    .from('problem')
+    .select('problem_id, learning_mode, problem_status, evaluation(*)')
+    .eq('session_id', args.session.session_id);
+
+  if (error !== null) {
+    console.error(`[mission] 06 입력 수집 실패: ${error.message}`);
+    return;
+  }
+
+  const problems = rows ?? [];
+  const evaluations = problems
+    .map((row) => (Array.isArray(row.evaluation) ? row.evaluation[0] : row.evaluation))
+    .filter((item): item is NonNullable<typeof item> => item !== null && item !== undefined);
+
+  const stage = stageOf('06 DAILY ANALYZER');
+  let input: unknown = JSON.parse(stage.sampleInput);
+  input = write(input, 'student.student_id', args.student.student_id);
+  input = write(input, 'student.grade', args.student.grade);
+  input = write(input, 'session.session_id', args.session.session_id);
+  input = write(input, 'session.total_problems', args.session.target_problem_count);
+  input = write(input, 'payload.problem_evaluations', evaluations);
+  input = write(
+    input,
+    'payload.mode_status.mode_a_count',
+    problems.filter((row) => row.learning_mode === 'mode_a').length,
+  );
+  input = write(
+    input,
+    'payload.mode_status.mode_b_count',
+    problems.filter((row) => row.learning_mode === 'mode_b').length,
+  );
+
+  const result = await runStage(
+    '06 DAILY ANALYZER',
+    JSON.stringify(input, null, 2),
+    args.student.persona_type,
+  );
+  if (!result.ok) {
+    console.error(`[mission] 06 실패: ${result.error}`);
+    return;
+  }
+
+  try {
+    await saveDailyReport(supabase, {
+      studentId: args.student.student_id,
+      date,
+      summary: result.output,
+    });
+    // 이벤트는 남기지 않는다. COM-002 §14 의 16개에 하루 리포트에
+    // 해당하는 이름이 없다 — `weekly_report_generated` 를 갖다 쓰면
+    // 주간 리포트 수가 부풀려진다. 이름이 필요하면 문서를 먼저 고친다.
+  } catch (saveError) {
+    console.error(`[mission] 06 저장 실패: ${String(saveError)}`);
+  }
+}
+
+// ============================================================
+// 03 MODE B · 학생이 문제를 가져오고 AI 가 푼다
+// ============================================================
+
+/**
+ * MODE B 는 세 마당이다.
+ *
+ *   RECOGNIZE   학생이 가져온 문제를 읽고 "이거 맞아?" 를 묻는다
+ *   PREPARE     정답을 검증하고 **일부러 틀린 풀이**를 만든다
+ *   INTERACT    학생이 그 틀린 곳을 찾아낸다
+ *
+ * 가운데 마당이 이 서비스의 핵심이다. AI 가 만든 오답은 다음 턴에도 있어야
+ * 하므로 `problem` 에 남긴다(COM-002 §20-A). **학생 화면에는 나가지 않는다** —
+ * 나가는 것은 `ui.ai_wrong_solution`(보여줄 풀이)뿐이다.
+ */
+
+export type SourceStep =
+  /** 이렇게 읽었는데 맞아? */
+  | { ok: true; kind: 'confirm'; recognized: string; message: string; choices: Choice[] }
+  /** 확인 끝. 문제가 시작됐다 */
+  | { ok: true; kind: 'started'; problemText: string; message: string; choices: Choice[] }
+  | { ok: false; message: string };
+
+function buildModeBInput(args: {
+  studentId: string;
+  grade: number;
+  persona: 'friend' | 'villain';
+  sessionId: string;
+  problemNumber: number;
+  totalProblems: number;
+  phase: 'RECOGNIZE' | 'PREPARE' | 'INTERACT';
+  rawText: string | null;
+  recognized: string | null;
+  confirmed: boolean;
+  problem: {
+    verifiedAnswer: unknown;
+    locked: boolean;
+    wrongAnswer: unknown;
+    wrongReasoning: string | null;
+    misconception: string | null;
+  } | null;
+  studentTexts: string[];
+  supportLevel: number;
+  latest: string | null;
+}): string {
+  const stage = stageOf('03 MODE B');
+  let input: unknown = JSON.parse(stage.sampleInput);
+
+  input = write(input, 'student.student_id', args.studentId);
+  input = write(input, 'student.grade', args.grade);
+  input = write(input, 'student.selected_persona', args.persona.toUpperCase());
+
+  input = write(input, 'session.session_id', args.sessionId);
+  input = write(input, 'session.problem_number', args.problemNumber);
+  input = write(input, 'session.total_problems', args.totalProblems);
+
+  input = write(input, 'payload.learning_mode', 'B');
+  input = write(input, 'payload.mode_phase', args.phase);
+  input = write(input, 'payload.learning_target.concept', null);
+  input = write(input, 'payload.learning_target.target_logic_gap', null);
+  input = write(input, 'payload.learning_target.difficulty', 'SAME');
+
+  // 지금은 글로만 받는다. 사진은 Storage 와 함께 붙인다(COM-007 §4-3).
+  input = write(input, 'payload.source_problem.input_type', 'TEXT');
+  input = write(input, 'payload.source_problem.raw_text', args.rawText);
+  input = write(input, 'payload.source_problem.image_reference', null);
+  input = write(
+    input,
+    'payload.source_problem.recognized_problem.problem_text',
+    args.recognized,
+  );
+  input = write(input, 'payload.source_problem.recognized_problem.choices', []);
+  input = write(
+    input,
+    'payload.source_problem.recognized_problem.visual_information',
+    null,
+  );
+  input = write(
+    input,
+    'payload.source_problem.recognition_status',
+    args.recognized === null ? 'NOT_STARTED' : args.confirmed ? 'CONFIRMED' : 'NEEDS_CONFIRMATION',
+  );
+  input = write(input, 'payload.source_problem.student_confirmed', args.confirmed);
+
+  input = write(input, 'payload.problem.verified_answer', args.problem?.verifiedAnswer ?? null);
+  input = write(input, 'payload.problem.answer_lock', args.problem?.locked ?? false);
+  input = write(input, 'payload.problem.ai_wrong_answer', args.problem?.wrongAnswer ?? null);
+  input = write(input, 'payload.problem.ai_wrong_reasoning', args.problem?.wrongReasoning ?? null);
+  input = write(
+    input,
+    'payload.problem.target_misconception',
+    args.problem?.misconception ?? null,
+  );
+
+  const used = args.studentTexts.length;
+  input = write(input, 'payload.interaction.student_turn_count', used);
+  input = write(input, 'payload.interaction.turn_limit', TURN_LIMIT);
+  input = write(input, 'payload.interaction.turns_remaining', Math.max(0, TURN_LIMIT - used));
+  input = write(input, 'payload.interaction.latest_response', {
+    response_role: null,
+    response_type: 'FREE_TEXT',
+    choice_id: null,
+    content: args.latest,
+  });
+  input = write(
+    input,
+    'payload.interaction.response_history',
+    args.studentTexts.map((text) => ({
+      response_role: null,
+      response_type: 'FREE_TEXT',
+      choice_id: null,
+      content: text,
+    })),
+  );
+  input = write(input, 'payload.interaction.support_level', args.supportLevel);
+  input = write(input, 'payload.interaction.hint_count', 0);
+  input = write(input, 'payload.interaction.hint_history', []);
+
+  return JSON.stringify(input, null, 2);
+}
+
+/**
+ * 학생이 가져온 문제를 읽는다 (03 RECOGNIZE).
+ *
+ * 아직 `problem` 행을 만들지 않는다. **정답 검증 전이기 때문**이다 — 검증에
+ * 실패한 문제로 학습을 진행하지 않는다(COM-001 §19).
+ */
+export async function offerSourceProblem(text: string): Promise<SourceStep> {
+  const said = text.trim();
+  if (said === '') return { ok: false, message: '어떤 문제인지 적어줄래?' };
+
+  const ctx = await context();
+  if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
+  const { student, session } = ctx;
+
+  const input = buildModeBInput({
+    studentId: student.student_id,
+    grade: student.grade,
+    persona: student.persona_type,
+    sessionId: session.session_id,
+    problemNumber: session.completed_problem_count + 1,
+    totalProblems: session.target_problem_count,
+    phase: 'RECOGNIZE',
+    rawText: said,
+    recognized: null,
+    confirmed: false,
+    problem: null,
+    studentTexts: [],
+    supportLevel: 0,
+    latest: said,
+  });
+
+  const result = await runStage('03 MODE B', input, student.persona_type);
+  if (!result.ok) {
+    console.error(`[mission] 03 RECOGNIZE 실패: ${result.error}`);
+    return { ok: false, message: '문제를 읽다가 잠깐 멈췄어. 다시 적어줄래?' };
+  }
+
+  const status = str(read(result.output, 'source_problem_update.recognition_status'));
+  const recognized = str(
+    read(result.output, 'source_problem_update.recognized_problem.problem_text'),
+  );
+  const message = str(read(result.output, 'ui.message'));
+
+  if (status === 'FAILED' || recognized === '') {
+    return {
+      ok: false,
+      message: message === '' ? '문제를 잘 읽지 못했어. 다시 적어줄래?' : message,
+    };
+  }
+
+  return {
+    ok: true,
+    kind: 'confirm',
+    recognized,
+    message,
+    choices: readChoices(result.output),
+  };
+}
+
+/**
+ * 학생이 "맞아" 라고 했다 (03 PREPARE).
+ *
+ * 여기서 정답을 검증하고 **일부러 틀린 풀이**를 만든다. `problem` 행은 이
+ * 시점에 생긴다 — 검증된 정답이 있어야 만들 수 있기 때문이다.
+ */
+export async function confirmSourceProblem(
+  recognized: string,
+  reply: string,
+): Promise<SourceStep> {
+  const ctx = await context();
+  if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
+  const { supabase, student, session } = ctx;
+
+  const input = buildModeBInput({
+    studentId: student.student_id,
+    grade: student.grade,
+    persona: student.persona_type,
+    sessionId: session.session_id,
+    problemNumber: session.completed_problem_count + 1,
+    totalProblems: session.target_problem_count,
+    phase: 'PREPARE',
+    rawText: recognized,
+    recognized,
+    confirmed: true,
+    problem: null,
+    studentTexts: [],
+    supportLevel: 0,
+    latest: reply,
+  });
+
+  const result = await runStage('03 MODE B', input, student.persona_type);
+  if (!result.ok) {
+    console.error(`[mission] 03 PREPARE 실패: ${result.error}`);
+    return { ok: false, message: '문제를 풀어보다가 잠깐 멈췄어. 다시 해볼래?' };
+  }
+
+  const output = result.output;
+  const verified = read(output, 'problem_state.verified_answer');
+
+  // **정답을 확신하지 못하면 진행하지 않는다**(COM-001 §19). 지어낸 정답으로
+  // 학습을 이어가는 것이 가장 나쁘다.
+  if (verified === null || verified === undefined) {
+    return {
+      ok: false,
+      message: '이 문제는 내가 확실하게 못 풀겠어. 다른 문제로 해볼까?',
+    };
+  }
+
+  const problemText = str(read(output, 'ui.problem_text')) || recognized;
+  const wrongSolution = str(read(output, 'ui.ai_wrong_solution'));
+  const message = str(read(output, 'ui.message'));
+
+  const problem = await createProblem(supabase, {
+    sessionId: session.session_id,
+    studentId: student.student_id,
+    problemSource: 'text',
+    problemText,
+    concept: '미지정',
+    difficulty: student.current_difficulty,
+    learningMode: 'mode_b',
+    verifiedAnswer: verified,
+    answerLock: read(output, 'problem_state.answer_lock') === true,
+    wrongAnswer: read(output, 'problem_state.ai_wrong_answer') ?? null,
+    wrongReasoning: str(read(output, 'problem_state.ai_wrong_reasoning')) || null,
+    misconception: str(read(output, 'problem_state.target_misconception')) || null,
+  });
+
+  // 학생이 봐야 하는 것은 **틀린 풀이**다. 그걸 놓치면 잡아낼 것이 없다.
+  const shown = [wrongSolution, message].filter((part) => part !== '').join('\n\n');
+  await appendMessage(supabase, {
+    problemId: problem.problem_id,
+    sessionId: session.session_id,
+    studentId: student.student_id,
+    speaker: 'ai',
+    text: shown === '' ? problemText : shown,
+    turnNumber: 1,
+    supportLevel: num(read(output, 'interaction_update.support_level'), 0),
+  });
+
+  await record(supabase, EVENT.problemStarted, {
+    studentId: student.student_id,
+    sessionId: session.session_id,
+  });
+
+  return {
+    ok: true,
+    kind: 'started',
+    problemText,
+    message: shown,
+    choices: readChoices(output),
+  };
 }

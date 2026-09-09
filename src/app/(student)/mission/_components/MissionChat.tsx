@@ -19,6 +19,8 @@ import { learningModeLabel } from '@/lib/constants/copy';
 import { PartnerFace } from '@/components/ui/PartnerFace';
 import {
   answerProblem,
+  confirmSourceProblem,
+  offerSourceProblem,
   startProblem,
   talkToHost,
   type Choice,
@@ -44,6 +46,9 @@ export type Initial =
   | { kind: 'host' }
   | { kind: 'problem'; problemText: string; turns: Turn[]; turnsLeft: number };
 
+/** 한 문제에서 학생이 말할 수 있는 횟수. 서버(_actions)와 같은 값이다 */
+const TURN_LIMIT = 5;
+
 type Props = {
   partner: string;
   persona: Database['public']['Enums']['persona_type'];
@@ -65,8 +70,14 @@ export function MissionChat({ partner, persona, initial }: Props) {
   const [freeText, setFreeText] = useState(true);
   const [finished, setFinished] = useState(false);
   const [sessionDone, setSessionDone] = useState(false);
-  /** 아직 못 만든 길로 들어갔을 때. 지금은 MODE B */
-  const [notYet, setNotYet] = useState(false);
+  /**
+   * MODE B 의 앞마당.
+   *
+   *   ask      "어떤 문제 가져왔어?" 를 기다린다
+   *   confirm  "이렇게 읽었는데 맞아?" 를 기다린다
+   */
+  const [sourceStage, setSourceStage] = useState<'ask' | 'confirm' | null>(null);
+  const [recognized, setRecognized] = useState('');
   const [draft, setDraft] = useState('');
   const opened = useRef(false);
   const bottom = useRef<HTMLDivElement>(null);
@@ -107,8 +118,9 @@ export function MissionChat({ partner, persona, initial }: Props) {
       return;
     }
     if (reply.nextModule === 'MODE_B') {
-      // 학생이 고른 쪽을 우리가 몰래 바꾸지 않는다. 아직 없다고 말한다.
-      setNotYet(true);
+      // 학생이 문제를 가져오는 차례다. 글로 받는다 — 사진은 다음이다.
+      setSourceStage('ask');
+      addAi('어떤 문제를 가져왔어? 그대로 적어줄래?');
       setChoices([]);
       setPending(false);
       return;
@@ -120,7 +132,7 @@ export function MissionChat({ partner, persona, initial }: Props) {
 
   async function openProblem() {
     setPending(true);
-    setNotYet(false);
+    setSourceStage(null);
 
     const reply = await startProblem();
     if (!reply.ok) {
@@ -136,6 +148,55 @@ export function MissionChat({ partner, persona, initial }: Props) {
     setTurnsLeft(reply.turnsLeft);
     setFinished(false);
     setPending(false);
+  }
+
+  /** MODE B · 학생이 적은 문제를 읽는다 */
+  async function readSource(text: string) {
+    setPending(true);
+    setChoices([]);
+
+    const reply = await offerSourceProblem(text);
+    if (!reply.ok) {
+      addAi(reply.message);
+      setPending(false);
+      return;
+    }
+
+    if (reply.kind === 'confirm') {
+      setRecognized(reply.recognized);
+      setSourceStage('confirm');
+      addAi(reply.message === '' ? `이렇게 읽었어.
+
+${reply.recognized}
+
+맞아?` : reply.message);
+      setChoices(reply.choices);
+      setPending(false);
+    }
+  }
+
+  /** MODE B · 학생이 "맞아" 라고 했다. 여기서 문제가 시작된다 */
+  async function startSource(text: string) {
+    setPending(true);
+    setChoices([]);
+
+    const reply = await confirmSourceProblem(recognized, text);
+    if (!reply.ok) {
+      // 정답을 확신하지 못하면 진행하지 않는다. 다시 받는다.
+      addAi(reply.message);
+      setSourceStage('ask');
+      setPending(false);
+      return;
+    }
+
+    if (reply.kind === 'started') {
+      setProblemText(reply.problemText);
+      addAi(reply.message);
+      setChoices(reply.choices);
+      setTurnsLeft(TURN_LIMIT);
+      setSourceStage(null);
+      setPending(false);
+    }
   }
 
   async function answer(text: string) {
@@ -167,11 +228,14 @@ export function MissionChat({ partner, persona, initial }: Props) {
     setTurns(next);
     setDraft('');
 
-    if (problemText === null) void hostSays(sent.trim(), next);
+    if (sourceStage === 'ask') void readSource(sent.trim());
+    else if (sourceStage === 'confirm') void startSource(sent.trim());
+    else if (problemText === null) void hostSays(sent.trim(), next);
     else void answer(sent.trim());
   }
 
-  const inputBlocked = pending || finished || notYet || !freeText;
+  // MODE B 의 앞마당에서는 학생이 자유롭게 적어야 한다. 보기가 없다.
+  const inputBlocked = pending || finished || (sourceStage === null && !freeText);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -218,21 +282,6 @@ export function MissionChat({ partner, persona, initial }: Props) {
           <p className="ml-9 text-[13px] text-meti-sub">{partner}가 생각하는 중…</p>
         )}
 
-        {notYet && (
-          <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-meti/40 px-4 py-3 text-center">
-            <p className="text-[12px] leading-relaxed text-meti-sub">
-              네가 문제를 가져오는 방식은 아직 준비 중이야.
-            </p>
-            <button
-              type="button"
-              onClick={() => void openProblem()}
-              className="rounded-xl bg-meti py-2.5 text-[13px] font-bold text-white"
-            >
-              {partner}가 문제 내기로 할래
-            </button>
-          </div>
-        )}
-
         <div ref={bottom} />
       </div>
 
@@ -261,10 +310,10 @@ export function MissionChat({ partner, persona, initial }: Props) {
                   오늘 미션 끝! 정말 잘했어
                 </p>
                 <a
-                  href="/home"
+                  href="/home/today"
                   className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
                 >
-                  홈으로 가기
+                  오늘의 기록 보기
                 </a>
               </>
             ) : (
@@ -290,7 +339,13 @@ export function MissionChat({ partner, persona, initial }: Props) {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               disabled={inputBlocked}
-              placeholder="내 생각을 써볼까?"
+              placeholder={
+              sourceStage === 'ask'
+                ? '문제를 그대로 적어줘'
+                : sourceStage === 'confirm'
+                  ? '맞으면 "응", 아니면 고쳐서 적어줘'
+                  : '내 생각을 써볼까?'
+            }
               className="flex-1 rounded-full border border-black/10 bg-white px-4 py-2.5 text-[14px] outline-none focus:border-meti disabled:opacity-60"
             />
             <button

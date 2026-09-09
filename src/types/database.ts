@@ -439,8 +439,11 @@ export type Database = {
       }
       problem: {
         Row: {
+          ai_wrong_answer: Json | null
+          ai_wrong_reasoning: string | null
           answer_lock_status: Database["public"]["Enums"]["answer_lock_status"]
           concept: string
+          target_misconception: string | null
           created_at: string
           difficulty: number
           learning_mode: Database["public"]["Enums"]["learning_mode"]
@@ -453,8 +456,11 @@ export type Database = {
           verified_answer: Json | null
         }
         Insert: {
+          ai_wrong_answer?: Json | null
+          ai_wrong_reasoning?: string | null
           answer_lock_status: Database["public"]["Enums"]["answer_lock_status"]
           concept: string
+          target_misconception?: string | null
           created_at?: string
           difficulty: number
           learning_mode: Database["public"]["Enums"]["learning_mode"]
@@ -467,8 +473,11 @@ export type Database = {
           verified_answer?: Json | null
         }
         Update: {
+          ai_wrong_answer?: Json | null
+          ai_wrong_reasoning?: string | null
           answer_lock_status?: Database["public"]["Enums"]["answer_lock_status"]
           concept?: string
+          target_misconception?: string | null
           created_at?: string
           difficulty?: number
           learning_mode?: Database["public"]["Enums"]["learning_mode"]

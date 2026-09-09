@@ -99,6 +99,13 @@ export default async function HomePage() {
       </section>
 
       <Link
+        href="/home/today"
+        className="rounded-2xl bg-white p-4 text-center text-[14px] font-bold text-meti-ink shadow-sm"
+      >
+        {TERMS.learningResult.student} 보기
+      </Link>
+
+      <Link
         href="/students"
         className="text-center text-[13px] font-semibold text-meti-sub underline"
       >
