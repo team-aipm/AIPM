@@ -21,6 +21,7 @@ import {
   answerProblem,
   confirmSourceProblem,
   offerSourceProblem,
+  readPhotoProblem,
   startProblem,
   talkToHost,
   type Choice,
@@ -78,6 +79,8 @@ export function MissionChat({ partner, persona, initial }: Props) {
    */
   const [sourceStage, setSourceStage] = useState<'ask' | 'confirm' | null>(null);
   const [recognized, setRecognized] = useState('');
+  /** 사진으로 가져왔는지. problem_source 에 그대로 들어간다 */
+  const [fromPhoto, setFromPhoto] = useState(false);
   const [draft, setDraft] = useState('');
   const opened = useRef(false);
   const bottom = useRef<HTMLDivElement>(null);
@@ -120,7 +123,8 @@ export function MissionChat({ partner, persona, initial }: Props) {
     if (reply.nextModule === 'MODE_B') {
       // 학생이 문제를 가져오는 차례다. 글로 받는다 — 사진은 다음이다.
       setSourceStage('ask');
-      addAi('어떤 문제를 가져왔어? 그대로 적어줄래?');
+      setFromPhoto(false);
+      addAi('어떤 문제를 가져왔어? 사진으로 올려도 되고 직접 써도 돼.');
       setChoices([]);
       setPending(false);
       return;
@@ -175,12 +179,46 @@ ${reply.recognized}
     }
   }
 
+  /** MODE B · 사진으로 가져온다 */
+  async function sendPhoto(file: File) {
+    setPending(true);
+    setChoices([]);
+    setTurns((now) => [...now, { who: 'student', text: '(사진을 보냈어)' }]);
+
+    const form = new FormData();
+    form.append('photo', file);
+    const reply = await readPhotoProblem(form);
+
+    if (!reply.ok) {
+      addAi(reply.message);
+      setPending(false);
+      return;
+    }
+
+    if (reply.kind === 'confirm') {
+      setRecognized(reply.recognized);
+      setFromPhoto(true);
+      setSourceStage('confirm');
+      addAi(
+        reply.message === ''
+          ? `이렇게 읽었어.
+
+${reply.recognized}
+
+맞아?`
+          : reply.message,
+      );
+      setChoices(reply.choices);
+      setPending(false);
+    }
+  }
+
   /** MODE B · 학생이 "맞아" 라고 했다. 여기서 문제가 시작된다 */
   async function startSource(text: string) {
     setPending(true);
     setChoices([]);
 
-    const reply = await confirmSourceProblem(recognized, text);
+    const reply = await confirmSourceProblem(recognized, text, fromPhoto);
     if (!reply.ok) {
       // 정답을 확신하지 못하면 진행하지 않는다. 다시 받는다.
       addAi(reply.message);
@@ -300,6 +338,24 @@ ${reply.recognized}
               </button>
             ))}
           </div>
+        )}
+
+        {sourceStage === 'ask' && !pending && (
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full border border-meti/40 bg-white py-2.5 text-[13px] font-semibold text-meti">
+            📷 사진으로 올릴게
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic"
+              // 휴대폰에서는 카메라가 바로 열린다
+              capture="environment"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file !== undefined) void sendPhoto(file);
+              }}
+            />
+          </label>
         )}
 
         {finished ? (

@@ -9,7 +9,7 @@
  * 도구에서 고친 글은 브라우저에만 있으므로 제품은 코드의 프리셋을 쓴다.
  */
 
-import { callGemini } from '@/lib/gemini/client';
+import { callGemini, type GeminiImage } from '@/lib/gemini/client';
 import { COMMON_RULES } from '@/lib/ai/prompts/common-rules';
 import { AIPM_PRESET, type StagePreset } from '@/lib/ai/prompts/stages';
 import { personaBlock } from '@/lib/ai/prompts/variables';
@@ -60,6 +60,8 @@ export async function runStage(
   name: StageName,
   inputJson: string,
   persona: 'friend' | 'villain' = 'friend',
+  /** 사진으로 가져온 문제. 03 RECOGNIZE 만 쓴다 */
+  images: GeminiImage[] = [],
 ): Promise<RunResult> {
   const stage = stageOf(name);
 
@@ -72,6 +74,7 @@ export async function runStage(
     // 공통 규칙이 앞에 온다. 단계 프롬프트가 그 위에서 자기 역할만 맡는다.
     system: `${COMMON_RULES}\n\n${prompt}`,
     input: inputJson,
+    images,
     forceJsonMimeType: stage.outputMode === 'json',
   });
 
