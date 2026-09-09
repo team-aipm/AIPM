@@ -687,6 +687,19 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           })),
         );
 
+  /**
+   * 프리셋에는 있는데 지금 목록에 없는 세트.
+   *
+   * 저장본의 `varSets` 는 프리셋을 **통째로 갈아치운다.** 세트를 하나
+   * 직접 만들어 저장하면 FRIEND · VILLAIN 이 목록에서 사라진다. 단계
+   * 프리셋과 같은 일이 변수에서도 일어났다.
+   *
+   * `단계 초기화` 로 되돌릴 수는 있지만 그건 프롬프트까지 날린다.
+   */
+  const missingSets = varPreset.filter(
+    (item) => !varSets.some((mine) => mine.name === item.name),
+  );
+
   /** 반복 실행 통과율. 회차가 없으면 안 보여 준다 */
   const rate =
     trials.length === 0 ? null : tally(trials, stages.map((stage) => stage.name));
@@ -2642,6 +2655,21 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   className="text-[11px] text-red-600 hover:underline dark:text-red-400"
                 >
                   삭제
+                </button>
+              )}
+              {missingSets.length > 0 && (
+                <button
+                  onClick={() => {
+                    setVarSets((prev) => [...prev, ...missingSets.map((set) => ({
+                      name: set.name,
+                      vars: set.vars.map((v) => ({ ...v })),
+                    }))]);
+                    setActiveSet(varSets.length);
+                  }}
+                  className="rounded border border-amber-400 px-2 py-1 dark:border-amber-600"
+                  title={missingSets.map((set) => set.name).join(' · ')}
+                >
+                  프리셋 세트 추가 · {missingSets.map((set) => set.name).join(' · ')}
                 </button>
               )}
               <span className="ml-auto text-[11px] text-neutral-500">
