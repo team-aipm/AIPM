@@ -20,12 +20,17 @@
 
 import { getPath, isRecord, parsePath, setPath } from './_paths';
 
-export type MapSource = 'output' | 'input' | 'literal';
+export type MapSource = 'output' | 'input' | 'literal' | 'increment';
 
 export const MAP_SOURCES: { id: MapSource; label: string; hint: string }[] = [
   { id: 'output', label: '이 단계 결과', hint: '예: evaluation.reasoning_score' },
   { id: 'input', label: '이 단계 입력', hint: '예: conversation' },
   { id: 'literal', label: '직접 적기', hint: '예: photo · 0 · [] · null' },
+  {
+    id: 'increment',
+    label: '1 더하기',
+    hint: '예: payload.mode_status.mode_a_count',
+  },
 ];
 
 export type MapRow = {
@@ -80,6 +85,25 @@ export function applyMapping(
 
     if (row.source === 'literal') {
       next = setPath(next, target, parseLiteral(from));
+      applied += 1;
+      continue;
+    }
+
+    // 세는 값은 도구가 늘려 준다.
+    //
+    // 모델에게 "지금까지 몇 번 했는지 세어라" 를 시키면 틀린다. 그리고
+    // 안 세면 "덜 해 본 쪽" 을 고를 수가 없다 — mode_a_count 가 0 에
+    // 머물러 매번 같은 판단이 반복된다.
+    if (row.source === 'increment') {
+      const source = parsePath(from);
+      if (source === null) {
+        notes.push(`${from} → 셀 경로가 올바르지 않습니다.`);
+        continue;
+      }
+      const found = getPath(fromInput, source);
+      // 없으면 0 에서 시작한다. 첫 문제에는 아직 아무 값도 없다.
+      const before = typeof found.value === 'number' ? found.value : 0;
+      next = setPath(next, target, before + 1);
       applied += 1;
       continue;
     }
@@ -177,9 +201,25 @@ function safeParse(text: string): unknown {
  * 여기 적는 것은 "이 값을 저기에 넣어라" 뿐이다. 판단은 프롬프트가 한다.
  */
 export const AIPM_MAPS: Record<string, MapRow[]> = {
+  // 고른 모드와 지금까지의 균형을 문제 단계로 들려 보낸다. 이게 한
+  // 바퀴 돌아 01 로 돌아와야 "이번엔 B 어때?" 를 말할 수 있다.
+  '01 SESSION HOST': [
+    { source: 'output', from: 'selected_mode', to: 'payload.learning_mode' },
+    { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
+    { source: 'input', from: 'student', to: 'student' },
+    { source: 'input', from: 'session', to: 'session' },
+  ],
   // 문제 하나가 끝났다. 결과를 평가 단계가 읽는 자리에 옮긴다.
   '02 MODE A': [
     { source: 'literal', from: 'A', to: 'payload.learning_mode' },
+    { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
+    // 도구가 센다. 모델에게 세라고 하면 틀리고, 안 세면 "덜 해 본 쪽"
+    // 을 고를 수가 없다.
+    {
+      source: 'increment',
+      from: 'payload.mode_status.mode_a_count',
+      to: 'payload.mode_status.mode_a_count',
+    },
     { source: 'output', from: 'problem_state.problem_text', to: 'payload.problem_result.problem_text' },
     { source: 'output', from: 'problem_state.verified_answer', to: 'payload.problem_result.verified_answer' },
     { source: 'output', from: 'completion.status', to: 'payload.problem_result.completion_status' },
@@ -192,6 +232,12 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
   ],
   '03 MODE B': [
     { source: 'literal', from: 'B', to: 'payload.learning_mode' },
+    { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
+    {
+      source: 'increment',
+      from: 'payload.mode_status.mode_b_count',
+      to: 'payload.mode_status.mode_b_count',
+    },
     { source: 'output', from: 'problem_state.problem_text', to: 'payload.problem_result.problem_text' },
     { source: 'output', from: 'problem_state.verified_answer', to: 'payload.problem_result.verified_answer' },
     { source: 'output', from: 'completion.status', to: 'payload.problem_result.completion_status' },
