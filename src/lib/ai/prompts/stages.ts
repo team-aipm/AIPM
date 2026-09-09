@@ -1436,6 +1436,8 @@ A/B 5:5는 권장 목표이며 강제하지 않는다.
 - target_logic_gap
 - difficulty
 를 결정한다.
+target_concept은 한국어로 쓴다.
+이 값은 부모 화면의 "자주 막힌 부분"에 그대로 나간다.
 difficulty는:
 DOWN | SAME | UP
 중 하나이다.

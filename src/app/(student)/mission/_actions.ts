@@ -18,6 +18,8 @@ import { findTodaySession, countCompleted } from '@/lib/services/learning-sessio
 import { createProblem, findActiveProblem, finishProblem } from '@/lib/services/problem';
 import { appendMessage, listMessages } from '@/lib/services/message';
 import { EVENT, record } from '@/lib/analytics/events';
+import { saveEvaluation, saveLogicGaps } from '@/lib/services/evaluation';
+import { Constants, type Database } from '@/types/database';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 import { runStage, stageOf } from '@/lib/ai/pipeline/run';
 import { getPath, parsePath, setPath } from '@/lib/ai/pipeline/paths';
@@ -476,6 +478,30 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     };
   }
 
+  await evaluateProblem(supabase, {
+    student: {
+      student_id: student.student_id,
+      grade: student.grade,
+      persona_type: student.persona_type,
+    },
+    session: {
+      session_id: session.session_id,
+      completed_problem_count: session.completed_problem_count,
+      target_problem_count: session.target_problem_count,
+    },
+    problem: {
+      problem_id: problem.problem_id,
+      problem_text: problem.problem_text,
+      verified_answer: problem.verified_answer,
+      concept: problem.concept,
+      learning_mode: problem.learning_mode,
+    },
+    studentTexts: [...studentTexts, said],
+    supportLevel: nextSupport,
+    completionStatus: status,
+    correct,
+  });
+
   const who = { studentId: student.student_id, sessionId: session.session_id };
   await record(supabase, correct ? EVENT.problemCompleted : EVENT.problemNeedsReview, who);
 
@@ -492,4 +518,134 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     finished: true,
     sessionFinished: sessionCompleted,
   };
+}
+
+// ============================================================
+// 05 EVALUATOR · 문제 하나를 평가한다
+// ============================================================
+
+const GAP_TYPES = Constants.public.Enums.gap_type;
+
+const gapOf = (value: unknown): Database['public']['Enums']['gap_type'] | null => {
+  const name = str(value);
+  return (GAP_TYPES as readonly string[]).includes(name)
+    ? (name as Database['public']['Enums']['gap_type'])
+    : null;
+};
+
+const score = (value: unknown, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+/** 물어보지 않고 끝난 항목은 0 이 아니라 없음이다 */
+const scoreOrNull = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+const boolOrNull = (value: unknown): boolean | null =>
+  typeof value === 'boolean' ? value : null;
+
+/**
+ * 문제가 끝나면 평가를 남긴다 (05 EVALUATOR).
+ *
+ * **학생을 기다리게 하지만 여기서 해야 한다.** 다음 문제가 시작되면 이
+ * 문제의 대화가 입력에서 밀려나고, 나중에 다시 모으려면 같은 것을 두 번
+ * 짓게 된다.
+ *
+ * 평가가 실패해도 학습은 이미 끝난 것이다. 던지지 않고 로그만 남긴다 —
+ * 문제를 다 풀었는데 화면이 오류로 바뀌면 그게 더 큰 손해다.
+ */
+async function evaluateProblem(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  args: {
+    student: { student_id: string; grade: number; persona_type: 'friend' | 'villain' };
+    session: { session_id: string; completed_problem_count: number; target_problem_count: number };
+    problem: {
+      problem_id: string;
+      problem_text: string;
+      verified_answer: unknown;
+      concept: string;
+      learning_mode: string;
+    };
+    studentTexts: string[];
+    supportLevel: number;
+    completionStatus: string;
+    correct: boolean;
+  },
+): Promise<void> {
+  const stage = stageOf('05 EVALUATOR');
+  let input: unknown = JSON.parse(stage.sampleInput);
+
+  input = write(input, 'student.student_id', args.student.student_id);
+  input = write(input, 'student.grade', args.student.grade);
+  input = write(input, 'session.problem_number', args.session.completed_problem_count + 1);
+  input = write(input, 'session.total_problems', args.session.target_problem_count);
+
+  input = write(input, 'payload.learning_mode', args.problem.learning_mode === 'mode_b' ? 'B' : 'A');
+  input = write(input, 'payload.problem_result.problem_text', args.problem.problem_text);
+  input = write(input, 'payload.problem_result.verified_answer', args.problem.verified_answer);
+  input = write(input, 'payload.problem_result.initial_answer', args.studentTexts[0] ?? null);
+  input = write(
+    input,
+    'payload.problem_result.final_answer',
+    args.studentTexts[args.studentTexts.length - 1] ?? null,
+  );
+  input = write(input, 'payload.problem_result.completion_status', args.completionStatus);
+  input = write(
+    input,
+    'payload.problem_result.response_history',
+    args.studentTexts.map((text) => ({
+      response_role: null,
+      response_type: 'FREE_TEXT',
+      choice_id: null,
+      content: text,
+    })),
+  );
+  input = write(input, 'payload.problem_result.student_turn_count', args.studentTexts.length);
+  input = write(input, 'payload.problem_result.turn_limit', TURN_LIMIT);
+  input = write(
+    input,
+    'payload.problem_result.turns_remaining',
+    Math.max(0, TURN_LIMIT - args.studentTexts.length),
+  );
+  input = write(input, 'payload.problem_result.support_level', args.supportLevel);
+  input = write(input, 'payload.problem_result.hint_count', 0);
+
+  const result = await runStage('05 EVALUATOR', JSON.stringify(input, null, 2), args.student.persona_type);
+  if (!result.ok) {
+    console.error(`[mission] 05 실패: ${result.error}`);
+    return;
+  }
+
+  const evaluation = read(result.output, 'evaluation');
+  if (evaluation === undefined || evaluation === null) {
+    console.error('[mission] 05 가 evaluation 을 내지 않았습니다');
+    return;
+  }
+
+  try {
+    await saveEvaluation(supabase, {
+      problemId: args.problem.problem_id,
+      studentId: args.student.student_id,
+      initialAccuracy: boolOrNull(read(evaluation, 'initial_accuracy')),
+      reasoningScore: score(read(evaluation, 'reasoning_score'), 0),
+      ruleScore: score(read(evaluation, 'rule_score'), 0),
+      selfCorrection: read(evaluation, 'self_correction') === true,
+      transferScore: scoreOrNull(read(evaluation, 'transfer_score')),
+      reflectionScore: scoreOrNull(read(evaluation, 'reflection_score')),
+      supportLevel: score(read(evaluation, 'support_level'), args.supportLevel),
+      // 05 는 이 값을 내지 않는다. 맞혀서 끝났는지는 완료 상태가 안다.
+      finalAccuracy: args.correct,
+    });
+
+    await saveLogicGaps(supabase, {
+      problemId: args.problem.problem_id,
+      studentId: args.student.student_id,
+      concept: str(read(result.output, 'next_learning.target_concept')) || args.problem.concept,
+      gaps: [
+        gapOf(read(evaluation, 'primary_logic_gap')),
+        gapOf(read(evaluation, 'secondary_logic_gap')),
+      ],
+    });
+  } catch (error) {
+    console.error(`[mission] 평가 저장 실패: ${String(error)}`);
+  }
 }
