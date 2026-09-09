@@ -1171,3 +1171,91 @@ export async function readPhotoProblem(formData: FormData): Promise<SourceStep> 
     choices: readChoices(result.output),
   };
 }
+
+// ============================================================
+// 04 HINT · 막혔을 때
+// ============================================================
+
+export type HintReply =
+  | { ok: true; message: string; supportLevel: number }
+  | { ok: false; message: string };
+
+/**
+ * 힌트를 준다 (04 HINT).
+ *
+ * **문제를 대신 풀거나 정답을 알려주지 않는다**(04 프롬프트). 다음 한
+ * 걸음만 짚어 준다.
+ *
+ * 힌트를 받으면 `support_level` 이 1 이상이 된다. 그 값은 평가에 그대로
+ * 들어가고(05) 부모 화면의 "도움을 얼마나 받았는지" 가 된다. **학생에게
+ * 감점처럼 보이면 안 된다**(CLAUDE.md UI) — 화면에 점수로 표시하지 않는다.
+ *
+ * 턴은 쓰지 않는다. 힌트는 학생의 발화가 아니라 도움 요청이다 —
+ * 5턴 한도(COM-001 §8)를 힌트로 깎지 않는다.
+ */
+export async function askHint(): Promise<HintReply> {
+  const ctx = await context();
+  if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
+  const { supabase, student, session } = ctx;
+
+  const problem = await findActiveProblem(supabase, session.session_id);
+  if (problem === null) return { ok: false, message: '지금은 풀고 있는 문제가 없어.' };
+
+  const before = await listMessages(supabase, problem.problem_id);
+  const studentTexts = before
+    .filter((m) => m.speaker === 'student')
+    .map((m) => m.message_text);
+  const supportLevel = before.reduce((max, m) => Math.max(max, m.support_level), 0);
+
+  const stage = stageOf('04 HINT');
+  let input: unknown = JSON.parse(stage.sampleInput);
+
+  input = write(input, 'student.student_id', student.student_id);
+  input = write(input, 'student.grade', student.grade);
+  input = write(input, 'student.selected_persona', student.persona_type.toUpperCase());
+  input = write(input, 'payload.learning_mode', problem.learning_mode === 'mode_b' ? 'B' : 'A');
+  input = write(input, 'payload.problem.problem_text', problem.problem_text);
+  input = write(input, 'payload.problem.verified_answer', problem.verified_answer);
+  // MODE B 에서는 AI 가 만든 틀린 풀이도 함께 본다. 그래야 "내 풀이의 어디를
+  // 보라" 는 힌트를 줄 수 있다.
+  input = write(input, 'payload.problem.ai_wrong_solution', problem.ai_wrong_reasoning);
+  input = write(input, 'payload.interaction.current_request_type', 'HINT');
+  input = write(input, 'payload.interaction.latest_response', studentTexts[studentTexts.length - 1] ?? null);
+  input = write(
+    input,
+    'payload.interaction.response_history',
+    studentTexts.map((text) => ({
+      response_role: null,
+      response_type: 'FREE_TEXT',
+      choice_id: null,
+      content: text,
+    })),
+  );
+  input = write(input, 'payload.interaction.support_level', supportLevel);
+  input = write(input, 'payload.interaction.hint_count', 0);
+  input = write(input, 'payload.interaction.hint_history', []);
+
+  const result = await runStage('04 HINT', JSON.stringify(input, null, 2), student.persona_type);
+  if (!result.ok) {
+    console.error(`[mission] 04 실패: ${result.error}`);
+    return { ok: false, message: '잠깐 멈췄어. 다시 눌러줄래?' };
+  }
+
+  const message = str(read(result.output, 'hint.message'));
+  if (message === '') return { ok: false, message: '지금은 줄 힌트가 마땅치 않아.' };
+
+  // 힌트도 대화의 일부다. 안 남기면 다음 턴의 입력에서 사라지고, 05 가
+  // "도움을 받았다" 를 모른다.
+  const next = Math.max(supportLevel, num(read(result.output, 'hint.support_level'), 1), 1);
+  await appendMessage(supabase, {
+    problemId: problem.problem_id,
+    sessionId: session.session_id,
+    studentId: student.student_id,
+    speaker: 'ai',
+    text: message,
+    turnNumber: before.length + 1,
+    supportLevel: next,
+  });
+
+  return { ok: true, message, supportLevel: next };
+}
