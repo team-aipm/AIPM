@@ -261,10 +261,10 @@ export function MissionChat({ partner, persona, initial }: Props) {
                   오늘 미션 끝! 정말 잘했어
                 </p>
                 <a
-                  href="/home"
+                  href="/home/today"
                   className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
                 >
-                  홈으로 가기
+                  오늘의 기록 보기
                 </a>
               </>
             ) : (
