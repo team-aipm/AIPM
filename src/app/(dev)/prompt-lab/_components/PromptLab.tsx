@@ -226,8 +226,8 @@ type Props = {
 const LOG_LABEL: Record<AutoStep['kind'], string> = {
   // **이 도구는 범용이다.** 화면에 "학생" 이 나오면 안 된다. 단계와
   // 주고받는 쪽은 프로젝트마다 학생일 수도 고객일 수도 환자일 수도 있다.
-  ai: '단계',
-  student: '상대',
+  ai: 'AI',
+  student: '사용자',
   move: '이동',
   end: '끝',
   error: '오류',
@@ -1298,7 +1298,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     if (!active || !thread?.result?.ok) return;
     const note = window.prompt(
       '이 케이스가 무엇을 지키는지 한 줄로 적으세요.\n' +
-        '예: 빌런 말투로 3턴째, 상대가 규칙을 못 찾는 경우',
+        '예: 빌런 말투로 3턴째, 사용자가 규칙을 못 찾는 경우',
       '',
     );
     if (note === null) return;
@@ -1924,7 +1924,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         break;
       }
       if (!pick.show) {
-        add({ stage: at, kind: 'error', text: '상대에게 보여줄 말이 없습니다. 응답 필드를 보세요.' });
+        add({ stage: at, kind: 'error', text: '사용자에게 보여줄 말이 없습니다. 응답 필드를 보세요.' });
         reason = 'error';
         break;
       }
@@ -1953,7 +1953,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           }),
       );
       if (said === null || !said.ok) {
-        add({ stage: at, kind: 'error', text: said?.error ?? '상대 모델 호출 실패' });
+        add({ stage: at, kind: 'error', text: said?.error ?? '사용자 모델 호출 실패' });
         reason = 'error';
         break;
       }
@@ -1962,7 +1962,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
       const withUser = appendUserTurn(input, shape, text);
       if (withUser === null) {
-        add({ stage: at, kind: 'error', text: '입력 JSON을 읽지 못해 상대의 말을 넣을 수 없습니다.' });
+        add({ stage: at, kind: 'error', text: '입력 JSON을 읽지 못해 사용자의 말을 넣을 수 없습니다.' });
         reason = 'error';
         break;
       }
@@ -2951,7 +2951,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           hint={
             autoRunning
               ? '도는 중… 아래 [중지]로 멈춥니다'
-              : '모델이 상대 자리에 앉아 끝까지 돌립니다'
+              : '모델이 사용자 자리에 앉아 끝까지 돌립니다'
           }
           onClose={() => setPanel('none')}
         >
@@ -2967,7 +2967,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
             <div className="flex flex-col gap-1 rounded border border-neutral-200 p-2 text-[11px] text-neutral-500 dark:border-neutral-800">
               {(
                 [
-                  ['최대 발화', '상대가 말할 수 있는 횟수', '여기서 멈추면 종료 분기가 없다는 뜻'],
+                  ['최대 발화', '사용자가 말할 수 있는 횟수', '여기서 멈추면 종료 분기가 없다는 뜻'],
                   ['최대 이동', '단계를 옮길 수 있는 횟수', '여기서 멈추면 분기가 돌고 있다는 뜻'],
                   ['최대 호출', '위의 셋에서 계산합니다 · 마지막 안전장치', '화면에서 안 받습니다'],
                   ['최대 재시도', '오류로 다시 부를 횟수', '3 · 8 · 20 · 45초 쉬고 다시'],
@@ -2988,7 +2988,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
               <p>
                 <b>프롬프트 안의 횟수 제한과는 다른 숫자입니다.</b> 프롬프트가
                 &ldquo;한 문제에 5번&rdquo; 을 정한다면 그건 <b>한 문제 안</b>이고,
-                여기 <b>최대 발화</b>는 <b>한 회차 전체</b>를 셉니다. 로그에 상대의
+                여기 <b>최대 발화</b>는 <b>한 회차 전체</b>를 셉니다. 로그에 사용자의
                 걸음이 7개여도 앞 단계에서 2번 + 문제 단계에서 5번이면 정상입니다.
               </p>
             </div>
@@ -3001,7 +3001,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
             </p>
 
             <p className="text-[11px] text-neutral-500">
-              단계를 실행하고, 그 답을 <b>상대 모델</b>에 넘기고, 상대가 한 말을
+              단계를 실행하고, 그 답을 <b>사용자 모델</b>에 넘기고, 사용자가 한 말을
               다시 단계에 넣습니다. 어디로 갈지는 각 단계의 <b>[분기]</b> 표가
               정합니다 — 거기서 <code>{STAY}</code> 와 <code>{FINISH}</code> 를 고를
               수 있습니다. 규칙이 없으면 <b>최대 발화</b>에 걸릴 때까지 대화를
@@ -3030,7 +3030,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   [
                     'students',
                     '최대 발화',
-                    '상대가 말할 수 있는 횟수. 여기서 멈추면 종료 분기가 없다는 뜻입니다',
+                    '사용자가 말할 수 있는 횟수. 여기서 멈추면 종료 분기가 없다는 뜻입니다',
                   ],
                   [
                     'moves',
@@ -3086,7 +3086,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   <button
                     onClick={runAuto}
                     className="rounded bg-neutral-900 px-4 py-2 text-white dark:bg-white dark:text-neutral-900"
-                    title="지금 고른 상대로 딱 한 번 돌립니다. 걸음이 화면에 그대로 쌓입니다"
+                    title="지금 고른 사용자로 딱 한 번 돌립니다. 걸음이 화면에 그대로 쌓입니다"
                   >
                     한 번
                   </button>
@@ -3098,8 +3098,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     className="rounded border border-neutral-400 px-4 py-2 dark:border-neutral-600"
                     title={
                       autoAll
-                        ? `반복 ${Math.max(1, autoRepeat)} × 상대 ${profiles.length}명 = ${profiles.length * Math.max(1, autoRepeat)}회`
-                        : `지금 고른 상대로 ${Math.max(1, autoRepeat)}회`
+                        ? `반복 ${Math.max(1, autoRepeat)} × 사용자 ${profiles.length}명 = ${profiles.length * Math.max(1, autoRepeat)}회`
+                        : `지금 고른 사용자로 ${Math.max(1, autoRepeat)}회`
                     }
                   >
                     모두 돌리기 ·{' '}
@@ -3107,7 +3107,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   </button>
                   <label
                     className="flex items-center gap-2"
-                    title="상대 한 명을 몇 번씩 돌릴지. 모델은 매번 다르게 답하므로 여러 번 돌려야 통과율이 나옵니다"
+                    title="사용자 한 명을 몇 번씩 돌릴지. 모델은 매번 다르게 답하므로 여러 번 돌려야 통과율이 나옵니다"
                   >
                     <span className="shrink-0 cursor-help border-b border-dotted border-neutral-400 text-neutral-500">
                       반복
@@ -3121,7 +3121,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       className="w-14 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
                     />
                   </label>
-                  <Toggle checked={autoAll} onChange={setAutoAll} label="상대 전부" />
+                  <Toggle checked={autoAll} onChange={setAutoAll} label="사용자 전부" />
                   <Toggle
                     checked={autoFresh}
                     onChange={setAutoFresh}
@@ -3160,7 +3160,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                         .map((p) => p.name)
                         .join(' · ')}
                     >
-                      프리셋 상대 받아오기 ·{' '}
+                      프리셋 사용자 받아오기 ·{' '}
                       {profileDrift.added.length > 0 && `새로 ${profileDrift.added.length}`}
                       {profileDrift.added.length > 0 && profileDrift.changed.length > 0 && ' · '}
                       {profileDrift.changed.length > 0 && `되돌림 ${profileDrift.changed.length}`}
@@ -3174,9 +3174,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
               <div className="flex flex-wrap items-center gap-1">
                 <span
                   className="mr-1 cursor-help border-b border-dotted border-neutral-400 text-neutral-500"
-                  title="단계와 주고받을 상대를 연기하는 모델입니다. 여러 명을 만들어 두고 [상대 전부] 로 돌리면 한 사람만으로는 안 지나는 길이 열립니다"
+                  title="AI 와 주고받을 사용자를 연기하는 모델입니다. 여러 명을 만들어 두고 [사용자 전부] 로 돌리면 한 사람만으로는 안 지나는 길이 열립니다"
                 >
-                  상대
+                  사용자
                 </span>
                 {profiles.map((profile, index) => (
                   <button
@@ -3195,7 +3195,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   onClick={() =>
                     setProfiles((prev) => [
                       ...prev,
-                      { name: `상대 ${prev.length + 1}`, prompt: prev[0]?.prompt ?? '' },
+                      { name: `사용자 ${prev.length + 1}`, prompt: prev[0]?.prompt ?? '' },
                     ])
                   }
                   disabled={autoRunning}
@@ -3211,7 +3211,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     }}
                     disabled={autoRunning}
                     className="px-2 text-neutral-400 hover:text-red-600"
-                    title="이 상대 삭제"
+                    title="이 사용자 삭제"
                   >
                     ×
                   </button>
@@ -4490,9 +4490,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     남기면 됩니다. 비우면 응답 필드와 같습니다.
                   </p>
                   <p>
-                    <b>보기 필드</b>는 상대에게 <b>버튼으로 보여줄 선택지</b>가 담긴
+                    <b>보기 필드</b>는 사용자에게 <b>버튼으로 보여줄 선택지</b>가 담긴
                     자리입니다. v3.0 은 <code>ui.choices</code> 에 냅니다. 누르면 그
-                    글이 상대의 말로 들어가고, 자동 실행의 상대 모델도 같은 보기를
+                    글이 사용자의 말로 들어가고, 자동 실행의 사용자 모델도 같은 보기를
                     받습니다. <code>{'{ label, value }'}</code> 목록도, 글자만 있는
                     목록도 읽습니다.
                   </p>
@@ -4500,12 +4500,12 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
               </div>
 
               {/* 프롬프트마다 대화를 담는 모양이 다르다. 도구가 한 모양으로
-                  고정해 쓰면 모델이 상대의 말을 자기가 읽는 자리에서 못
+                  고정해 쓰면 모델이 사용자의 말을 자기가 읽는 자리에서 못
                   찾는다. */}
               <div hidden={settingTab !== 'chat'} className="flex flex-col gap-2 p-3">
                 <p className="text-[11px] text-neutral-500">
                   대화창에서 보낸 말이 <b>입력 JSON 의 어디에 어떤 모양으로</b>{' '}
-                  들어갈지 정합니다. 프롬프트가 읽는 자리와 맞아야 모델이 상대의
+                  들어갈지 정합니다. 프롬프트가 읽는 자리와 맞아야 모델이 사용자의
                   말을 찾습니다.
                 </p>
 
@@ -4538,7 +4538,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   {(
                     [
-                      ['turnCountKey', '상대 발화 수', '비우면 안 씀'],
+                      ['turnCountKey', '사용자 발화 수', '비우면 안 씀'],
                       ['limitKey', '한도', '비우면 안 씀'],
                       ['remainingKey', '남은 횟수', '한도가 있어야 계산'],
                       ['resetKey', '문제 바뀜 기준', '비우면 안 씀'],
@@ -4562,7 +4562,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                 <div className="flex flex-col gap-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                   {(
                     [
-                      ['studentTurn', 'studentField', '상대 턴 모양', ''],
+                      ['studentTurn', 'studentField', '사용자 턴 모양', ''],
                       ['aiTurn', 'aiField', 'AI 턴 모양', '비우면 배열에 안 남깁니다'],
                     ] as const
                   ).map(([tKey, fKey, label, ph]) => (
@@ -4595,12 +4595,12 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
                 <div className="flex flex-col gap-1 border-t border-neutral-200 pt-2 text-[11px] text-neutral-500 dark:border-neutral-800">
                   <p>
-                    <b>마지막 발화</b>는 배열에 쌓는 것과 별개로, 직전 상대 발화를
+                    <b>마지막 발화</b>는 배열에 쌓는 것과 별개로, 직전 사용자 발화를
                     한 곳에 더 두는 자리입니다. 프롬프트가{' '}
                     <code>latest_response</code> 같은 필드를 읽을 때 씁니다.
                   </p>
                   <p>
-                    <b>남은 횟수</b>는 <b>한도 − 상대 발화 수</b>로 도구가
+                    <b>남은 횟수</b>는 <b>한도 − 사용자 발화 수</b>로 도구가
                     계산합니다. 모델에게 숫자를 비교시키지 않으려고 두는 값이라
                     도구가 채우는 게 맞습니다.
                   </p>
@@ -4613,7 +4613,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   </p>
                   <p>
                     <b>AI 턴 모양</b>을 비우면 AI 응답을 대화 배열에 남기지
-                    않습니다. 상대의 말만 기록하는 프롬프트에 맞춥니다. 대신
+                    않습니다. 사용자의 말만 기록하는 프롬프트에 맞춥니다. 대신
                     대화창에도 AI 말풍선이 쌓이지 않습니다.
                   </p>
                 </div>
@@ -4921,7 +4921,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                           고른 값이 보이게 빈 칸을 맨 앞에 둔다. */}
                       <option value="">(고르세요)</option>
                       {/* 자동 실행 전용. 손으로 보낼 때는 못 고른 것으로 본다 */}
-                      <option value={STAY}>{STAY} · 상대가 한 번 더</option>
+                      <option value={STAY}>{STAY} · 사용자가 한 번 더</option>
                       <option value={FINISH}>{FINISH} · 실행을 마친다</option>
                       {stages.map((stage, i) =>
                         i === activeIndex ? null : (
@@ -5329,7 +5329,7 @@ function ChatPanel({
           <div className="flex flex-col items-start gap-2">
             <p className="whitespace-pre-wrap text-neutral-500">
               {emptyReason?.text ??
-                '아직 대화가 없습니다. 아래에 상대의 답을 입력해 보세요.'}
+                '아직 대화가 없습니다. 아래에 사용자의 답을 입력해 보세요.'}
             </p>
             {emptyReason?.action && (
               <button
@@ -5355,7 +5355,7 @@ function ChatPanel({
               }`}
             >
               <span className="mr-2 text-[11px] opacity-60">
-                {turn.who === 'user' ? '상대' : turn.who === 'ai' ? '단계' : '?'}
+                {turn.who === 'user' ? '사용자' : turn.who === 'ai' ? 'AI' : '?'}
               </span>
               {turn.text}
               {turn.attachments.length > 0 && (
@@ -5389,7 +5389,7 @@ function ChatPanel({
             </button>
           ))}
           <span className="text-[11px] text-neutral-500">
-            · 누르면 그 글이 상대의 말로 들어갑니다. 직접 써도 됩니다
+            · 누르면 그 글이 사용자의 말로 들어갑니다. 직접 써도 됩니다
           </span>
         </div>
       )}
@@ -5458,7 +5458,7 @@ function ChatPanel({
               onSend();
             }
           }}
-          placeholder="상대가 되어 답해 보세요. Enter로 전송"
+          placeholder="사용자가 되어 답해 보세요. Enter로 전송"
           className="flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1.5 dark:border-neutral-700"
         />
         <button
