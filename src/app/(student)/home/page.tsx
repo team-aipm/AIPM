@@ -14,6 +14,7 @@ import { getStudent } from '@/lib/services/student';
 import { findTodaySession } from '@/lib/services/learning-session';
 import { PARTNER_NAME, TERMS } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import { startMission } from './_actions';
 
 export const metadata = { title: '오늘의 미션 · 메티' };
 
@@ -89,15 +90,14 @@ export default async function HomePage() {
           {partner}와 함께 오늘의 미션을 시작해보자!
         </p>
 
-        {/* 미션 화면은 다음 차례다. 아직 없는 곳으로 보내지 않는다. */}
-        <button
-          type="button"
-          disabled
-          className="mt-4 w-full rounded-xl bg-meti py-3 text-[14px] font-bold text-white disabled:opacity-40"
-        >
-          {session === null ? TERMS.startLearning.student : TERMS.resumeLearning.student}
-        </button>
-        <p className="mt-2 text-center text-[11px] text-meti-sub">준비 중이에요</p>
+        <form action={startMission}>
+          <button
+            type="submit"
+            className="mt-4 w-full rounded-xl bg-meti py-3 text-[14px] font-bold text-white"
+          >
+            {session === null ? TERMS.startLearning.student : TERMS.resumeLearning.student}
+          </button>
+        </form>
       </section>
 
       <Link
