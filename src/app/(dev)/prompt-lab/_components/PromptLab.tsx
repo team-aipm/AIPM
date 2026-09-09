@@ -1208,19 +1208,19 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
     // 우선순위: 사용자가 적은 매핑 → AIPM 규칙 → 출력 원문.
     // 손으로 적은 것이 항상 이긴다. 도구가 몰래 다르게 옮기면 안 된다.
+    // 우선순위: 사용자가 적은 매핑 → AIPM 규칙 → 출력 원문.
+    let nextInput: string;
+    const notes: string[] = [];
+
     const custom = applyMapping(active.mapping, output, thread.input, targetInput);
     if (custom !== null) {
-      patchThread(nextIndex, targetThread, { input: custom.json });
-      setSendNote(
-        custom.notes.length > 0
-          ? `${custom.applied}칸 옮겼습니다. ${custom.notes.join(' ')}`
-          : `${custom.applied}칸 옮겼습니다.`,
-      );
+      nextInput = custom.json;
+      notes.push(`${custom.applied}칸 옮겼습니다.`, ...custom.notes);
     } else {
       // 출력만이 아니라 이 단계의 입력도 넘긴다. 대화 기록이 거기 있다.
       const mapped = bridge(active.checkRule, output, thread.input, targetInput);
-      patchThread(nextIndex, targetThread, { input: mapped ?? raw });
-      setSendNote(
+      nextInput = mapped ?? raw;
+      notes.push(
         mapped !== null
           ? '검증 규칙에 맞춰 옮겼습니다.'
           : '옮길 규칙이 없어 결과 원문을 그대로 넣었습니다.',
@@ -1228,11 +1228,25 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     }
 
     // 규칙이 대화를 다루지 않을 때만 체크박스가 일한다.
+    //
+    // **위에서 만든 nextInput 위에 이어서 얹는다.** 예전에는 patchThread
+    // 를 한 번 더 하려고 setTimeout 을 썼는데, 그 콜백이 옛 stages 를
+    // 붙잡고 있어서 방금 넣은 입력을 못 보고 덮어썼다.
     if (!conversationHandled && carryConversation) {
-      // patchThread 두 번이 같은 setState 큐에 쌓이므로, 위에서 넣은
-      // 입력 위에 이어서 덮인다.
-      window.setTimeout(() => copyConversation(activeIndex, nextIndex), 0);
+      const carried = carryInto(
+        thread.input,
+        active.historyKey,
+        nextInput,
+        target.historyKey,
+      );
+      if (carried !== null) {
+        nextInput = carried;
+        notes.push('대화도 함께 옮겼습니다.');
+      }
     }
+
+    patchThread(nextIndex, targetThread, { input: nextInput });
+    setSendNote(notes.join(' '));
 
     setLastTransfer({ from: activeIndex, to: nextIndex });
     setActiveIndex(nextIndex);
@@ -1240,30 +1254,42 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   }
 
   /**
-   * 한 단계의 대화를 다른 단계의 입력에 옮긴다.
+   * 대화를 옮겨 넣은 입력을 만든다. 옮길 게 없으면 null.
    *
-   * 받는 쪽의 `대화 배열 키` 이름에 맞춰 넣는다. 이름이 서로 달라도 된다.
+   * 상태를 건드리지 않는다. 부르는 쪽이 결과를 어떻게 쓸지 정한다.
+   * 받는 쪽의 `대화 배열 키` 이름에 맞춰 넣으므로 이름이 서로 달라도 된다.
    */
+  function carryInto(
+    fromInput: string,
+    fromKey: string,
+    toInput: string,
+    toKey: string,
+  ): string | null {
+    if (readTurns(fromInput, fromKey).length === 0) return null;
+    const result = applyMapping(
+      [{ source: 'input', from: fromKey, to: toKey }],
+      null,
+      fromInput,
+      toInput,
+    );
+    return result === null || result.applied === 0 ? null : result.json;
+  }
+
+  /** 빈 대화창의 [가져오기] 버튼. 지금 상태를 읽어 옮긴다 */
   function copyConversation(fromIndex: number, toIndex: number): boolean {
     const from = stages[fromIndex];
     const to = stages[toIndex];
     if (!from || !to) return false;
 
-    const source = from.threads[from.activeThread]?.input ?? '';
-    const turns = readTurns(source, from.historyKey);
-    if (turns.length === 0) return false;
-
-    const targetThread = to.activeThread;
-    const targetInput = to.threads[targetThread]?.input ?? '{}';
-    const result = applyMapping(
-      [{ source: 'input', from: from.historyKey, to: to.historyKey }],
-      null,
-      source,
-      targetInput,
+    const carried = carryInto(
+      from.threads[from.activeThread]?.input ?? '',
+      from.historyKey,
+      to.threads[to.activeThread]?.input ?? '{}',
+      to.historyKey,
     );
-    if (result === null || result.applied === 0) return false;
+    if (carried === null) return false;
 
-    patchThread(toIndex, targetThread, { input: result.json });
+    patchThread(toIndex, to.activeThread, { input: carried });
     return true;
   }
 
