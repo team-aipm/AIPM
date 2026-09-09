@@ -1,6 +1,9 @@
 /**
  * 조건부 다음 단계.
  *
+ * **제품과 개발 도구가 함께 쓴다.** 원래 `(dev)/prompt-lab/_routing.ts`
+ * 였다.
+ *
  * 학습은 한 줄로 흐르지 않는다. 01 SESSION HOST 는 `recommended_mode` 로
  * A 인지 B 인지를 내놓고, 그에 따라 02 로 갈지 03 으로 갈지가 갈린다.
  * 손으로 매번 대상을 고르면 시험할 때마다 틀린 단계로 보내게 된다.
@@ -21,8 +24,7 @@
  * 옮겨도 따라간다.
  */
 
-import { FINISH, STAY } from './_autorun';
-import { getPath, parsePath, preview } from './_paths';
+import { getPath, parsePath, preview } from '@/lib/ai/pipeline/paths';
 
 export type RouteRow = {
   /** 읽은 값이 이것과 같으면. 비우면 "그밖의 모든 값" */
@@ -36,6 +38,16 @@ export type Routing = {
   from: string;
   rows: RouteRow[];
 };
+
+/**
+ * 분기 표에서 고를 수 있는 예약 대상. 단계 이름과 겹치지 않게 괄호를 쓴다.
+ *
+ * 자동 실행이 쓰던 값인데 **분기의 뜻**이라 여기에 둔다. `(계속)` 은 같은
+ * 단계에서 한 번 더 주고받는다는 뜻이고, `(끝)` 은 한 바퀴를 마친다는
+ * 뜻이다. 둘 다 단계 이름이 아니라서 이름으로 찾으면 안 나온다.
+ */
+export const STAY = '(계속)';
+export const FINISH = '(끝)';
 
 export const EMPTY_ROUTING: Routing = { from: '', rows: [] };
 export const BLANK_ROUTE_ROW: RouteRow = { equals: '', to: '' };

@@ -41,16 +41,18 @@ import {
   defaultMapping,
   resetWritten,
   writtenPaths,
-} from '../_mapping';
+} from '@/lib/ai/pipeline/mapping';
 import {
   BLANK_ROUTE_ROW,
   defaultRouting,
+  FINISH,
   hasRouting,
   matchRoute,
   pickRoute,
+  STAY,
   type RouteRow,
   type Routing,
-} from '../_routing';
+} from '@/lib/ai/pipeline/routing';
 import {
   diffAgainst,
   pull,
@@ -76,9 +78,7 @@ import {
   callCap,
   isTransient,
   waitFor,
-  FINISH,
   PROFILE_PRESET,
-  STAY,
   STOP_TEXT,
   studentInput,
   type AutoLimits,
@@ -126,7 +126,7 @@ import {
   readTurns,
   type ChatShape,
   type Turn,
-} from '../_chat';
+} from '@/lib/ai/pipeline/chat';
 
 /**
  * 한 단계 안의 **대화 하나**.

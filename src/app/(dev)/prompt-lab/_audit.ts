@@ -12,7 +12,7 @@
  * 규칙의 출처는 전부 우리 문서다. 새로 지어낸 기준이 없다.
  */
 
-import { getPath, isRecord, parsePath, preview } from './_paths';
+import { getPath, isRecord, parsePath, preview } from '@/lib/ai/pipeline/paths';
 
 export type AuditLevel = 'fail' | 'warn';
 

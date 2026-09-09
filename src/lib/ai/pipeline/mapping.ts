@@ -1,5 +1,11 @@
 /**
- * 단계 연결 매핑. **이 단계의 결과 중 무엇을 다음 단계 입력의 어디에
+ * 단계 연결 매핑.
+ *
+ * **제품과 개발 도구가 함께 쓴다.** 원래 `(dev)/prompt-lab/_mapping.ts`
+ * 였다. 학습 한 바퀴를 도는 데 필요한 것이 정확히 이 파일과 `routing` ·
+ * `chat` · `paths` 넷이라, 화면 폴더 안에 두면 제품이 쓸 수 없다.
+ * prompt-lab 은 이제 이 라이브러리를 쓰는 첫 소비자다 — 도구를 돌려
+ * 보면 여기가 맞는지 바로 확인된다. **이 단계의 결과 중 무엇을 다음 단계 입력의 어디에
  * 넣을지**를 사용자가 직접 정한다.
  *
  * `_bridge.ts` 가 하는 일과 같지만, 그쪽은 AIPM 규칙에 맞춰 코드에
@@ -18,7 +24,7 @@
  * 나머지는 화면에서 편집한 값을 그대로 둔다.
  */
 
-import { getPath, isRecord, parsePath, setPath } from './_paths';
+import { getPath, isRecord, parsePath, setPath } from '@/lib/ai/pipeline/paths';
 
 export type MapSource = 'output' | 'input' | 'literal' | 'increment' | 'append';
 

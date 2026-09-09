@@ -21,8 +21,8 @@
 
 import type { Check, CheckRuleId, OutputMode } from '@/lib/ai/schema-check';
 import type { CustomRules, FieldRule } from './_field-rules';
-import type { MapRow } from './_mapping';
-import { hasRouting, type Routing } from './_routing';
+import type { MapRow } from '@/lib/ai/pipeline/mapping';
+import { hasRouting, type Routing } from '@/lib/ai/pipeline/routing';
 import type { Variable } from './_vars';
 
 /** 내보내기가 필요로 하는 단계 정보. 화면 상태에서 이만큼만 뽑아 온다 */
