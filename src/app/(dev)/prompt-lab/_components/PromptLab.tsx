@@ -51,6 +51,7 @@ import {
   applyVars,
   BLANK_VARIABLE,
   DEFAULT_VAR_SET,
+  repairBareVars,
   undefinedRefs,
   usageOf,
   type Variable,
@@ -1121,9 +1122,34 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       return;
     }
 
-    const withUser = appendUserTurn(thread.input, active.historyKey, text, names);
+    let source = thread.input;
+    let withUser = appendUserTurn(source, active.historyKey, text, names);
+
+    // 안내만 하고 손으로 고치게 두면, 저장된 설정을 쓰는 사람은 매번 같은
+    // 벽을 만난다. 고칠 수 있으면 그 자리에서 고쳐 준다.
     if (withUser === null) {
-      window.alert(inputParseHint(thread.input));
+      const repair = repairBareVars(source, vars);
+      if (
+        repair !== null &&
+        window.confirm(
+          [
+            `따옴표 없는 변수 때문에 입력을 읽지 못했습니다: ${repair.replaced.join(' ')}`,
+            '',
+            '지금 값으로 바꿔서 이어갈까요?',
+            '',
+            '입력 JSON 은 변수 치환 전에도 유효해야 합니다.',
+            '대화가 입력 JSON 안의 배열이라 보내기 전에 읽어야 하기 때문입니다.',
+          ].join('\n'),
+        )
+      ) {
+        source = repair.text;
+        patchThread(index, threadIndex, { input: source });
+        withUser = appendUserTurn(source, active.historyKey, text, names);
+      }
+    }
+
+    if (withUser === null) {
+      window.alert(inputParseHint(source));
       return;
     }
 
