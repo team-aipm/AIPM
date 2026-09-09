@@ -1,0 +1,70 @@
+'use server';
+
+/**
+ * 마이페이지의 쓰기 동작 (MY-003 · MY-005 · MY-006 · MY-008~010).
+ *
+ * 모두 `lib/services` 를 부르는 얇은 래퍼다(DEV-001). DB 쿼리를 직접 쓰지
+ * 않는다.
+ */
+
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
+import { setPersona, softDeleteStudent, restoreStudent } from '@/lib/services/student';
+
+export async function changePersona(formData: FormData): Promise<void> {
+  const studentId = String(formData.get('student_id') ?? '');
+  const persona = String(formData.get('persona') ?? '');
+  if (persona !== 'friend' && persona !== 'villain') return;
+
+  const supabase = await createClient();
+  await setPersona(supabase, studentId, persona);
+  revalidatePath(`/parent/my/students/${studentId}`);
+}
+
+/**
+ * 학생 삭제 요청 (MY-003 · COM-007 §5-1).
+ *
+ * **지우지 않는다.** `deleted_pending` 으로 두고 30일 안에는 되돌릴 수
+ * 있다. 학습기록은 1년 뒤에 지운다.
+ */
+export async function requestDeleteStudent(formData: FormData): Promise<void> {
+  const studentId = String(formData.get('student_id') ?? '');
+  const supabase = await createClient();
+  await softDeleteStudent(supabase, studentId);
+  redirect('/parent/my/students');
+}
+
+export async function undoDeleteStudent(formData: FormData): Promise<void> {
+  const studentId = String(formData.get('student_id') ?? '');
+  const supabase = await createClient();
+  await restoreStudent(supabase, studentId);
+  redirect('/parent/my/students');
+}
+
+/** MY-006 마케팅 수신설정. 3종을 각각 받는다(COM-002 §3 · COM-007 §9) */
+export async function saveMarketing(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth.user === null) redirect('/login');
+
+  const { error } = await supabase
+    .from('account')
+    .update({
+      marketing_email_opt_in: formData.get('marketing_email_opt_in') === 'on',
+      marketing_sms_opt_in: formData.get('marketing_sms_opt_in') === 'on',
+      marketing_alimtalk_opt_in: formData.get('marketing_alimtalk_opt_in') === 'on',
+      // 언제 바꿨는지가 동의 이력이다(COM-002 §3).
+      marketing_consent_updated_at: new Date().toISOString(),
+    })
+    .eq('account_id', auth.user.id);
+
+  if (error !== null) throw new Error(`저장하지 못했습니다: ${error.message}`);
+  revalidatePath('/parent/my/marketing');
+}
+
+export async function signOutAccount(): Promise<void> {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect('/login');
+}
