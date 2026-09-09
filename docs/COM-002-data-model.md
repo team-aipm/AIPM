@@ -493,6 +493,56 @@ COM-002의 논리 구조는 확정하되, 실제 구현 전에 다음은 별도 
 -   **`Evaluation.transfer_score` · `reflection_score`의 Required** →
     `NO`로 확정. §8 참조
 
+## 20-A. 변경 제안 · MODE B 의 의도적 오답을 담을 자리 (2026-09-10)
+
+> **Status:** 제안 — 승인 전. 마이그레이션을 만들지 않았다.
+
+### 무엇이 없나
+
+MODE B 는 학생이 문제를 가져오고 **AI 가 일부러 틀리게 푼 뒤 학생이 그
+오류를 잡아내는** 방식이다(COM-001). 프롬프트 03 은 그 오답을 입력으로
+다시 받는다.
+
+```text
+payload.problem.ai_wrong_answer        AI 가 만든 의도적 오답
+payload.problem.ai_wrong_reasoning     왜 그렇게 틀렸는지 (내부)
+payload.problem.target_misconception   겨냥한 오개념 (내부)
+```
+
+`problem` 테이블에는 이 셋을 담을 칸이 없다. `verified_answer` 는 검증된
+**정답**이라 여기에 섞을 수 없다(§6 · §17).
+
+### 없으면 무슨 일이 생기나
+
+**AI 가 자기가 만든 오답을 다음 턴에 잊는다.** 그러면 "내 풀이에서 틀린
+곳을 찾아봐" 를 이어갈 수 없고, 남는 차이는 "문제를 누가 내느냐" 뿐이라
+MODE A 와 같아진다. 개발 도구에서 2026-09-09 에 실제로 겪은 증상이며,
+그때는 도구가 값을 이월하도록 고쳐서 해결했다. **제품은 새로고침을 넘어
+살아남아야 하므로 DB 가 필요하다.**
+
+### 제안
+
+`Problem` (§6) 에 세 칸을 더한다. 모두 선택(NULL 허용)이며 MODE A 에서는
+비어 있다.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ai_wrong_answer` | JSONB | NO | MODE B 에서 AI 가 만든 의도적 오답 |
+| `ai_wrong_reasoning` | TEXT | NO | 그 오답의 논리. **내부 값** |
+| `target_misconception` | TEXT | NO | 겨냥한 오개념. **내부 값** |
+
+- 셋 다 **학생 화면에 노출하지 않는다.** `verified_answer` 와 같은 취급이다
+  (§17). 문제를 마칠 때 보여주는 것은 정답과 해설이지 이 값이 아니다.
+- 부모 화면에도 내보내지 않는다. 리포트가 읽을 값이 아니다.
+- MODE A 문제에서는 NULL 이다. NOT NULL 로 두면 A 가 못 들어온다.
+
+### 왜 지금
+
+이 칸이 없으면 **MODE B 를 제품에 붙일 수 없다.** MIS-002(내가 문제 내기)가
+막혀 있다.
+
+---
+
 ## 21. 완료 조건
 
 -   모든 PM이 공통 entity와 ID 이름에 합의
@@ -511,6 +561,7 @@ COM-002의 논리 구조는 확정하되, 실제 구현 전에 다음은 별도 
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| — | 2026-09-10 | §20-A **변경 제안** 추가: MODE B 의 의도적 오답을 담을 칸 3개(`ai_wrong_answer` · `ai_wrong_reasoning` · `target_misconception`). 승인 전이므로 본문 §6 은 그대로 | — |
 | 1.3 | 2026-09-09 | §17 `verified_answer` 노출 금지를 **"문제가 진행 중인 동안"** 으로 한정. 종료 시점에는 정답·해설로 보여준다(COM-001 §8 종료 안내). Answer Lock 데이터는 시점과 무관하게 계속 비노출 — 검증 상태는 내부 값이다. §8 Rules에도 같은 단서 추가 | — |
 | 1.0 | 2026-08-28 | `docs/` 이관 및 문서 헤더 도입. **본문 변경 없음** | — |
 | 1.2 | 2026-09-09 | §8 `initial_accuracy` Required {YES} → `NO`. 관찰하지 못한 최초 정답을 `false`가 아닌 NULL 로 둔다 — MODE B 는 학생이 AI 오류를 찾는 구조라 "최초 정답"이 성립하지 않는 경우가 정상적으로 생긴다. `support_level` 최종값은 턴별 값의 최대값이며 서버가 계산한다는 규칙 추가. LOGIC AUDITOR 프롬프트 v3.0 과 맞춤 (Issue #28) | — |
