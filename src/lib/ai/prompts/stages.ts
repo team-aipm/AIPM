@@ -703,6 +703,16 @@ target_logic_gap,
   },
   "payload": {
     "problem_evaluations": [],
+    "learning_mode": "A",
+    "mode_status": {
+      "mode_a_count": 0,
+      "mode_b_count": 0,
+      "target_mode_a": 5,
+      "target_mode_b": 5,
+      "last_mode": null,
+      "preferred_mode": null,
+      "balance_policy": "SOFT"
+    },
     "mode_phase": "PREPARE",
     "learning_target": {
       "concept": "string",
@@ -1171,6 +1181,16 @@ completion.action = "COMPLETE"
   },
   "payload": {
     "problem_evaluations": [],
+    "learning_mode": "B",
+    "mode_status": {
+      "mode_a_count": 0,
+      "mode_b_count": 0,
+      "target_mode_a": 5,
+      "target_mode_b": 5,
+      "last_mode": null,
+      "preferred_mode": null,
+      "balance_policy": "SOFT"
+    },
     "mode_phase": "RECOGNIZE",
     "learning_target": {
       "concept": "string | null",
@@ -1377,6 +1397,7 @@ AI의 핵심 오류를 직접 알려주지 않는다.
       "mode_b_count": 0,
       "target_mode_a": 5,
       "target_mode_b": 5,
+      "last_mode": "A | B | null",
       "preferred_mode": "A | B | null",
       "balance_policy": "SOFT"
     }
@@ -1479,7 +1500,8 @@ action = "DAILY_ANALYSIS"
       "mode_b_count": 0,
       "target_mode_a": 5,
       "target_mode_b": 5,
-      "preferred_mode": "A | B | null",
+      "last_mode": null,
+      "preferred_mode": null,
       "balance_policy": "SOFT"
     }
   }
@@ -1616,9 +1638,12 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
   },
   "payload": {
     "problem_evaluations": [],
+    "learning_mode": null,
     "mode_status": {
       "mode_a_count": 5,
-      "mode_b_count": 5
+      "mode_b_count": 5,
+      "last_mode": null,
+      "preferred_mode": null
     },
     "student_memory": null
   }
