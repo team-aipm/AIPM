@@ -29,6 +29,53 @@ function writeAt(root: unknown, path: string, value: unknown): unknown {
   return setPath(root, segments, value);
 }
 
+/**
+ * 대화를 입력 JSON 의 어디에 어떤 모양으로 쓸지.
+ *
+ * 프롬프트마다 대화를 담는 모양이 다르다. 어떤 프롬프트는
+ * `{ speaker, message_text }` 를 기대하고, 어떤 프롬프트는
+ * `{ response_role, response_type, content }` 를 기대한다. 마지막 발화를
+ * 배열과 **별도 자리에** 한 번 더 두는 프롬프트도 있다.
+ *
+ * 도구가 한 모양으로 고정해 쓰면 그런 프롬프트에서는 모델이 학생의 말을
+ * 자기가 읽는 자리에서 못 찾는다. 그래서 단계마다 정한다.
+ */
+export type ChatShape = {
+  /** 대화가 쌓이는 배열. 중첩 경로를 쓴다 */
+  historyKey: string;
+  /** 학생 턴 JSON 템플릿 */
+  studentTurn: string;
+  /** 그 템플릿에서 학생의 말이 들어갈 자리 */
+  studentField: string;
+  /** AI 턴 JSON 템플릿. 비우면 AI 턴을 배열에 남기지 않는다 */
+  aiTurn: string;
+  aiField: string;
+  /**
+   * 마지막 **학생** 발화를 따로 두는 자리. 비우면 쓰지 않는다.
+   *
+   * 배열에 쌓는 것과 별개다. 프롬프트가 "직전에 뭐라고 했나" 를 한 곳에서
+   * 읽게 하려고 두는 필드다.
+   */
+  latestKey: string;
+  /** 학생 발화 수. 비우면 쓰지 않는다 */
+  turnCountKey: string;
+  /** 남은 횟수. turnCountKey 와 limitKey 가 함께 있어야 계산한다 */
+  remainingKey: string;
+  limitKey: string;
+};
+
+export const DEFAULT_CHAT_SHAPE: ChatShape = {
+  historyKey: 'conversation',
+  studentTurn: '{ "speaker": "student", "message_text": "" }',
+  studentField: 'message_text',
+  aiTurn: '{ "speaker": "ai", "message_text": "" }',
+  aiField: 'message_text',
+  latestKey: '',
+  turnCountKey: '',
+  remainingKey: '',
+  limitKey: '',
+};
+
 export type Turn = {
   who: 'user' | 'ai' | 'other';
   text: string;
@@ -78,29 +125,117 @@ export function readTurns(inputJson: string, historyKey: string): Turn[] {
   });
 }
 
+/**
+ * 템플릿으로 턴 하나를 만든다.
+ *
+ * 템플릿이 JSON 이 아니거나 비어 있으면 null 을 돌려주고, 부르는 쪽이
+ * 그 턴을 건너뛴다.
+ */
+function makeTurn(
+  template: string,
+  field: string,
+  text: string,
+  extra?: Record<string, unknown>,
+): unknown | null {
+  const trimmed = template.trim();
+  if (trimmed === '') return null;
+
+  const shape = safeParse(trimmed);
+  if (!isRecord(shape)) return null;
+
+  const segments = parsePath(field);
+  const filled = segments === null ? shape : setPath(shape, segments, text);
+  return extra && Object.keys(extra).length > 0 && isRecord(filled)
+    ? { ...filled, ...extra }
+    : filled;
+}
+
+/** 학생 발화 수를 세고, 남은 횟수까지 맞춘다 */
+function syncCounters(
+  root: Record<string, unknown>,
+  shape: ChatShape,
+  studentTurns: number,
+): Record<string, unknown> {
+  let next = root;
+
+  if (shape.turnCountKey.trim() !== '') {
+    next = writeAt(next, shape.turnCountKey, studentTurns) as Record<string, unknown>;
+  }
+
+  // 남은 횟수는 한도에서 뺀다. 모델에게 숫자를 비교시키지 않으려고 둔
+  // 필드이므로 도구가 계산해 준다.
+  if (shape.remainingKey.trim() !== '' && shape.limitKey.trim() !== '') {
+    const limit = readAt(next, shape.limitKey);
+    if (typeof limit === 'number') {
+      next = writeAt(
+        next,
+        shape.remainingKey,
+        Math.max(0, limit - studentTurns),
+      ) as Record<string, unknown>;
+    }
+  }
+
+  return next;
+}
+
+/** 대화 배열에서 학생 턴만 센다. 템플릿이 무엇이든 위치로 세지 않는다 */
+function countStudentTurns(history: unknown[], shape: ChatShape): number {
+  const marker = safeParse(shape.studentTurn.trim() || '{}');
+  const keys = isRecord(marker) ? Object.keys(marker) : [];
+  if (keys.length === 0) return history.length;
+
+  // 학생 템플릿에만 있고 AI 템플릿에는 없는 키를 표식으로 쓴다.
+  const aiShape = safeParse(shape.aiTurn.trim() || '{}');
+  const aiKeys = new Set(isRecord(aiShape) ? Object.keys(aiShape) : []);
+  const mark = keys.find((key) => !aiKeys.has(key));
+
+  if (mark === undefined) {
+    // 두 템플릿의 키가 같으면 값으로 가른다 (speaker: student / ai 처럼)
+    const studentValues = isRecord(marker) ? marker : {};
+    return history.filter(
+      (item) =>
+        isRecord(item) &&
+        keys.some(
+          (key) =>
+            key !== shape.studentField &&
+            studentValues[key] !== undefined &&
+            item[key] === studentValues[key],
+        ),
+    ).length;
+  }
+  return history.filter((item) => isRecord(item) && mark in item).length;
+}
+
 /** 사용자 발화를 대화 배열 끝에 붙인 입력 JSON을 만든다. */
 export function appendUserTurn(
   inputJson: string,
-  historyKey: string,
+  shape: ChatShape,
   text: string,
   attachmentNames: string[] = [],
 ): string | null {
   const root = safeParse(inputJson);
   if (!isRecord(root)) return null;
 
-  const current = readAt(root, historyKey);
+  const current = readAt(root, shape.historyKey);
   const history = Array.isArray(current) ? [...current] : [];
+
   // 이미지 본문(base64)은 대화 기록에 넣지 않는다. 파일명만 남긴다.
   // 넣으면 입력 JSON 이 수십 KB 로 부풀어 화면에서 읽을 수 없게 된다.
-  history.push({
-    speaker: 'student',
-    message_text: text,
-    turn_number: history.length + 1,
+  const turn = makeTurn(shape.studentTurn, shape.studentField, text, {
     ...(attachmentNames.length > 0 ? { attachments: attachmentNames } : {}),
   });
+  if (turn === null) return null;
+  history.push(turn);
 
-  const next = writeAt(root, historyKey, history);
-  return stringify(syncTurnNumber(next as Record<string, unknown>, history.length));
+  let next = writeAt(root, shape.historyKey, history) as Record<string, unknown>;
+
+  // 마지막 발화를 따로 두는 프롬프트가 있다. 배열과 별개다.
+  if (shape.latestKey.trim() !== '') {
+    next = writeAt(next, shape.latestKey, turn) as Record<string, unknown>;
+  }
+
+  next = syncCounters(next, shape, countStudentTurns(history, shape));
+  return stringify(syncTurnNumber(next, history.length));
 }
 
 /**
@@ -124,24 +259,38 @@ export function pickReply(
   // 출력이 평문이면 고를 필드가 없다. 그대로 보여준다.
   if (outputMode === 'text') return { show: true, text: raw };
 
-  const key = replyKey.trim();
-  if (key === '') return { show: false, reason: '응답 필드가 비어 있어 표시하지 않습니다' };
+  // 쉼표로 여러 경로를 적을 수 있다. 문제와 말풍선이 다른 필드에 나오는
+  // 프롬프트가 있어서, 하나만 보면 문제가 화면에 안 나온다.
+  const keys = replyKey
+    .split(',')
+    .map((one) => one.trim())
+    .filter((one) => one !== '');
+  if (keys.length === 0) {
+    return { show: false, reason: '응답 필드가 비어 있어 표시하지 않습니다' };
+  }
 
   const parsed = parseOutput(raw);
   // JSON 이어야 하는데 깨졌으면 원문을 보여준다. 디버깅에 필요하다.
   if (!isRecord(parsed)) return { show: true, text: raw };
 
-  const segments = parsePath(key);
-  const found = segments === null ? { exists: false, value: undefined } : getPath(parsed, segments);
-  if (!found.exists) {
-    return { show: false, reason: `출력에 ${key} 가 없습니다` };
+  const parts: string[] = [];
+  const missing: string[] = [];
+  for (const key of keys) {
+    const segments = parsePath(key);
+    const found =
+      segments === null ? { exists: false, value: undefined } : getPath(parsed, segments);
+    if (!found.exists || found.value === null || found.value === '') {
+      missing.push(key);
+      continue;
+    }
+    const value = found.value;
+    parts.push(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
   }
 
-  const value = found.value;
-  return {
-    show: true,
-    text: typeof value === 'string' ? value : JSON.stringify(value, null, 2),
-  };
+  if (parts.length === 0) {
+    return { show: false, reason: `출력에 ${missing.join(' · ')} 가 없습니다` };
+  }
+  return { show: true, text: parts.join('\n\n') };
 }
 
 /**
@@ -159,7 +308,7 @@ export function pickReply(
  */
 export function appendAiTurn(
   inputJson: string,
-  historyKey: string,
+  shape: ChatShape,
   replyKey: string,
   output: unknown,
   replyText: string | null,
@@ -170,30 +319,36 @@ export function appendAiTurn(
   let next: Record<string, unknown> = { ...root };
 
   if (replyText !== null) {
-    const current = readAt(root, historyKey);
+    const current = readAt(root, shape.historyKey);
     const history = Array.isArray(current) ? [...current] : [];
-    history.push({
-      speaker: 'ai',
-      message_text: replyText,
-      turn_number: history.length + 1,
-    });
-    next = writeAt(next, historyKey, history) as Record<string, unknown>;
-  }
-
-  if (isRecord(output)) {
-    for (const [key, value] of Object.entries(output)) {
-      // 응답 필드가 중첩이면 그 최상위 조각과만 비교한다.
-      // ui.message 가 응답 필드일 때 ui 를 통째로 이월하면 말풍선이
-      // 두 번 들어간다.
-      const replyTop = replyKey.split('.')[0]?.split('[')[0] ?? replyKey;
-      if (key !== replyTop && key in root) next[key] = value;
+    const turn = makeTurn(shape.aiTurn, shape.aiField, replyText);
+    // AI 턴 템플릿을 비우면 배열에 남기지 않는다. 학생 응답만 기록하는
+    // 프롬프트가 있다.
+    if (turn !== null) {
+      history.push(turn);
+      next = writeAt(next, shape.historyKey, history) as Record<string, unknown>;
     }
   }
 
-  const written = readAt(next, historyKey);
-  const historyLength = Array.isArray(written) ? written.length : 0;
-  next = syncTurnNumber(next, historyLength);
-  return stringify(next);
+  if (isRecord(output)) {
+    // 응답 필드가 여러 개일 수 있다. 그 최상위 조각들과 비교한다.
+    const replyTops = new Set(
+      replyKey
+        .split(',')
+        .map((one) => one.trim().split('.')[0]?.split('[')[0] ?? '')
+        .filter((one) => one !== ''),
+    );
+    for (const [key, value] of Object.entries(output)) {
+      // ui.message 가 응답 필드일 때 ui 를 통째로 이월하면 말풍선이
+      // 두 번 들어간다.
+      if (!replyTops.has(key) && key in root) next[key] = value;
+    }
+  }
+
+  const written = readAt(next, shape.historyKey);
+  const history = Array.isArray(written) ? written : [];
+  next = syncCounters(next, shape, countStudentTurns(history, shape));
+  return stringify(syncTurnNumber(next, history.length));
 }
 
 /** 입력에 turn_number 가 있으면 대화 길이에 맞춘다. 없으면 만들지 않는다. */
