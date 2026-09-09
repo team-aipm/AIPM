@@ -37,6 +37,14 @@ import {
   type MapRow,
   type MapSource,
 } from '../_mapping';
+import {
+  BLANK_ROUTE_ROW,
+  defaultRouting,
+  hasRouting,
+  pickRoute,
+  type RouteRow,
+  type Routing,
+} from '../_routing';
 import { parsePath, setPath } from '../_paths';
 import { stageColor } from '../_stage-colors';
 import {
@@ -133,6 +141,8 @@ type Stage = StagePreset & {
   rules: CustomRules;
   /** 다음 단계로 무엇을 옮길지. 비어 있으면 AIPM 규칙 → 원문 순으로 넘어간다 */
   mapping: MapRow[];
+  /** 결과를 보고 보낼 단계를 고르는 규칙. 비어 있으면 바로 다음 단계 */
+  routing: Routing;
   threads: Thread[];
   activeThread: number;
 };
@@ -178,6 +188,8 @@ function toStage(base: StagePreset, key: string): Stage {
     forceJsonMimeType: false,
     rules: EMPTY_RULES,
     mapping: [],
+    // 이름으로 찾는다. AIPM 프리셋이 아니면 빈 값이다.
+    routing: defaultRouting(base.name),
     threads: [newThread(`${key}-t0`, '대화 1', base.sampleInput)],
     activeThread: 0,
   };
@@ -279,6 +291,7 @@ type SavedStage = StagePreset & {
   forceJsonMimeType: boolean;
   rules: CustomRules;
   mapping: MapRow[];
+  routing: Routing;
   /** 대화는 이름과 입력만 남긴다. 결과는 다시 실행하면 되고 이미지는 무겁다 */
   threads: { name: string; input: string }[];
 };
@@ -313,6 +326,7 @@ function toSaved(stage: Stage): SavedStage {
     ownSettings: stage.ownSettings,
     rules: stage.rules,
     mapping: stage.mapping,
+    routing: stage.routing,
   };
 }
 
@@ -336,6 +350,11 @@ function fromSaved(item: Partial<SavedStage>, key: string): Stage {
       banned: typeof item.rules?.banned === 'string' ? item.rules.banned : '',
     },
     mapping: Array.isArray(item.mapping) ? item.mapping : [],
+    // 예전 저장본에는 없다. 이름이 프리셋과 같으면 기본 분기를 준다.
+    routing:
+      typeof item.routing?.from === 'string' && Array.isArray(item.routing.rows)
+        ? { from: item.routing.from, rows: item.routing.rows }
+        : defaultRouting(item.name ?? ''),
     // 예전 저장본에는 threads 가 없다. sampleInput 하나를 대화 1로 만든다.
     threads: (Array.isArray(item.threads) && item.threads.length > 0
       ? item.threads
@@ -449,7 +468,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * 그렇다고 이어 붙이면 펼쳤을 때 너무 길다. 탭이 답이다.
    */
   const [settingTab, setSettingTab] = useState<
-    'model' | 'chat' | 'rules' | 'mapping'
+    'model' | 'chat' | 'rules' | 'mapping' | 'routing'
   >('model');
 
   function togglePanel(name: keyof typeof openPanel) {
@@ -795,6 +814,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         ownSettings: stage.ownSettings,
         rules: stage.rules,
         mapping: stage.mapping,
+        routing: stage.routing,
       };
     });
   }
@@ -923,6 +943,28 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   function removeMapRow(index: number) {
     if (!active) return;
     patch(activeIndex, { mapping: active.mapping.filter((_, i) => i !== index) });
+  }
+
+  function setRouting(next: Partial<Routing>) {
+    if (!active) return;
+    patch(activeIndex, { routing: { ...active.routing, ...next } });
+  }
+
+  function setRouteRow(index: number, next: Partial<RouteRow>) {
+    if (!active) return;
+    setRouting({
+      rows: active.routing.rows.map((row, i) => (i === index ? { ...row, ...next } : row)),
+    });
+  }
+
+  function addRouteRow() {
+    if (!active) return;
+    setRouting({ rows: [...active.routing.rows, BLANK_ROUTE_ROW] });
+  }
+
+  function removeRouteRow(index: number) {
+    if (!active) return;
+    setRouting({ rows: active.routing.rows.filter((_, i) => i !== index) });
   }
 
   function addStage() {
@@ -1392,8 +1434,28 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     return undefined;
   })();
 
-  /** 기본 대상. 다음 단계가 있으면 그쪽, 마지막이면 처음으로 돌아간다. */
-  const defaultTarget = activeIndex + 1 < stages.length ? activeIndex + 1 : 0;
+  /**
+   * 결과를 보고 고른 대상. 규칙이 없으면 null, 규칙은 있는데 못 골랐으면
+   * `index` 만 null 이고 이유가 `note` 에 남는다.
+   */
+  const routePick =
+    active && thread?.result?.raw
+      ? pickRoute(
+          active.routing,
+          parseOutput(thread.result.raw),
+          stages.map((stage) => stage.name),
+          activeIndex,
+        )
+      : null;
+
+  /**
+   * 기본 대상. 조건부 규칙 → 다음 단계 → 마지막이면 처음.
+   *
+   * **정하기만 하고 보내지는 않는다.** 자동으로 넘어가면 결과를 보기도
+   * 전에 화면이 바뀐다. 무엇을 보고 정했는지 옆에 적어 두고 누르게 한다.
+   */
+  const straightTarget = activeIndex + 1 < stages.length ? activeIndex + 1 : 0;
+  const defaultTarget = routePick?.index ?? straightTarget;
 
   // ── 대화 관리 ──────────────────────────────────────────────────────────
 
@@ -2132,6 +2194,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       '다음 단계',
                       active.mapping.length > 0 ? String(active.mapping.length) : '',
                     ],
+                    [
+                      'routing',
+                      '분기',
+                      hasRouting(active.routing) ? String(active.routing.rows.length) : '',
+                    ],
                   ] as const
                 ).map(([id, label, count]) => (
                   <button
@@ -2841,6 +2908,83 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   대화를 비우려면 <code>[]</code> 를 넣으세요.
                 </p>
               </div>
+
+              <div hidden={settingTab !== 'routing'} className="flex flex-col gap-2 p-3">
+                <p className="text-[11px] text-neutral-500">
+                  결과의 값을 보고 <b>[입력으로] 의 기본 대상</b>을 정합니다.
+                  정하기만 하고 보내지는 않습니다 — 결과를 보고 나서 누르세요.
+                  규칙이 없으면 바로 다음 단계가 기본입니다.
+                </p>
+
+                <label className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-neutral-500">읽을 값</span>
+                  <input
+                    value={active.routing.from}
+                    onChange={(event) => setRouting({ from: event.target.value })}
+                    placeholder="예: recommended_mode · payload.next.action"
+                    spellCheck={false}
+                    className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                  />
+                </label>
+
+                {active.routing.rows.map((row, index) => (
+                  <div key={index} className="flex flex-wrap items-center gap-1">
+                    <span className="w-20 shrink-0 text-right text-neutral-400">
+                      {index === 0 ? '이 값이면' : '아니면'}
+                    </span>
+                    <input
+                      value={row.equals}
+                      onChange={(event) => setRouteRow(index, { equals: event.target.value })}
+                      placeholder="비우면 그밖의 모든 값"
+                      spellCheck={false}
+                      className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <span className="text-neutral-400">→</span>
+                    <select
+                      value={row.to}
+                      onChange={(event) => setRouteRow(index, { to: event.target.value })}
+                      className="w-52 rounded border border-neutral-300 bg-transparent px-1 py-1 dark:border-neutral-700"
+                    >
+                      {/* 저장해 둔 이름의 단계가 지금 없을 수도 있다. 그때도
+                          고른 값이 보이게 빈 칸을 맨 앞에 둔다. */}
+                      <option value="">(고르세요)</option>
+                      {stages.map((stage, i) =>
+                        i === activeIndex ? null : (
+                          <option key={stage.key} value={stage.name}>
+                            {stage.name || '(이름 없음)'}
+                          </option>
+                        ),
+                      )}
+                      {row.to !== '' && !stages.some((stage) => stage.name === row.to) && (
+                        <option value={row.to}>{row.to} (없는 단계)</option>
+                      )}
+                    </select>
+                    <button
+                      onClick={() => removeRouteRow(index)}
+                      className="px-2 text-neutral-400 hover:text-red-600"
+                      title="이 줄 삭제"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+
+                <div>
+                  <button
+                    onClick={addRouteRow}
+                    className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
+                  >
+                    + 분기
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  위에서부터 먼저 맞는 줄이 이깁니다. 대소문자는 가리지 않고,
+                  숫자와 <code>null</code> 도 보이는 대로 적으면 맞습니다.
+                  대상은 자리가 아니라 <b>단계 이름</b>으로 기억하므로 단계를
+                  넣거나 옮겨도 따라갑니다.
+                </p>
+              </div>
             </Panel>
 
             <Panel
@@ -3024,6 +3168,19 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       입력으로
                     </button>
                   </div>
+                )}
+
+                {thread.result?.ok && routePick !== null && (
+                  <span
+                    className={`text-[11px] ${
+                      routePick.index === null
+                        ? 'text-amber-700 dark:text-amber-500'
+                        : 'text-neutral-500'
+                    }`}
+                  >
+                    {routePick.index === null ? '⚠ ' : '분기 · '}
+                    {routePick.note}
+                  </span>
                 )}
 
                 {thread.result?.ok && (
