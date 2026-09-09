@@ -544,6 +544,57 @@ MODE A 와 같아진다. 개발 도구에서 2026-09-09 에 실제로 겪은 증
 
 ---
 
+## 20-B. 변경 · 운영자 · 감사 로그 · 동의 이력 (2026-09-10)
+
+> **Status:** 승인. 마이그레이션은
+> `20260910040000_create_admin_and_audit.sql` 이다.
+
+COM-007 §13 이 요청한 세 가지다. 없으면 ADM 영역을 만들 수 없다.
+
+### AdminUser
+
+운영자와 권한 등급. **부모 계정과 별개다** — 같은 `auth.users` 를 쓰되 이
+표에 없으면 어드민이 아니다. 부모가 스스로 운영자가 될 수 없다.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `admin_id` | UUID | YES | PK · FK → `auth.users` |
+| `admin_name` | TEXT | YES | 운영자 이름 |
+| `email` | TEXT | YES | |
+| `admin_role` | ENUM | YES | `full` / `cs` / `readonly` (COM-007 §7-2) |
+| `is_active` | BOOLEAN | YES | 차단하면 false |
+| `last_seen_at` | TIMESTAMPTZ | NO | |
+
+### AuditLog
+
+**마스킹 해제와 대화 원문 열람은 반드시 남긴다**(COM-007 §7-3). 누가 ·
+언제 · 무엇을 · 왜 봤는지가 없으면 열람 규칙은 글일 뿐이다.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `audit_id` | UUID | YES | PK |
+| `admin_id` | UUID | YES | FK → `AdminUser`. **on delete restrict** |
+| `action` | TEXT | YES | `unmask` · `view_messages` 등 |
+| `target_type` | TEXT | YES | `account` · `student` · `problem` … |
+| `target_id` | TEXT | YES | |
+| `reason` | TEXT | NO | 마스킹 해제는 필수 |
+
+지우거나 고칠 수 없다. RLS 에 update · delete 정책을 두지 않는다.
+
+### ConsentLog
+
+약관은 개정되므로 **버전이 함께 남아야 한다**(COM-007 §11).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `consent_id` | UUID | YES | PK |
+| `account_id` | UUID | YES | FK → `Account` |
+| `consent_type` | TEXT | YES | `terms` · `privacy` · `guardian` · `marketing_*` |
+| `document_version` | TEXT | YES | 동의한 약관의 버전 |
+| `agreed` | BOOLEAN | YES | 철회도 행으로 남긴다 |
+
+---
+
 ## 21. 완료 조건
 
 -   모든 PM이 공통 entity와 ID 이름에 합의
@@ -562,6 +613,7 @@ MODE A 와 같아진다. 개발 도구에서 2026-09-09 에 실제로 겪은 증
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| — | 2026-09-10 | §20-B 추가: `AdminUser` · `AuditLog` · `ConsentLog` (COM-007 §13). ADM 영역의 선행 조건 | — |
 | — | 2026-09-10 | §20-A **변경 제안** 추가: MODE B 의 의도적 오답을 담을 칸 3개(`ai_wrong_answer` · `ai_wrong_reasoning` · `target_misconception`). 승인 전이므로 본문 §6 은 그대로 | — |
 | 1.3 | 2026-09-09 | §17 `verified_answer` 노출 금지를 **"문제가 진행 중인 동안"** 으로 한정. 종료 시점에는 정답·해설로 보여준다(COM-001 §8 종료 안내). Answer Lock 데이터는 시점과 무관하게 계속 비노출 — 검증 상태는 내부 값이다. §8 Rules에도 같은 단서 추가 | — |
 | 1.0 | 2026-08-28 | `docs/` 이관 및 문서 헤더 도입. **본문 변경 없음** | — |
