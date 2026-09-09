@@ -1627,8 +1627,18 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   async function runOnce(
     prompt: string,
     live: boolean,
-  ): Promise<{ steps: AutoStep[]; reason: StopReason; visited: string[] }> {
+  ): Promise<{
+    steps: AutoStep[];
+    reason: StopReason;
+    visited: string[];
+    /** 단계별 마지막 입력과 결과. 반복 실행이 끝나고 화면에 옮긴다 */
+    final: Map<number, { thread: number; input: string; result: RunResult | null }>;
+  }> {
     const log: AutoStep[] = [];
+    const final = new Map<
+      number,
+      { thread: number; input: string; result: RunResult | null }
+    >();
     const names = stages.map((stage) => stage.name);
     const start = Math.min(Math.max(0, autoStart), stages.length - 1);
     /** 지나간 단계. 중복 없이 순서대로 */
@@ -1725,6 +1735,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       );
       if (withAi !== null) input = withAi;
       // 화면에도 남긴다. 끝나고 단계를 열면 마지막 상태가 보인다.
+      final.set(at, { thread: stage.activeThread, input, result });
       if (live) patchThread(at, stage.activeThread, { input, result });
 
       // ── 어디로 갈지 ──────────────────────────────────────────────
@@ -1776,6 +1787,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
             break;
           }
         }
+        final.set(at, { thread: target.activeThread, input, result: null });
         if (live) {
           patchThread(at, target.activeThread, { input });
           setActiveIndex(at);
@@ -1832,10 +1844,16 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         break;
       }
       input = withUser;
+      final.set(at, {
+        thread: stage.activeThread,
+        input,
+        // 학생이 말한 뒤에는 아직 답이 없다. 앞 답을 그대로 둔다.
+        result: final.get(at)?.result ?? null,
+      });
       if (live) patchThread(at, stage.activeThread, { input });
     }
 
-    return { steps: log, reason, visited };
+    return { steps: log, reason, visited, final };
   }
 
   /** 한 번 돌린다. 걸음이 화면에 그대로 쌓인다 */
@@ -1901,9 +1919,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           visited: done.visited,
         });
         setTrials([...got]);
-        // 마지막 회차의 걸음은 화면에 남긴다. 통과율만 보면 무슨 말이
-        // 오갔는지 알 수 없다.
+        // 걸음과 대화를 화면에 남긴다. 통과율만 보면 무슨 말이 오갔는지
+        // 알 수 없고, 로그만 보면 어느 단계의 입력이 어떤 모양이었는지
+        // 알 수 없다. **회차마다 덮으므로 마지막 것이 남는다.**
         setAutoLog(done.steps);
+        for (const [index, at] of done.final) {
+          patchThread(index, at.thread, { input: at.input, result: at.result });
+        }
       }
       if (stopFlag.current) break;
     }
@@ -3101,8 +3123,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                 </details>
 
                 <p className="text-[11px] text-neutral-500">
-                  아래 걸음 기록은 <b>마지막 회차</b>의 것입니다. 통과율만 보면
-                  무슨 말이 오갔는지 알 수 없습니다.
+                  아래 걸음 기록과 각 단계의 <b>대화창 · 입력</b>은{' '}
+                  <b>마지막 회차</b>의 것입니다. 단계를 열면 그 회차에 무슨 말이
+                  오갔는지 그대로 볼 수 있습니다.
                 </p>
               </div>
             )}
