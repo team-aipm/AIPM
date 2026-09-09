@@ -5,6 +5,7 @@
  * 파일이 없어서 자리만 잡아 뒀다.
  */
 
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { LoginForm } from './_components/LoginForm';
@@ -36,7 +37,11 @@ export default async function LoginPage() {
       </section>
 
       <p className="text-center text-[13px] text-meti-sub">
-        계정이 없으면 부모님과 함께 회원가입해줘
+        계정이 없으면 부모님과 함께{' '}
+        <Link href="/signup" className="font-semibold underline">
+          회원가입
+        </Link>
+        해줘
       </p>
     </main>
   );
