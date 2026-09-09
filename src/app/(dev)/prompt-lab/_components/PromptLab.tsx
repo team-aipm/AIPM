@@ -72,6 +72,7 @@ import {
   parseOutput,
   pickReply,
   readTurns,
+  type ChatShape,
   type Turn,
 } from '../_chat';
 
@@ -294,6 +295,14 @@ function toSaved(stage: Stage): SavedStage {
     checkRule: stage.checkRule,
     historyKey: stage.historyKey,
     replyKey: stage.replyKey,
+    studentTurn: stage.studentTurn,
+    studentField: stage.studentField,
+    aiTurn: stage.aiTurn,
+    aiField: stage.aiField,
+    latestKey: stage.latestKey,
+    turnCountKey: stage.turnCountKey,
+    remainingKey: stage.remainingKey,
+    limitKey: stage.limitKey,
     provider: stage.provider,
     model: stage.model,
     temperature: stage.temperature,
@@ -439,9 +448,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * 셋 다 "이 단계의 설정" 이라 패널을 따로 두면 제목줄만 세 줄이 된다.
    * 그렇다고 이어 붙이면 펼쳤을 때 너무 길다. 탭이 답이다.
    */
-  const [settingTab, setSettingTab] = useState<'model' | 'rules' | 'mapping'>(
-    'model',
-  );
+  const [settingTab, setSettingTab] = useState<
+    'model' | 'chat' | 'rules' | 'mapping'
+  >('model');
 
   function togglePanel(name: keyof typeof openPanel) {
     setOpenPanel((prev) => ({ ...prev, [name]: !prev[name] }));
@@ -680,6 +689,19 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         vars,
       )
     : [];
+
+  /** 지금 단계의 대화 모양. 여러 곳에서 쓰므로 한 번만 만든다 */
+  const chatShape: ChatShape = {
+    historyKey: active?.historyKey ?? 'conversation',
+    studentTurn: active?.studentTurn ?? '',
+    studentField: active?.studentField ?? '',
+    aiTurn: active?.aiTurn ?? '',
+    aiField: active?.aiField ?? '',
+    latestKey: active?.latestKey ?? '',
+    turnCountKey: active?.turnCountKey ?? '',
+    remainingKey: active?.remainingKey ?? '',
+    limitKey: active?.limitKey ?? '',
+  };
 
   /** 지금 단계가 실제로 쓸 모델 설정. 공통을 따를 수도, 직접 정했을 수도 */
   const eff = active ? effective(active, common) : common;
@@ -1123,7 +1145,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     }
 
     let source = thread.input;
-    let withUser = appendUserTurn(source, active.historyKey, text, names);
+    let withUser = appendUserTurn(source, chatShape, text, names);
 
     // 안내만 하고 손으로 고치게 두면, 저장된 설정을 쓰는 사람은 매번 같은
     // 벽을 만난다. 고칠 수 있으면 그 자리에서 고쳐 준다.
@@ -1144,7 +1166,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       ) {
         source = repair.text;
         patchThread(index, threadIndex, { input: source });
-        withUser = appendUserTurn(source, active.historyKey, text, names);
+        withUser = appendUserTurn(source, chatShape, text, names);
       }
     }
 
@@ -1153,7 +1175,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       return;
     }
 
-    const historyKey = active.historyKey;
+    const shapeAtSend = chatShape;
     const replyKey = active.replyKey;
 
     setDraft('');
@@ -1173,7 +1195,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       // 말풍선을 만들지 않아도 stage_status 같은 상태 이월은 그대로 한다.
       const withAi = appendAiTurn(
         withUser,
-        historyKey,
+        shapeAtSend,
         replyKey,
         parsed,
         pick.show ? pick.text : null,
@@ -2094,6 +2116,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   [
                     ['model', '모델 · 형식', ''],
                     [
+                      'chat',
+                      '대화 모양',
+                      active.latestKey.trim() !== '' ? '고급' : '',
+                    ],
+                    [
                       'rules',
                       '검증 규칙',
                       active.rules.fields.length > 0 || active.rules.banned.trim() !== ''
@@ -2453,7 +2480,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                         patch(activeIndex, { replyKey: event.target.value })
                       }
                       disabled={replyKeyOff}
-                      placeholder={replyKeyOff ? '해당 없음' : '비우면 표시 안 함'}
+                      placeholder={
+                        replyKeyOff ? '해당 없음' : '쉼표로 여러 개. 비우면 표시 안 함'
+                      }
                       title={
                         replyKeyOff
                           ? '출력이 텍스트라 원문을 그대로 보여줍니다'
@@ -2497,12 +2526,127 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     적어 쓰세요.
                   </p>
                   <p>
-                    <b>응답 필드</b>는 출력 중 말풍선에 보여줄 부분입니다.
+                    <b>응답 필드</b>는 출력 중 말풍선에 보여줄 부분입니다. 쉼표로
+                    여러 개를 적으면 이어서 보여줍니다 —{' '}
+                    <code>ui.problem_text, ui.message</code> 처럼 문제와 말풍선이
+                    다른 필드에 나오는 경우에 씁니다.
                     {replyKeyOff
                       ? ' 출력이 JSON일 때만 씁니다. 지금은 출력이 텍스트라 원문이 그대로 나갑니다.'
                       : active.replyKey.trim() === ''
                         ? ' 지금은 비어 있어 아무것도 표시하지 않습니다. 데이터만 만드는 단계에 맞습니다.'
                         : ' 보여줄 문장이 없는 단계(평가·기억 저장 등)는 비워 두세요.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* 프롬프트마다 대화를 담는 모양이 다르다. 도구가 한 모양으로
+                  고정해 쓰면 모델이 학생의 말을 자기가 읽는 자리에서 못
+                  찾는다. */}
+              <div hidden={settingTab !== 'chat'} className="flex flex-col gap-2 p-3">
+                <p className="text-[11px] text-neutral-500">
+                  대화창에서 보낸 말이 <b>입력 JSON 의 어디에 어떤 모양으로</b>{' '}
+                  들어갈지 정합니다. 프롬프트가 읽는 자리와 맞아야 모델이 학생의
+                  말을 찾습니다.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                  <label className="flex min-w-[20rem] flex-1 items-center gap-2">
+                    <span className="shrink-0 text-neutral-500">대화 배열</span>
+                    <input
+                      value={active.historyKey}
+                      onChange={(event) =>
+                        patch(activeIndex, { historyKey: event.target.value })
+                      }
+                      spellCheck={false}
+                      className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                  </label>
+                  <label className="flex min-w-[20rem] flex-1 items-center gap-2">
+                    <span className="shrink-0 text-neutral-500">마지막 발화</span>
+                    <input
+                      value={active.latestKey}
+                      onChange={(event) =>
+                        patch(activeIndex, { latestKey: event.target.value })
+                      }
+                      placeholder="비우면 안 씁니다"
+                      spellCheck={false}
+                      className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  {(
+                    [
+                      ['turnCountKey', '학생 발화 수', '비우면 안 씀'],
+                      ['limitKey', '한도', '비우면 안 씀'],
+                      ['remainingKey', '남은 횟수', '한도가 있어야 계산'],
+                    ] as const
+                  ).map(([key, label, ph]) => (
+                    <label key={key} className="flex min-w-[16rem] flex-1 items-center gap-2">
+                      <span className="shrink-0 text-neutral-500">{label}</span>
+                      <input
+                        value={active[key]}
+                        onChange={(event) =>
+                          patch(activeIndex, { [key]: event.target.value })
+                        }
+                        placeholder={ph}
+                        spellCheck={false}
+                        className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <div className="flex flex-col gap-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                  {(
+                    [
+                      ['studentTurn', 'studentField', '학생 턴 모양', ''],
+                      ['aiTurn', 'aiField', 'AI 턴 모양', '비우면 배열에 안 남깁니다'],
+                    ] as const
+                  ).map(([tKey, fKey, label, ph]) => (
+                    <div key={tKey} className="flex flex-wrap items-start gap-2">
+                      <span className="w-24 shrink-0 py-1.5 text-neutral-500">{label}</span>
+                      <textarea
+                        value={active[tKey]}
+                        onChange={(event) =>
+                          patch(activeIndex, { [tKey]: event.target.value })
+                        }
+                        placeholder={ph}
+                        rows={2}
+                        spellCheck={false}
+                        className="min-w-[20rem] flex-1 resize-y rounded border border-neutral-300 bg-transparent px-2 py-1 font-mono text-[11px] dark:border-neutral-700"
+                      />
+                      <label className="flex items-center gap-2">
+                        <span className="shrink-0 text-neutral-500">말이 들어갈 자리</span>
+                        <input
+                          value={active[fKey]}
+                          onChange={(event) =>
+                            patch(activeIndex, { [fKey]: event.target.value })
+                          }
+                          spellCheck={false}
+                          className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-col gap-1 border-t border-neutral-200 pt-2 text-[11px] text-neutral-500 dark:border-neutral-800">
+                  <p>
+                    <b>마지막 발화</b>는 배열에 쌓는 것과 별개로, 직전 학생 발화를
+                    한 곳에 더 두는 자리입니다. 프롬프트가{' '}
+                    <code>latest_response</code> 같은 필드를 읽을 때 씁니다.
+                  </p>
+                  <p>
+                    <b>남은 횟수</b>는 <b>한도 − 학생 발화 수</b>로 도구가
+                    계산합니다. 모델에게 숫자를 비교시키지 않으려고 두는 값이라
+                    도구가 채우는 게 맞습니다.
+                  </p>
+                  <p>
+                    <b>AI 턴 모양</b>을 비우면 AI 응답을 대화 배열에 남기지
+                    않습니다. 학생 응답만 기록하는 프롬프트에 맞춥니다. 대신
+                    대화창에도 AI 말풍선이 쌓이지 않습니다.
                   </p>
                 </div>
               </div>

@@ -50,8 +50,25 @@ export type StagePreset = {
    * 중첩일 수도 있다.
    */
   historyKey: string;
-  /** 화면에 말풍선으로 보여줄 출력 필드. 중첩 경로를 쓴다 */
+  /**
+   * 화면에 말풍선으로 보여줄 출력 필드. 중첩 경로를 쓴다.
+   * 쉼표로 여러 개를 적을 수 있다 — 문제와 말풍선이 다른 필드에 나오는
+   * 프롬프트가 있다.
+   */
   replyKey: string;
+  /** 학생 턴 JSON 템플릿. 말이 들어갈 자리는 studentField 로 지정 */
+  studentTurn: string;
+  studentField: string;
+  /** AI 턴 템플릿. 비우면 AI 턴을 배열에 남기지 않는다 */
+  aiTurn: string;
+  aiField: string;
+  /** 마지막 학생 발화를 따로 두는 자리. 비우면 안 쓴다 */
+  latestKey: string;
+  /** 학생 발화 수. 비우면 안 쓴다 */
+  turnCountKey: string;
+  /** 남은 횟수. turnCountKey · limitKey 가 함께 있어야 계산한다 */
+  remainingKey: string;
+  limitKey: string;
 };
 
 /** 단계를 새로 추가할 때의 빈 값 */
@@ -66,6 +83,14 @@ export const BLANK_STAGE: StagePreset = {
   checkRule: null,
   historyKey: 'conversation',
   replyKey: 'message',
+  studentTurn: '{ "speaker": "student", "message_text": "" }',
+  studentField: 'message_text',
+  aiTurn: '{ "speaker": "ai", "message_text": "" }',
+  aiField: 'message_text',
+  latestKey: '',
+  turnCountKey: '',
+  remainingKey: '',
+  limitKey: '',
 };
 
 export const AIPM_PRESET: StagePreset[] = [
@@ -183,6 +208,14 @@ END:
     checkRule: null,
     historyKey: 'conversation',
     replyKey: 'message',
+    studentTurn: '{ "speaker": "student", "message_text": "" }',
+    studentField: 'message_text',
+    aiTurn: '{ "speaker": "ai", "message_text": "" }',
+    aiField: 'message_text',
+    latestKey: '',
+    turnCountKey: '',
+    remainingKey: '',
+    limitKey: '',
   },
   {
     name: '02 MODE A',
@@ -512,7 +545,16 @@ target_logic_gap,
     outputMode: 'json',
     checkRule: null,
     historyKey: 'payload.interaction.response_history',
-    replyKey: 'ui.message',
+    replyKey: 'ui.problem_text, ui.message',
+    studentTurn:
+      '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
+    studentField: 'content',
+    aiTurn: '{ "speaker": "ai", "content": "" }',
+    aiField: 'content',
+    latestKey: 'payload.interaction.latest_response',
+    turnCountKey: 'payload.interaction.student_turn_count',
+    remainingKey: 'payload.interaction.turns_remaining',
+    limitKey: 'payload.interaction.turn_limit',
   },
   {
     name: '03 MODE B',
@@ -970,7 +1012,16 @@ completion.action = "COMPLETE"
     outputMode: 'json',
     checkRule: null,
     historyKey: 'payload.interaction.response_history',
-    replyKey: 'ui.message',
+    replyKey: 'ui.problem_text, ui.ai_wrong_solution, ui.message',
+    studentTurn:
+      '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
+    studentField: 'content',
+    aiTurn: '{ "speaker": "ai", "content": "" }',
+    aiField: 'content',
+    latestKey: 'payload.interaction.latest_response',
+    turnCountKey: 'payload.interaction.student_turn_count',
+    remainingKey: 'payload.interaction.turns_remaining',
+    limitKey: 'payload.interaction.turn_limit',
   },
   {
     name: '04 HINT',
@@ -1063,6 +1114,15 @@ AI의 핵심 오류를 직접 알려주지 않는다.
     checkRule: null,
     historyKey: 'payload.interaction.response_history',
     replyKey: 'hint.message',
+    studentTurn:
+      '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
+    studentField: 'content',
+    aiTurn: '{ "speaker": "ai", "content": "" }',
+    aiField: 'content',
+    latestKey: 'payload.interaction.latest_response',
+    turnCountKey: 'payload.interaction.student_turn_count',
+    remainingKey: 'payload.interaction.turns_remaining',
+    limitKey: 'payload.interaction.turn_limit',
   },
   {
     name: '05 EVALUATOR',
@@ -1217,6 +1277,15 @@ action = "DAILY_ANALYSIS"
     checkRule: null,
     historyKey: 'payload.problem_result.response_history',
     replyKey: '',
+    studentTurn:
+      '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
+    studentField: 'content',
+    aiTurn: '{ "speaker": "ai", "content": "" }',
+    aiField: 'content',
+    latestKey: '',
+    turnCountKey: 'payload.problem_result.student_turn_count',
+    remainingKey: '',
+    limitKey: '',
   },
   {
     name: '06 DAILY ANALYZER',
@@ -1362,6 +1431,14 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
     checkRule: null,
     historyKey: 'conversation',
     replyKey: '',
+    studentTurn: '{ "speaker": "student", "message_text": "" }',
+    studentField: 'message_text',
+    aiTurn: '{ "speaker": "ai", "message_text": "" }',
+    aiField: 'message_text',
+    latestKey: '',
+    turnCountKey: '',
+    remainingKey: '',
+    limitKey: '',
   },
   {
     name: '07 WEEKLY REPORT',
@@ -1482,5 +1559,13 @@ monitoring_gap
     checkRule: null,
     historyKey: 'conversation',
     replyKey: '',
+    studentTurn: '{ "speaker": "student", "message_text": "" }',
+    studentField: 'message_text',
+    aiTurn: '{ "speaker": "ai", "message_text": "" }',
+    aiField: 'message_text',
+    latestKey: '',
+    turnCountKey: '',
+    remainingKey: '',
+    limitKey: '',
   },
 ];
