@@ -751,6 +751,32 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     (item) => !varSets.some((mine) => mine.name === item.name),
   );
 
+  /**
+   * 상한이 서로 안 맞는지 **돌리기 전에** 본다.
+   *
+   * 바퀴 10 인데 학생 발화 상한이 6 이면 한 바퀴도 못 돈다. 그걸
+   * 돌려 보고 나서야 알면 호출만 버린다. 실제로 두 번 그랬다.
+   *
+   * 한 바퀴에 학생 발화가 6~7 든다 — 01 에서 모드 고르기 1~2,
+   * 문제 풀기 5. 넉넉히 7 로 잡는다.
+   */
+  const perLap = 7;
+  const limitWarning = ((): string | null => {
+    const need = autoLimits.laps * perLap;
+    if (autoLimits.students < need) {
+      return `바퀴 ${autoLimits.laps}을 돌려면 학생 발화가 ${need} 쯤 필요합니다. 지금 ${autoLimits.students}이면 ${Math.floor(autoLimits.students / perLap)}바퀴에서 멈춥니다.`;
+    }
+    // 호출은 걸음마다 단계와 학생을 한 번씩 부른다. 재시도까지 여유를 둔다.
+    const calls = need * 2 + autoLimits.laps * 2;
+    if (autoLimits.calls < calls) {
+      return `바퀴 ${autoLimits.laps}을 돌려면 호출이 ${calls} 쯤 필요합니다. 지금 ${autoLimits.calls}이면 중간에 멈춥니다.`;
+    }
+    if (autoLimits.moves < autoLimits.laps * 3) {
+      return `한 바퀴에 단계를 3번 옮깁니다. 바퀴 ${autoLimits.laps}이면 단계 이동이 ${autoLimits.laps * 3} 쯤 필요합니다.`;
+    }
+    return null;
+  })();
+
   /** 반복 실행 통과율. 회차가 없으면 안 보여 준다 */
   const rate =
     trials.length === 0 ? null : tally(trials, stages.map((stage) => stage.name));
@@ -3154,6 +3180,25 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                 className="h-40 w-full resize-y rounded border border-neutral-300 bg-transparent p-2 outline-none dark:border-neutral-700"
               />
             </div>
+
+            {limitWarning !== null && !autoRunning && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-500">
+                ⚠ {limitWarning}{' '}
+                <button
+                  onClick={() =>
+                    setAutoLimits((prev) => ({
+                      ...prev,
+                      students: Math.max(prev.students, prev.laps * perLap),
+                      calls: Math.max(prev.calls, prev.laps * perLap * 2 + prev.laps * 2),
+                      moves: Math.max(prev.moves, prev.laps * 3),
+                    }))
+                  }
+                  className="underline"
+                >
+                  바퀴에 맞춰 올리기
+                </button>
+              </p>
+            )}
 
             {autoAt !== null && (
               <p className="text-neutral-500">돌아가는 중… {autoAt}</p>
