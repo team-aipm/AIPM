@@ -44,6 +44,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // 정적 파일과 이미지 최적화 요청은 제외한다.
-    '/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    //
+    // **배치(api/batch)도 제외한다.** 세션 쿠키가 없는 요청이라 여기서
+    // 토큰을 갱신할 것이 없고, Cron 이 부를 때마다 헛일을 한다.
+    '/((?!_next/static|_next/image|favicon.ico|api/batch|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
