@@ -161,3 +161,64 @@ function safeParse(text: string): unknown {
     return null;
   }
 }
+
+/**
+ * AIPM 기본 매핑.
+ *
+ * `_bridge.ts` · `AIPM_ROUTES` 와 같은 성격이다 — 도구는 범용이지만
+ * 이 저장소에서 처음 열었을 때 AIPM 흐름은 그냥 돌아가야 한다.
+ *
+ * **없어서 생긴 일:** 05 는 `next_learning.recommended_mode` 로 다음
+ * 모드를 내고 `action = NEXT_MODE_SELECTION` 으로 "학생에게 물어봐라"
+ * 까지 말한다. 01 에는 그걸 받는 `## CONTINUE` 절이 있다. 그런데 두
+ * 값을 옮기는 줄이 없어서, 01 은 매번 `session_phase = "START"` 로
+ * 돌았다. **첫 인사만 다시 하고 모드는 늘 A 였다.**
+ *
+ * 여기 적는 것은 "이 값을 저기에 넣어라" 뿐이다. 판단은 프롬프트가 한다.
+ */
+export const AIPM_MAPS: Record<string, MapRow[]> = {
+  // 문제 하나가 끝났다. 결과를 평가 단계가 읽는 자리에 옮긴다.
+  '02 MODE A': [
+    { source: 'literal', from: 'A', to: 'payload.learning_mode' },
+    { source: 'output', from: 'problem_state.problem_text', to: 'payload.problem_result.problem_text' },
+    { source: 'output', from: 'problem_state.verified_answer', to: 'payload.problem_result.verified_answer' },
+    { source: 'output', from: 'completion.status', to: 'payload.problem_result.completion_status' },
+    { source: 'output', from: 'interaction_update.support_level', to: 'payload.problem_result.support_level' },
+    { source: 'input', from: 'payload.interaction.response_history', to: 'payload.problem_result.response_history' },
+    { source: 'input', from: 'payload.interaction.student_turn_count', to: 'payload.problem_result.student_turn_count' },
+    { source: 'input', from: 'payload.interaction.turn_limit', to: 'payload.problem_result.turn_limit' },
+    { source: 'input', from: 'student', to: 'student' },
+    { source: 'input', from: 'session', to: 'session' },
+  ],
+  '03 MODE B': [
+    { source: 'literal', from: 'B', to: 'payload.learning_mode' },
+    { source: 'output', from: 'problem_state.problem_text', to: 'payload.problem_result.problem_text' },
+    { source: 'output', from: 'problem_state.verified_answer', to: 'payload.problem_result.verified_answer' },
+    { source: 'output', from: 'completion.status', to: 'payload.problem_result.completion_status' },
+    { source: 'output', from: 'interaction_update.support_level', to: 'payload.problem_result.support_level' },
+    { source: 'input', from: 'payload.interaction.response_history', to: 'payload.problem_result.response_history' },
+    { source: 'input', from: 'payload.interaction.student_turn_count', to: 'payload.problem_result.student_turn_count' },
+    { source: 'input', from: 'payload.interaction.turn_limit', to: 'payload.problem_result.turn_limit' },
+    { source: 'input', from: 'student', to: 'student' },
+    { source: 'input', from: 'session', to: 'session' },
+  ],
+  // 평가가 끝났다. 01 이 "이번엔 어떤 방식으로 할래?" 를 물을 수 있게
+  // 세션 단계를 CONTINUE 로 바꾸고 다음 모드 추천을 넘긴다.
+  '05 EVALUATOR': [
+    { source: 'literal', from: 'CONTINUE', to: 'payload.session_phase' },
+    // **순서가 중요하다.** 통째로 옮기는 줄을 먼저 두어야 한다. 뒤에
+    // 두면 방금 채운 preferred_mode · last_mode 를 도로 덮는다.
+    { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
+    { source: 'output', from: 'next_learning.recommended_mode', to: 'payload.mode_status.preferred_mode' },
+    { source: 'input', from: 'payload.learning_mode', to: 'payload.mode_status.last_mode' },
+    { source: 'input', from: 'student', to: 'student' },
+    { source: 'input', from: 'session', to: 'session' },
+    // 새 문제로 가므로 앞 문제의 대화는 안 넘긴다.
+    { source: 'literal', from: '[]', to: 'conversation' },
+  ],
+};
+
+export function defaultMapping(name: string): MapRow[] {
+  // 얕은 복사. 화면에서 고친 값이 프리셋에 스며들면 안 된다.
+  return (AIPM_MAPS[name] ?? []).map((row) => ({ ...row }));
+}

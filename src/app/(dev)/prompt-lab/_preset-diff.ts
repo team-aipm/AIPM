@@ -21,6 +21,7 @@
 
 import type { OutputMode, CheckRuleId } from '@/lib/ai/schema-check';
 
+import type { MapRow } from './_mapping';
 import type { Routing } from './_routing';
 
 /**
@@ -48,6 +49,7 @@ export type Comparable = {
   limitKey: string;
   resetKey: string;
   routing: Routing;
+  mapping: MapRow[];
 };
 
 export type FieldId = keyof Comparable;
@@ -58,6 +60,7 @@ export type Group = { id: string; label: string; fields: FieldId[] };
 export const GROUPS: Group[] = [
   { id: 'prompt', label: '프롬프트', fields: ['prompt'] },
   { id: 'routing', label: '분기', fields: ['routing'] },
+  { id: 'mapping', label: '다음 단계로 보낼 값', fields: ['mapping'] },
   {
     id: 'chat',
     label: '대화 모양',
