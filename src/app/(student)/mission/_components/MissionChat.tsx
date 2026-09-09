@@ -20,6 +20,7 @@ import { PartnerFace } from '@/components/ui/PartnerFace';
 import {
   answerProblem,
   confirmSourceProblem,
+  askHint,
   offerSourceProblem,
   readPhotoProblem,
   startProblem,
@@ -237,6 +238,19 @@ ${reply.recognized}
     }
   }
 
+  /**
+   * 힌트를 받는다.
+   *
+   * **턴을 쓰지 않는다.** 힌트는 학생의 발화가 아니라 도움 요청이라,
+   * 5턴 한도를 힌트로 깎지 않는다.
+   */
+  async function hint() {
+    setPending(true);
+    const reply = await askHint();
+    addAi(reply.message);
+    setPending(false);
+  }
+
   async function answer(text: string) {
     setPending(true);
     setChoices([]);
@@ -338,6 +352,16 @@ ${reply.recognized}
               </button>
             ))}
           </div>
+        )}
+
+        {problemText !== null && !finished && !pending && (
+          <button
+            type="button"
+            onClick={() => void hint()}
+            className="self-start rounded-full border border-meti/40 bg-white px-3.5 py-2 text-[13px] font-semibold text-meti"
+          >
+            💡 힌트 주세요
+          </button>
         )}
 
         {sourceStage === 'ask' && !pending && (
