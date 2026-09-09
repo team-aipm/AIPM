@@ -282,6 +282,8 @@ export type Trial = {
   steps: number;
   students: number;
   findings: Finding[];
+  /** 이 회차가 지나간 단계 이름. 중복 없이 */
+  visited: string[];
 };
 
 export type RuleTally = {
@@ -302,9 +304,17 @@ export type Tally = {
   rules: RuleTally[];
   /** 어떻게 끝났나 */
   reasons: { reason: string; count: number }[];
+  /**
+   * 단계마다 몇 회차가 지나갔나.
+   *
+   * **한 번도 안 지난 단계가 있으면 시험이 절반만 된 것이다.** 아홉
+   * 회차를 돌려도 03 MODE B 를 0회 지났으면 통과율은 멀쩡해 보이지만
+   * MODE B 는 한 줄도 확인 못 했다.
+   */
+  coverage: { stage: string; trials: number }[];
 };
 
-export function tally(trials: Trial[]): Tally {
+export function tally(trials: Trial[], stageNames: string[] = []): Tally {
   const runs = trials.length;
   const rules = AUDIT_RULES.map((rule) => {
     const hit = trials.filter((trial) =>
@@ -322,9 +332,19 @@ export function tally(trials: Trial[]): Tally {
     counts.set(trial.reason, (counts.get(trial.reason) ?? 0) + 1);
   }
 
+  // 화면에 있는 단계 전부를 줄로 만든다. 안 지난 단계가 0 으로 보여야
+  // 한다. 지나간 것만 세면 빠진 게 안 보인다.
+  const known = stageNames.length > 0
+    ? stageNames
+    : [...new Set(trials.flatMap((trial) => trial.visited))];
+
   return {
     runs,
     clean: trials.filter((trial) => trial.findings.length === 0).length,
+    coverage: known.map((stage) => ({
+      stage,
+      trials: trials.filter((trial) => trial.visited.includes(stage)).length,
+    })),
     avgSteps: mean(trials.map((trial) => trial.steps)),
     avgStudents: mean(trials.map((trial) => trial.students)),
     // 자주 걸린 것부터. 통과한 규칙은 아래로 모인다.

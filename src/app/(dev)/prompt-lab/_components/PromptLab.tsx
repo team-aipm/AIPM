@@ -633,7 +633,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         );
 
   /** 반복 실행 통과율. 회차가 없으면 안 보여 준다 */
-  const rate = trials.length === 0 ? null : tally(trials);
+  const rate =
+    trials.length === 0 ? null : tally(trials, stages.map((stage) => stage.name));
 
   /** 규칙별로 묶는다. 같은 위반이 열 번 나오면 한 줄로 접어야 읽힌다 */
   const byRule: { rule: (typeof AUDIT_RULES)[number]; hits: Finding[] }[] =
@@ -1425,10 +1426,14 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   async function runOnce(
     prompt: string,
     live: boolean,
-  ): Promise<{ steps: AutoStep[]; reason: StopReason }> {
+  ): Promise<{ steps: AutoStep[]; reason: StopReason; visited: string[] }> {
     const log: AutoStep[] = [];
     const names = stages.map((stage) => stage.name);
-    let at = Math.min(Math.max(0, autoStart), stages.length - 1);
+    const start = Math.min(Math.max(0, autoStart), stages.length - 1);
+    /** 지나간 단계. 중복 없이 순서대로 */
+    const visited: string[] = [names[start]];
+    let laps = 0;
+    let at = start;
     let input = stages[at].threads[stages[at].activeThread]?.input ?? '';
     if (autoFresh) input = resetConversation(input, shapeOf(stages[at]));
     let n = 0;
@@ -1550,6 +1555,17 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
         add({ stage: next, kind: 'move', text: `${names[at]} → ${to}`, note: matched?.note });
         at = next;
+        if (!visited.includes(names[at])) visited.push(names[at]);
+
+        // 시작 단계로 돌아오면 한 바퀴다. AIPM 에서는 한 문제다.
+        if (at === start) {
+          laps += 1;
+          if (laps >= autoLimits.laps) {
+            add({ stage: at, kind: 'end', text: `${laps}바퀴 돌았습니다.` });
+            reason = 'lap-limit';
+            break;
+          }
+        }
         if (live) {
           patchThread(at, target.activeThread, { input });
           setActiveIndex(at);
@@ -1600,7 +1616,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       if (live) patchThread(at, stage.activeThread, { input });
     }
 
-    return { steps: log, reason };
+    return { steps: log, reason, visited };
   }
 
   /** 한 번 돌린다. 걸음이 화면에 그대로 쌓인다 */
@@ -1662,6 +1678,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           steps: checked.steps,
           students: checked.students,
           findings: checked.findings,
+          visited: done.visited,
         });
         setTrials([...got]);
         // 마지막 회차의 걸음은 화면에 남긴다. 통과율만 보면 무슨 말이
@@ -2589,11 +2606,12 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   ['moves', '단계 이동'],
                   ['calls', '호출'],
                   ['retries', '재시도'],
+                  ['laps', '바퀴'],
                 ] as const
               ).map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2">
                   <span className="shrink-0 text-neutral-500">
-                    {label} {key === 'retries' ? '' : '상한'}
+                    {label} {key === 'retries' || key === 'laps' ? '' : '상한'}
                   </span>
                   <input
                     value={String(autoLimits[key])}
@@ -2780,6 +2798,31 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     </span>
                   </div>
                 ))}
+
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                  <span className="text-neutral-500">지나간 단계</span>
+                  {rate.coverage.map((row) => (
+                    <span
+                      key={row.stage}
+                      className={
+                        row.trials === 0
+                          ? 'text-amber-700 dark:text-amber-500'
+                          : 'text-neutral-500'
+                      }
+                    >
+                      {row.trials === 0 && '△ '}
+                      {row.stage} {row.trials}/{rate.runs}
+                    </span>
+                  ))}
+                </div>
+
+                {rate.coverage.some((row) => row.trials === 0) && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-500">
+                    한 번도 안 지난 단계가 있습니다. 통과율이 멀쩡해도 그 단계는
+                    한 줄도 확인 못 한 것입니다 — 분기를 보거나 시작 단계를
+                    바꿔서 돌려 보세요.
+                  </p>
+                )}
 
                 <p className="text-[11px] text-neutral-500">
                   멈춘 이유 ·{' '}
