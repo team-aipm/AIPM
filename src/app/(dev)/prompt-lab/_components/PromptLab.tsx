@@ -48,6 +48,13 @@ import {
   type Routing,
 } from '../_routing';
 import {
+  lineChange,
+  newRevision,
+  toHistoryCsv,
+  when,
+  type Revision,
+} from '../_history';
+import {
   auditRun,
   AUDIT_RULES,
   tally,
@@ -556,7 +563,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     'none' | 'prompt' | 'price' | 'settings' | 'vars' | 'export' | 'auto'
   >('none');
   const [exportKind, setExportKind] = useState<
-    'stages' | 'cases' | 'rules' | 'spec'
+    'stages' | 'cases' | 'rules' | 'spec' | 'history'
   >('stages');
   const [draft, setDraft] = useState('');
   // 프로바이더에서 받아온 실제 모델 목록. 코드의 후보보다 이쪽이 정확하다.
@@ -591,6 +598,16 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * 중지는 ref 로 본다. 루프가 도는 동안 state 는 옛 값이 잡혀 있어
    * 버튼을 눌러도 루프가 못 본다.
    */
+  /**
+   * 프롬프트 변경 장부.
+   *
+   * 되돌리기가 아니다. 무엇을 왜 고쳤는지 적어 두는 곳이다. 결과가
+   * 나아졌을 때 "무엇 때문에" 를 말할 수 있어야 한다.
+   */
+  const [history, setHistory] = useState<Revision[]>([]);
+  /** 이유를 받는 칸. null 이면 접혀 있다 */
+  const [reasonDraft, setReasonDraft] = useState<string | null>(null);
+
   const [profiles, setProfiles] = useState<Profile[]>(PROFILE_PRESET);
   const [activeProfile, setActiveProfile] = useState(0);
   /** 반복 실행 회차. 프로필마다 이만큼씩 돈다 */
@@ -743,11 +760,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           autoPrompt?: string;
           profiles?: Profile[];
           autoLimits?: Partial<AutoLimits>;
+          history?: Revision[];
         };
         if (parsed.prices && typeof parsed.prices === 'object') {
           setPrices(parsed.prices);
         }
         if (typeof parsed.krwRate === 'string') setKrwRate(parsed.krwRate);
+        if (Array.isArray(parsed.history)) setHistory(parsed.history);
         if (Array.isArray(parsed.profiles) && parsed.profiles.length > 0) {
           setProfiles(parsed.profiles);
         } else if (typeof parsed.autoPrompt === 'string') {
@@ -863,6 +882,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           krwRate,
           profiles,
           autoLimits,
+          history,
         }),
       );
       setSaveState('saved');
@@ -883,6 +903,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     krwRate,
     profiles,
     autoLimits,
+    history,
   ]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -946,6 +967,31 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         vars,
       )
     : [];
+
+  /**
+   * 이 단계에 마지막으로 기록해 둔 프롬프트.
+   *
+   * 없으면 프리셋을 기준으로 삼는다. 처음 고친 것도 "무엇에서
+   * 무엇으로" 가 남아야 한다.
+   */
+  const lastRecorded = ((): string => {
+    if (active === undefined) return '';
+    const mine = history.filter((item) => item.stage === active.name);
+    const last = mine[mine.length - 1];
+    if (last !== undefined) return last.after;
+    return preset.find((item) => item.name === active.name)?.prompt ?? '';
+  })();
+
+  /** 아직 안 적어 둔 변경이 있는가 */
+  const unrecorded = active !== undefined && active.prompt !== lastRecorded;
+
+  function record(reason: string) {
+    if (active === undefined) return;
+    const made = newRevision(active.name, reason, lastRecorded, active.prompt);
+    if (made === null) return;
+    setHistory((prev) => [...prev, made]);
+    setReasonDraft(null);
+  }
 
   /** 지금 단계의 대화 모양. 여러 곳에서 쓰므로 한 번만 만든다 */
   const chatShape: ChatShape = active === undefined ? DEFAULT_CHAT_SHAPE : shapeOf(active);
@@ -1055,6 +1101,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     if (exportKind === 'stages') return toStagesTs(list, commonPrompt, vars);
     if (exportKind === 'cases') return toCasesJson(cases);
     if (exportKind === 'rules') return toRulesTs(list);
+    if (exportKind === 'history') return toHistoryCsv(history);
     return toSpecMd(list, commonPrompt);
   })();
 
@@ -1063,10 +1110,17 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     cases: 'golden-cases.json',
     rules: 'stage-rules.ts',
     spec: 'pipeline-spec.md',
+    history: 'prompt-history.csv',
   }[exportKind];
 
   function downloadExport() {
-    const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
+    // CSV 는 MIME 를 맞춰야 Excel 이 바로 연다.
+    const blob = new Blob([exportText], {
+      type:
+        exportKind === 'history'
+          ? 'text/csv;charset=utf-8'
+          : 'text/plain;charset=utf-8',
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -2981,6 +3035,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   ['cases', '골든 케이스', `${cases.length}개`],
                   ['rules', '검증 규칙', 'stage-rules.ts'],
                   ['spec', '실행 명세', '빈칸 있음'],
+                  ['history', '프롬프트 이력', `${history.length}건`],
                 ] as const
               ).map(([id, label, tag]) => (
                 <button
@@ -3013,7 +3068,70 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                 '규칙 데이터만 뽑습니다. 검사 로직은 checkFieldRules 를 그대로 쓰면 됩니다. 두 벌 만들 이유가 없습니다.'}
               {exportKind === 'spec' &&
                 '빈칸이 있습니다. 화면에서 [입력으로] 를 손으로 누르며 내리던 판단이라 도구가 채울 수 없습니다. 이게 안 채워지면 코드를 쓸 때 지어내게 됩니다.'}
+              {exportKind === 'history' &&
+                'Excel 이 바로 여는 CSV 입니다. 한 줄에 날짜 · 단계 · 변경 이유 · 수정 전 · 수정 후가 들어갑니다. 아래 [파일로 내려받기] 를 쓰세요 — 화면에서 복사하면 줄바꿈이 든 칸이 깨집니다.'}
             </p>
+
+            {exportKind === 'history' && (
+              <div className="flex flex-col gap-1 border-y border-neutral-200 py-2 dark:border-neutral-800">
+                {history.length === 0 && (
+                  <p className="text-[11px] text-neutral-500">
+                    아직 없습니다. 프롬프트를 고친 뒤 <b>프롬프트</b> 패널 위의{' '}
+                    <b>[변경 기록]</b> 을 누르고 이유를 한 줄 적으세요.
+                  </p>
+                )}
+                {[...history]
+                  .map((item, index) => ({ item, index }))
+                  .reverse()
+                  .map(({ item, index }) => {
+                    const change = lineChange(item.before, item.after);
+                    return (
+                      <details key={index} className="text-[11px]">
+                        <summary className="flex cursor-pointer flex-wrap items-baseline gap-2">
+                          <span className="text-neutral-400">{index + 1}</span>
+                          <span className="w-32 shrink-0 truncate text-neutral-500">
+                            {item.stage}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {item.reason || '(이유 없음)'}
+                          </span>
+                          <span className="shrink-0 text-neutral-500">
+                            −{change.removed} +{change.added}
+                          </span>
+                          <span className="shrink-0 text-neutral-500">
+                            {when(item.at)}
+                          </span>
+                          <button
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setHistory((prev) => prev.filter((_, i) => i !== index));
+                            }}
+                            className="px-1 text-neutral-400 hover:text-red-600"
+                            title="이 기록 삭제"
+                          >
+                            ×
+                          </button>
+                        </summary>
+                        <div className="grid gap-2 pt-1 md:grid-cols-2">
+                          {(
+                            [
+                              ['수정 전', item.before],
+                              ['수정 후', item.after],
+                            ] as const
+                          ).map(([label, text]) => (
+                            <div key={label} className="flex min-w-0 flex-col gap-1">
+                              <span className="text-neutral-500">{label}</span>
+                              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border border-neutral-200 p-2 dark:border-neutral-800">
+                                {text || '(비어 있음)'}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    );
+                  })}
+              </div>
+            )}
 
             {exportKind === 'cases' && cases.length > 0 && (
               <div className="flex flex-col gap-1 border-y border-neutral-200 py-2 dark:border-neutral-800">
@@ -4137,6 +4255,61 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
               }
               onCopy={() => navigator.clipboard.writeText(active.prompt)}
             >
+              <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
+                {reasonDraft === null ? (
+                  <>
+                    <button
+                      onClick={() => setReasonDraft('')}
+                      disabled={!unrecorded}
+                      className="rounded border border-neutral-300 px-2 py-1 disabled:opacity-40 dark:border-neutral-700"
+                      title={
+                        unrecorded
+                          ? '지금 프롬프트를 이유와 함께 장부에 남깁니다'
+                          : '마지막 기록과 같습니다'
+                      }
+                    >
+                      변경 기록
+                    </button>
+                    <span className="text-[11px] text-neutral-500">
+                      {unrecorded
+                        ? (() => {
+                            const change = lineChange(lastRecorded, active.prompt);
+                            return `마지막 기록과 다릅니다 · 빠진 줄 ${change.removed} · 새 줄 ${change.added}`;
+                          })()
+                        : '마지막 기록과 같습니다'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      value={reasonDraft}
+                      onChange={(event) => setReasonDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && reasonDraft.trim() !== '') {
+                          record(reasonDraft);
+                        }
+                        if (event.key === 'Escape') setReasonDraft(null);
+                      }}
+                      autoFocus
+                      placeholder="왜 고쳤는지 한 줄. 예: 첫 턴부터 보기를 주게"
+                      className="min-w-0 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <button
+                      onClick={() => record(reasonDraft)}
+                      disabled={reasonDraft.trim() === ''}
+                      className="rounded bg-neutral-900 px-3 py-1 text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+                    >
+                      남기기
+                    </button>
+                    <button
+                      onClick={() => setReasonDraft(null)}
+                      className="px-2 text-neutral-500"
+                    >
+                      취소
+                    </button>
+                  </>
+                )}
+              </div>
               <textarea
                 value={active.prompt}
                 onChange={(event) => patch(activeIndex, { prompt: event.target.value })}
