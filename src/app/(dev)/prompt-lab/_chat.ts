@@ -470,3 +470,59 @@ export function resetConversation(inputJson: string, shape: ChatShape): string {
   }
   return stringify(syncCounters(next, shape, 0));
 }
+
+/**
+ * 학생에게 보여줄 **보기**.
+ *
+ * v3.0 은 FOUR CHOICES 를 낸다 — "학생의 입력 부담을 줄이기 위해
+ * 원칙적으로 4개의 선택지를 함께 제공한다". 그런데 도구는 그걸
+ * 화면에 그리는 코드가 아예 없었다. 모델이 보기를 내도 아무도 못
+ * 봤고, 자동 실행의 학생 모델도 못 봤다.
+ *
+ * 모양이 프로젝트마다 다르므로 넓게 받는다.
+ *
+ * ```text
+ * [{ "id": "C1", "label": "128 ÷ 8 을 먼저", "value": "A" }]
+ * [{ "label": "...", "value": "..." }]
+ * ["128 ÷ 8 을 먼저", "잘 모르겠어"]
+ * ```
+ */
+export type Choice = { id: string; label: string; value: string };
+
+export function readChoices(
+  raw: string,
+  outputMode: 'json' | 'text',
+  choicesKey: string,
+): Choice[] {
+  const key = choicesKey.trim();
+  if (key === '' || outputMode !== 'json') return [];
+
+  const root = parseOutput(raw);
+  const found = readAt(root, key);
+  if (!Array.isArray(found)) return [];
+
+  const out: Choice[] = [];
+  for (const [index, item] of found.entries()) {
+    // 글자만 있는 목록도 받는다. 보기는 결국 사람이 읽는 한 줄이다.
+    if (typeof item === 'string') {
+      if (item.trim() !== '') out.push({ id: `C${index + 1}`, label: item, value: item });
+      continue;
+    }
+    if (!isRecord(item)) continue;
+
+    const label = text(item.label) ?? text(item.text) ?? text(item.value);
+    if (label === null) continue;
+    out.push({
+      id: text(item.id) ?? `C${index + 1}`,
+      label,
+      value: text(item.value) ?? label,
+    });
+  }
+  return out;
+}
+
+function text(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim() !== '') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
+}

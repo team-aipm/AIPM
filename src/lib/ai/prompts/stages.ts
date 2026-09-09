@@ -65,6 +65,13 @@ export type StagePreset = {
    * 말풍선 문장만 남기면 된다.
    */
   recordKey: string;
+  /**
+   * 학생에게 보여줄 **보기**가 담긴 출력 필드. 비우면 안 쓴다.
+   *
+   * v3.0 은 FOUR CHOICES 를 내는데 도구가 그걸 그리지 않았다. 모델이
+   * 보기를 내도 아무도 못 봤고, 자동 실행의 학생 모델도 못 봤다.
+   */
+  choicesKey: string;
   /** 학생 턴 JSON 템플릿. 말이 들어갈 자리는 studentField 로 지정 */
   studentTurn: string;
   studentField: string;
@@ -95,6 +102,7 @@ export const BLANK_STAGE: StagePreset = {
   historyKey: 'conversation',
   replyKey: 'message',
   recordKey: '',
+  choicesKey: '',
   studentTurn: '{ "speaker": "student", "message_text": "" }',
   studentField: 'message_text',
   aiTurn: '{ "speaker": "ai", "message_text": "" }',
@@ -265,6 +273,7 @@ END:
     historyKey: 'conversation',
     replyKey: 'message',
     recordKey: '',
+    choicesKey: 'mode_choices',
     studentTurn: '{ "speaker": "student", "message_text": "" }',
     studentField: 'message_text',
     aiTurn: '{ "speaker": "ai", "message_text": "" }',
@@ -640,6 +649,7 @@ target_logic_gap,
     historyKey: 'payload.interaction.response_history',
     replyKey: 'ui.problem_text, ui.message',
     recordKey: 'ui.message',
+    choicesKey: 'ui.choices',
     studentTurn:
       '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
     studentField: 'content',
@@ -1117,6 +1127,7 @@ completion.action = "COMPLETE"
     historyKey: 'payload.interaction.response_history',
     replyKey: 'ui.problem_text, ui.ai_wrong_solution, ui.message',
     recordKey: 'ui.message',
+    choicesKey: 'ui.choices',
     studentTurn:
       '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
     studentField: 'content',
@@ -1220,6 +1231,7 @@ AI의 핵심 오류를 직접 알려주지 않는다.
     historyKey: 'payload.interaction.response_history',
     replyKey: 'hint.message',
     recordKey: '',
+    choicesKey: 'ui.choices',
     studentTurn:
       '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
     studentField: 'content',
@@ -1385,6 +1397,7 @@ action = "DAILY_ANALYSIS"
     historyKey: 'payload.problem_result.response_history',
     replyKey: '',
     recordKey: '',
+    choicesKey: '',
     studentTurn:
       '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
     studentField: 'content',
@@ -1541,6 +1554,7 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
     historyKey: 'conversation',
     replyKey: '',
     recordKey: '',
+    choicesKey: '',
     studentTurn: '{ "speaker": "student", "message_text": "" }',
     studentField: 'message_text',
     aiTurn: '{ "speaker": "ai", "message_text": "" }',
@@ -1671,6 +1685,7 @@ monitoring_gap
     historyKey: 'conversation',
     replyKey: '',
     recordKey: '',
+    choicesKey: '',
     studentTurn: '{ "speaker": "student", "message_text": "" }',
     studentField: 'message_text',
     aiTurn: '{ "speaker": "ai", "message_text": "" }',

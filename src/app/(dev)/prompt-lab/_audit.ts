@@ -83,6 +83,8 @@ export type AuditShape = {
   name: string;
   turnCountKey: string;
   limitKey: string;
+  /** 보기가 담긴 자리. 비우면 보기를 안 보는 단계다 */
+  choicesKey: string;
 };
 
 /** 점검이 보는 한 걸음. `AutoStep` 에서 필요한 것만 추린 모양이다 */
@@ -180,7 +182,8 @@ export function auditRun(steps: AuditStep[], shapes: AuditShape[]): AuditResult 
     const answer = read(output, 'problem_state.verified_answer');
     const locked = read(output, 'problem_state.answer_lock');
     const status = read(output, 'completion.status');
-    const choices = read(output, 'ui.choices');
+    const choicesKey = shape?.choicesKey.trim() ?? '';
+    const choices = choicesKey === '' ? undefined : read(output, choicesKey);
     const going = typeof status === 'string' && status === CONTINUING;
 
     // 문제를 냈는데 검증이 안 됐다.
