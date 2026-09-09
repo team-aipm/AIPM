@@ -11,9 +11,11 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getStudent } from '@/lib/services/student';
 import { findTodaySession } from '@/lib/services/learning-session';
+import { findActiveProblem } from '@/lib/services/problem';
+import { listMessages } from '@/lib/services/message';
 import { PARTNER_NAME } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
-import { MissionChat } from './_components/MissionChat';
+import { MissionChat, type Initial } from './_components/MissionChat';
 
 export const metadata = { title: '미션 · 메티' };
 
@@ -33,6 +35,26 @@ export default async function MissionPage() {
   if (session === null) redirect('/home');
 
   const partner = PARTNER_NAME[student.persona_type];
+
+  // 풀던 문제가 있으면 그 자리에서 이어 붙인다. 대화가 `message` 에 남아
+  // 있으므로 새로고침해도 사라지지 않는다 — 01 의 대화만 못 남긴다.
+  const active = await findActiveProblem(supabase, session.session_id);
+  let initial: Initial = { kind: 'host' };
+  if (active !== null) {
+    const messages = await listMessages(supabase, active.problem_id);
+    initial = {
+      kind: 'problem',
+      problemText: active.problem_text,
+      turns: messages.map((m) => ({
+        who: m.speaker === 'student' ? ('student' as const) : ('ai' as const),
+        text: m.message_text,
+      })),
+      turnsLeft: Math.max(
+        0,
+        5 - messages.filter((m) => m.speaker === 'student').length,
+      ),
+    };
+  }
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -54,7 +76,7 @@ export default async function MissionPage() {
         </div>
       </header>
 
-      <MissionChat partner={partner} />
+      <MissionChat partner={partner} initial={initial} />
     </div>
   );
 }
