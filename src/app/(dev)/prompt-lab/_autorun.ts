@@ -62,16 +62,23 @@ export type AutoLimits = {
   moves: number;
   /** 모델 호출 총 횟수. 단계와 학생을 합쳐서 센다 */
   calls: number;
+  /** 일시적 오류일 때 다시 부를 횟수 */
+  retries: number;
 };
 
-export const DEFAULT_LIMITS: AutoLimits = { students: 20, moves: 12, calls: 60 };
+export const DEFAULT_LIMITS: AutoLimits = {
+  students: 20,
+  moves: 12,
+  calls: 60,
+  retries: 3,
+};
 
 /** 실행 기록 한 줄 */
 export type AutoStep = {
   n: number;
   /** 어느 단계에서 일어난 일인가 */
   stage: number;
-  kind: 'ai' | 'student' | 'move' | 'end' | 'error';
+  kind: 'ai' | 'student' | 'move' | 'end' | 'error' | 'retry';
   text: string;
   /** 옮긴 이유, 검증 실패 같은 곁가지 */
   note?: string;
@@ -182,4 +189,49 @@ export function cleanStudentReply(raw: string): string {
     text = text.slice(1, -1);
   }
   return text.trim();
+}
+
+/**
+ * 다시 해 볼 만한 오류인가.
+ *
+ * 503 은 "지금 붐빈다" 는 뜻이지 우리가 뭘 잘못한 게 아니다. 그런데
+ * 지금까지는 그걸로 실행 전체가 죽었다. 아홉 회차를 돌리다 여섯 번째에
+ * 503 이 나면 앞의 다섯 회차까지 같이 버려졌다.
+ *
+ * ```text
+ * 429  너무 자주 불렀다
+ * 500  서버 안에서 터졌다
+ * 502  게이트웨이
+ * 503  붐빈다
+ * 504  시간 초과
+ * ```
+ *
+ * **4xx 중 429 만 재시도한다.** 400(잘못된 요청) · 401(키) · 404(없는
+ * 모델) 는 다시 불러도 똑같다. 기다리는 동안 요금만 나가고 원인을
+ * 늦게 안다.
+ *
+ * 오류 글은 `Gemini 503\n{...}` 모양으로 온다. 앞의 숫자를 본다.
+ */
+export function isTransient(error: string | null): boolean {
+  if (error === null) return false;
+
+  const code = /^\D*(\d{3})\b/.exec(error);
+  if (code !== null) {
+    return ['429', '500', '502', '503', '504'].includes(code[1]);
+  }
+
+  // 상태 코드가 안 붙는 것들. 그물을 좁게 친다 — 애매하면 안 기다린다.
+  return /timeout|timed out|ECONNRESET|ETIMEDOUT|fetch failed|network/i.test(error);
+}
+
+/**
+ * 몇 초 기다렸다 다시 부를지.
+ *
+ * 붐빌 때 바로 다시 부르면 더 붐빈다. 회를 거듭할수록 길게 쉰다.
+ * 목록을 넘어가면 마지막 값을 쓴다.
+ */
+const BACKOFF = [3, 8, 20, 45];
+
+export function waitFor(attempt: number): number {
+  return BACKOFF[Math.min(attempt, BACKOFF.length - 1)];
 }
