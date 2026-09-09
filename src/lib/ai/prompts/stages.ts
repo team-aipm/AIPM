@@ -1066,7 +1066,7 @@ AI의 핵심 오류를 직접 알려주지 않는다.
   },
   {
     name: '05 EVALUATOR',
-    note: '한 문제를 평가하고 다음 학습을 정한다 · 대화 없음',
+    note: '한 문제를 평가하고 다음 학습을 정한다',
     prompt: `# LOGIC AUDITOR — EVALUATOR / LOOP CONTROLLER
 # VERSION: 1.0
 ## ROLE
@@ -1215,7 +1215,7 @@ action = "DAILY_ANALYSIS"
     inputMode: 'json',
     outputMode: 'json',
     checkRule: null,
-    historyKey: 'conversation',
+    historyKey: 'payload.problem_result.response_history',
     replyKey: '',
   },
   {
