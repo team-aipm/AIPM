@@ -1123,10 +1123,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
     const withUser = appendUserTurn(thread.input, active.historyKey, text, names);
     if (withUser === null) {
-      window.alert(
-        '입력 JSON을 파싱하지 못해 대화를 이어갈 수 없습니다. ' +
-          '입력을 평문으로 바꾸거나 JSON을 고쳐 주세요.',
-      );
+      window.alert(inputParseHint(thread.input));
       return;
     }
 
@@ -1727,7 +1724,14 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
               <b>[보낸 프롬프트]</b>에서 확인하세요.
             </p>
             <p className="text-[11px] text-neutral-500">
-              따옴표는 직접 관리합니다. 파싱 전에 치환하므로{' '}
+              <b>입력 JSON 에서는 문자열 자리에만 쓰세요.</b>{' '}
+              <code>&quot;id&quot;: &quot;{'{{student_id}}'}&quot;</code> 는 되지만{' '}
+              <code>&quot;grade&quot;: {'{{grade}}'}</code> 는 안 됩니다. 치환은 보낼 때만
+              일어나는데 대화창은 그 전에 입력을 읽어야 하기 때문입니다. 숫자는 직접
+              적으세요.
+            </p>
+            <p className="text-[11px] text-neutral-500">
+              프롬프트 안에서는 어디에나 쓸 수 있습니다. 따옴표는 직접 관리합니다. 파싱 전에 치환하므로{' '}
               <code>&quot;grade&quot;: {'{{grade}}'}</code>는 숫자로,{' '}
               <code>&quot;name&quot;: &quot;{'{{nickname}}'}&quot;</code>는 문자로
               들어갑니다. <b>정의하지 않은 이름은 바꾸지 않고 그대로 둡니다.</b>
@@ -3320,6 +3324,44 @@ function Panel({
       <div hidden={!shown}>{children}</div>
     </div>
   );
+}
+
+/**
+ * 입력 JSON 이 왜 안 읽히는지 알려준다.
+ *
+ * "JSON 을 고쳐 주세요" 만으로는 어디가 잘못됐는지 알 수 없다. 가장 흔한
+ * 원인이 **따옴표 없는 변수**라, 그 경우를 따로 짚어 준다.
+ *
+ * 변수 치환은 보낼 때만 일어나는데 대화창은 그 전에 입력을 파싱해야 한다.
+ * 그래서 입력 JSON 은 **치환 전에도 유효해야 한다.**
+ */
+function inputParseHint(input: string): string {
+  // 값 자리에 따옴표 없이 놓인 {{변수}}
+  const bare = [...input.matchAll(/[:[,]\s*(\{\{[^{}]+\}\})/g)].map((m) => m[1]);
+  if (bare.length > 0) {
+    const one = bare[0];
+    return [
+      `따옴표 없는 변수 때문에 입력을 읽지 못했습니다: ${bare.join(' ')}`,
+      '',
+      '변수 치환은 보낼 때만 일어나는데, 대화창은 그 전에 입력을 읽어야 합니다.',
+      '입력 JSON 은 치환 전에도 유효해야 합니다.',
+      '',
+      '고치는 법',
+      `  문자로 쓸 값이면   "${one}"  처럼 따옴표로 감쌉니다`,
+      '  숫자로 쓸 값이면   변수 대신 숫자를 직접 적습니다',
+    ].join('\n');
+  }
+
+  try {
+    JSON.parse(input);
+  } catch (cause) {
+    return `입력 JSON 을 읽지 못했습니다.\n\n${String(cause)}`;
+  }
+
+  return [
+    '입력이 JSON 객체가 아닙니다. 대화를 쌓으려면 { } 로 감싼 객체여야 합니다.',
+    '대화가 필요 없는 단계라면 단계 설정에서 입력을 평문으로 바꾸세요.',
+  ].join('\n');
 }
 
 /** 입력 JSON 의 대화 배열만 비운다. 나머지 필드는 그대로 둔다. */
