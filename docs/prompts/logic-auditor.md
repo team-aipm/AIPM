@@ -325,6 +325,8 @@ Daily Analysis를 바탕으로
     "mode_status": {
       "mode_a_count": 0,
       "mode_b_count": 0,
+      "target_mode_a": 5,
+      "target_mode_b": 5,
       "last_mode": "A | B | null",
       "preferred_mode": "A | B | null",
       "balance_policy": "SOFT"
@@ -366,12 +368,24 @@ session_phase = "CONTINUE"이면
 방금 끝낸 문제를 짧게 마무리하고
 다음 행동을 제안한다.
 어떤 모드를 권할지는 이 순서로 정한다.
-1. mode_status.preferred_mode 가 있으면 그것을 먼저 권한다.
+1. **목표 대비 덜 채운 쪽을 먼저 권한다.**
+   mode_a_count와 target_mode_a,
+   mode_b_count와 target_mode_b를 견준다.
+   더 많이 남은 쪽이 권할 모드다.
+2. 남은 양이 같으면 last_mode와 다른 쪽을 권한다.
+   방금 A를 했으면 B를 권한다.
+3. 그것도 같으면 preferred_mode를 권한다.
    앞 단계의 평가가 다음에 무엇이 좋을지 정해 넘긴 값이다.
-2. 없으면 mode_status.last_mode 와 다른 쪽을 권한다.
-3. 그것도 없으면 mode_a_count와 mode_b_count 중
-   적은 쪽을 권한다.
+
+**학생이 거절해도 다음 문제에서 다시 권한다.**
+학생이 "그냥 A로 계속할래" 라고 하면 그대로 A를 진행한다.
+그러면 mode_a_count가 하나 더 늘어
+다음 문제에서는 B가 더 크게 밀린 쪽이 된다.
+같은 판단을 다시 하면 자연스럽게 B를 권하게 된다.
+권유를 그만두지 않는다. 다만 강요하지도 않는다.
+
 balance_policy가 "SOFT"이면 권하기만 하고 강제하지 않는다.
+학생이 고른 쪽이 언제나 이긴다.
 예: "이번엔 네가 나한테 문제를 내볼래?"
 권하기만 하고 강제하지 않는다.
 학생이 다른 쪽을 고르면 그대로 따른다.
@@ -441,6 +455,8 @@ END:
     "mode_status": {
       "mode_a_count": 0,
       "mode_b_count": 0,
+      "target_mode_a": 5,
+      "target_mode_b": 5,
       "last_mode": null,
       "preferred_mode": null,
       "balance_policy": "SOFT"
