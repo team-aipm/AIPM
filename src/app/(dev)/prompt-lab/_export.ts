@@ -22,6 +22,7 @@
 import type { Check, CheckRuleId, OutputMode } from '@/lib/ai/schema-check';
 import type { CustomRules, FieldRule } from './_field-rules';
 import type { MapRow } from './_mapping';
+import { hasRouting, type Routing } from './_routing';
 import type { Variable } from './_vars';
 
 /** 내보내기가 필요로 하는 단계 정보. 화면 상태에서 이만큼만 뽑아 온다 */
@@ -46,6 +47,7 @@ export type ExportStage = {
   ownSettings: boolean;
   rules: CustomRules;
   mapping: MapRow[];
+  routing: Routing;
 };
 
 /**
@@ -307,7 +309,17 @@ export function toRulesTs(stages: ExportStage[]): string {
  */
 export function toSpecMd(stages: ExportStage[], commonPrompt: string): string {
   const rows = stages.map((stage, index) => {
-    const next = stages[index + 1]?.name ?? '(마지막)';
+    // 분기 규칙이 있으면 그게 진짜 "다음" 이다. 없을 때만 줄 순서를 쓴다.
+    const next = hasRouting(stage.routing)
+      ? stage.routing.rows
+          .filter((row) => row.to.trim() !== '')
+          .map((row) =>
+            row.equals.trim() === ''
+              ? `그밖 → ${row.to.trim()}`
+              : `\`${stage.routing.from.trim()}\` = ${row.equals.trim()} → ${row.to.trim()}`,
+          )
+          .join('<br>')
+      : (stages[index + 1]?.name ?? '(마지막)');
     const mapped =
       stage.mapping.length > 0
         ? stage.mapping
