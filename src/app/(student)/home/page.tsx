@@ -14,6 +14,7 @@ import { getStudent } from '@/lib/services/student';
 import { findTodaySession } from '@/lib/services/learning-session';
 import { PARTNER_NAME, TERMS } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import { PartnerFace } from '@/components/ui/PartnerFace';
 import { startMission } from './_actions';
 
 export const metadata = { title: '오늘의 미션 · 메티' };
@@ -40,11 +41,8 @@ export default async function HomePage() {
   return (
     <main className="flex flex-1 flex-col gap-5 px-6 py-8">
       <header className="flex items-center gap-3">
-        <span
-          aria-hidden
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-xl shadow-sm"
-        >
-          🐣
+        <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
+          <PartnerFace persona={student.persona_type} size={40} />
         </span>
         <div className="flex flex-col">
           <h1 className="text-xl font-extrabold text-meti-ink">
