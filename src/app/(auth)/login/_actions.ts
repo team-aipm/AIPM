@@ -10,6 +10,7 @@
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { EVENT, recordOnce } from '@/lib/analytics/events';
 
 export type SignInState = { error: string | null };
 
@@ -32,6 +33,13 @@ export async function signIn(
     // 여부를 확인해 주는 답이라, 남의 이메일을 넣어 보며 회원인지 알아낼
     // 수 있다.
     return { error: '이메일이나 비밀번호가 맞지 않습니다.' };
+  }
+
+  // 가입 순간에는 세션이 없어 남길 수 없었던 것을 여기서 남긴다.
+  // 이미 있으면 넘어간다.
+  const { data: me } = await supabase.auth.getUser();
+  if (me.user !== null) {
+    await recordOnce(supabase, EVENT.signupCompleted, { accountId: me.user.id });
   }
 
   // redirect 는 예외를 던져 흐름을 끊는다. try 안에 두면 안 된다.
