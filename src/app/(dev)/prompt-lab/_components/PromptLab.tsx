@@ -204,6 +204,18 @@ function toStage(base: StagePreset, key: string): Stage {
  * 키는 저장하지 않는 조합을 기본으로 하기 위해서다.
  */
 const CONFIG_STORAGE_KEY = 'prompt-lab:config:v1';
+/**
+ * 저장본 판. 값이 **있는데 낡은** 칸을 한 번만 고쳐 주려고 둔다.
+ *
+ * 없는 칸은 `fromSaved` 가 프리셋에서 채운다. 문제는 값이 있는
+ * 경우다 — 응답 필드가 `ui.message` 하나였을 때 저장한 사람은,
+ * 프리셋이 `ui.problem_text, ui.message` 로 늘어나도 계속 예전 값을
+ * 쓴다. 문제는 나오는데 대화창에는 안 보인다.
+ *
+ * 판이 없는 저장본에만 손대고, 한 번 저장하면 다시는 손대지 않는다.
+ * 그래야 사람이 일부러 줄여 놓은 값을 매번 되돌리지 않는다.
+ */
+const CONFIG_VERSION = 2;
 const KEY_STORAGE_KEY = 'prompt-lab:keys:v1';
 /**
  * 저장할지 말지 자체를 기억하는 자리.
@@ -330,8 +342,24 @@ function toSaved(stage: Stage): SavedStage {
   };
 }
 
-function fromSaved(item: Partial<SavedStage>, key: string): Stage {
-  const base = { ...BLANK_STAGE, ...item } as StagePreset;
+/**
+ * 저장본 한 줄을 화면 상태로 되돌린다.
+ *
+ * **없는 칸은 이름이 같은 프리셋에서 가져온다.** 예전에는 `BLANK_STAGE`
+ * 에서 가져왔는데, 그러면 도구에 새 칸이 생길 때마다 이미 저장해 둔
+ * 사람만 빈 값으로 열렸다. 대화 턴 모양이 그랬다 — 02 MODE A 를 열어도
+ * v3.0 모양이 아니라 `{ speaker, message_text }` 로 돌아, 학생의 말이
+ * 프롬프트가 읽는 자리에 안 들어갔다.
+ *
+ * 저장본에 **있는** 칸은 그대로 둔다. 사람이 고친 값이다.
+ */
+function fromSaved(
+  item: Partial<SavedStage>,
+  key: string,
+  preset: StagePreset[],
+): Stage {
+  const matched = preset.find((stage) => stage.name === item.name);
+  const base = { ...BLANK_STAGE, ...matched, ...item } as StagePreset;
   return {
     ...toStage(base, key),
     // 예전 저장본에는 이 값이 없다. 그때는 단계마다 값을 직접 넣었으므로
@@ -362,6 +390,76 @@ function fromSaved(item: Partial<SavedStage>, key: string): Stage {
     ).map((t, i) => newThread(`${key}-t${i}`, t.name ?? `대화 ${i + 1}`, t.input ?? '')),
     activeThread: 0,
   };
+}
+
+/**
+ * 판이 없는 저장본의 **낡은 값**을 한 번 고친다.
+ *
+ * 손대는 기준은 하나다 — **사람이 정한 적 없는 값만 고친다.**
+ *
+ * ```text
+ * 대화 모양   빈 단계의 기본값 그대로면 → 프리셋 값
+ * 응답 필드   프리셋이 늘어나기만 했으면 → 프리셋 값
+ * ```
+ *
+ * 대화 모양이 문제였던 이유: v1 에는 그 칸 자체가 없었다. 저장본을
+ * 다시 열면 빈 단계의 기본값 `{ speaker, message_text }` 이 들어가고,
+ * 그대로 저장된다. 학생의 말이 프롬프트가 읽는
+ * `payload.interaction.latest_response.content` 에 안 들어가니, 모델은
+ * 학생이 아직 답을 안 했다고 보고 같은 문제만 다시 냈다.
+ *
+ * 응답 필드가 문제였던 이유: 값이 `ui.message` 로 **있었다.** 프리셋이
+ * `ui.problem_text, ui.message` 로 늘어나도 예전 값이 이긴다. 문제는
+ * 나오는데 대화창에는 인사말만 보였다.
+ */
+function upgradeStage(
+  item: Partial<SavedStage>,
+  preset: StagePreset[],
+): Partial<SavedStage> {
+  const target = preset.find((stage) => stage.name === item.name);
+  if (target === undefined) return item;
+
+  const next: Partial<SavedStage> = { ...item };
+
+  // 빈 단계의 기본값 그대로면 사람이 정한 적이 없다는 뜻이다.
+  const untouched = [
+    'historyKey',
+    'studentTurn',
+    'studentField',
+    'aiTurn',
+    'aiField',
+    'latestKey',
+    'turnCountKey',
+    'remainingKey',
+    'limitKey',
+  ] as const;
+  for (const field of untouched) {
+    if (next[field] === undefined || next[field] === BLANK_STAGE[field]) {
+      next[field] = target[field];
+    }
+  }
+
+  // 응답 필드는 빈 단계 값이 아니라 예전 프리셋 값이 들어 있다.
+  // 적어 둔 경로가 전부 새 프리셋에도 있고 새 쪽이 더 많으면, 사람이
+  // 지운 게 아니라 프리셋이 늘어난 것이다.
+  const saved = splitPaths(next.replyKey ?? '');
+  const wanted = splitPaths(target.replyKey);
+  if (
+    saved.length > 0 &&
+    wanted.length > saved.length &&
+    saved.every((path) => wanted.includes(path))
+  ) {
+    next.replyKey = target.replyKey;
+  }
+
+  return next;
+}
+
+function splitPaths(text: string): string[] {
+  return text
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part !== '');
 }
 
 export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
@@ -516,6 +614,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       const savedConfig = window.localStorage.getItem(CONFIG_STORAGE_KEY);
       if (savedConfig) {
         const parsed = JSON.parse(savedConfig) as {
+          version?: number;
           /** 예전 저장본. 세트 없이 배열 하나였다 */
           vars?: Variable[];
           varSets?: VarSet[];
@@ -547,9 +646,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           setCommon({ ...DEFAULT_COMMON, ...parsed.common });
         }
         if (Array.isArray(parsed.stages) && parsed.stages.length > 0) {
+          // 판이 없으면 낡은 칸을 한 번 손본다. 다음 저장부터는 안 한다.
+          const old = (parsed.version ?? 1) < CONFIG_VERSION;
           setStages(
             parsed.stages.map((item, index) =>
-              fromSaved(item, `r${index}`),
+              fromSaved(old ? upgradeStage(item, preset) : item, `r${index}`, preset),
             ),
           );
           setKeySeq(parsed.stages.length);
@@ -587,6 +688,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       // 저장값이 깨졌으면 무시하고 기본값으로 연다.
     }
     setRestored(true);
+    // 저장본은 mount 때 딱 한 번 읽는다. `preset` 은 서버에서 내려온
+    // 상수라 바뀌지 않고, 넣으면 저장본을 다시 읽어 화면을 되돌린다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -619,6 +723,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       window.localStorage.setItem(
         CONFIG_STORAGE_KEY,
         JSON.stringify({
+          version: CONFIG_VERSION,
           varSets,
           activeSet,
           cases,
