@@ -253,9 +253,14 @@ function pickComparable(
  * 대화와 횟수를 비우고, **실행하면서 매핑이 덮어쓴 칸**을 예시 값으로
  * 돌린다. 학년이나 학생 id 처럼 손으로 고친 칸은 그대로 둔다.
  */
-function freshInput(stage: Stage, input: string, written: string[]): string {
+function freshInput(
+  stage: Stage,
+  input: string,
+  written: string[],
+  sample: string,
+): string {
   if (stage.inputMode !== 'json') return input;
-  return resetConversation(resetWritten(input, stage.sampleInput, written), shapeOf(stage));
+  return resetConversation(resetWritten(input, sample, written), shapeOf(stage));
 }
 
 /** 단계에서 대화 모양만 뽑는다 */
@@ -417,7 +422,14 @@ function toSaved(stage: Stage): SavedStage {
     name: stage.name,
     note: stage.note,
     prompt: stage.prompt,
-    sampleInput: stage.threads[0]?.input ?? '',
+    // **예시는 예시로 둔다.**
+    //
+    // 여기에 대화 1 의 지금 값을 넣고 있었다. 한 번 실행하고 저장하면
+    // 예시가 실행 뒤 상태로 오염되고, `대화 비우기` 가 그 오염된 값으로
+    // 되돌린다. 대화를 지웠는데 지난 기록을 들고 시작하던 이유다.
+    //
+    // 대화는 threads 로 따로 저장되므로 여기에 담을 이유도 없다.
+    sampleInput: stage.sampleInput,
     threads: stage.threads.map((t) => ({ name: t.name, input: t.input })),
     inputMode: stage.inputMode,
     outputMode: stage.outputMode,
@@ -1171,6 +1183,17 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       ? readChoices(thread.result.raw, active.outputMode, active.choicesKey)
       : [];
 
+  /**
+   * 되돌릴 기준이 되는 예시 입력.
+   *
+   * 저장본의 예시가 오염돼 있을 수 있다 — 예전에는 저장할 때 대화 1 의
+   * 지금 값을 예시 자리에 넣었다. 그래서 **프리셋에 같은 이름이 있으면
+   * 그쪽을 먼저 쓴다.**
+   */
+  function cleanSample(stage: Stage): string {
+    return preset.find((item) => item.name === stage.name)?.sampleInput ?? stage.sampleInput;
+  }
+
   /** 지금 단계의 대화 모양. 여러 곳에서 쓰므로 한 번만 만든다 */
   const chatShape: ChatShape = active === undefined ? DEFAULT_CHAT_SHAPE : shapeOf(active);
 
@@ -1679,7 +1702,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     let at = start;
     let input = stages[at].threads[stages[at].activeThread]?.input ?? '';
     const written = writtenPaths(stages.map((stage) => stage.mapping));
-    if (autoFresh) input = freshInput(stages[at], input, written);
+    if (autoFresh) input = freshInput(stages[at], input, written, cleanSample(stages[at]));
     let n = 0;
     let students = 0;
     let moves = 0;
@@ -1799,7 +1822,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         // 받는 쪽 입력에 남아 있던 대화도 지운다. 옮겨온 대화가 그
         // 위에 얹히면 두 번 나온다.
         const cleanTarget = autoFresh
-          ? freshInput(target, targetInput, written)
+          ? freshInput(target, targetInput, written, cleanSample(target))
           : targetInput;
         input =
           applyMapping(stage.mapping, parsed, input, cleanTarget)?.json ??
@@ -2552,7 +2575,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   transcript: [],
                   result: null,
                   images: [],
-                  input: freshInput(stage, t.input, written),
+                  input: freshInput(stage, t.input, written, cleanSample(stage)),
                 })),
               })),
             );
