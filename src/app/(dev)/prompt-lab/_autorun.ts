@@ -177,11 +177,26 @@ export const PROFILE_PRESET: Profile[] = [
  * 쓰는 JSON 을 그대로 주면 학생이 내부 상태를 읽어 버린다 —
  * `verified_answer` 를 보고 정답을 말하면 시험이 안 된다.
  */
-export function studentInput(history: { who: string; text: string }[], latest: string): string {
+export function studentInput(
+  history: { who: string; text: string }[],
+  latest: string,
+  choices: string[] = [],
+): string {
   const lines = history
     .slice(-12)
     .map((turn) => `${turn.who === 'user' ? '나' : '선생님'}: ${turn.text}`);
   lines.push(`선생님: ${latest}`);
+
+  // 보기가 있으면 보여 준다. 화면의 학생은 버튼을 보는데 자동 실행의
+  // 학생만 못 보면, 우리가 시험하려는 것과 다른 상황을 시험하게 된다.
+  if (choices.length > 0) {
+    lines.push('');
+    lines.push('고를 수 있는 보기:');
+    for (const [index, label] of choices.entries()) {
+      lines.push(`${index + 1}. ${label}`);
+    }
+  }
+
   lines.push('나:');
   return lines.join('\n');
 }
