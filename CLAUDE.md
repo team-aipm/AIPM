@@ -93,7 +93,8 @@ src/lib/constants/copy  학생 어휘 ↔ 부모 어휘 매핑
 - `_actions.ts`는 `lib/services`를 호출하는 얇은 래퍼로 유지한다.
   DB 쿼리를 직접 쓰지 않는다.
 - 빈 폴더를 미리 만들지 않는다.
-- `src/app/(admin)/`은 COM-007 확정 전까지 만들지 않는다.
+- `src/app/(admin)/`은 COM-007 §7 과 COM-002 §20-B 를 근거로 만들었다.
+  운영자는 `admin_user` 에 행이 있어야 하며, 추가는 SQL 로만 한다.
 
 ---
 

@@ -18,6 +18,7 @@ import { findTodaySession, countCompleted, today } from '@/lib/services/learning
 import { findDailyReport, saveDailyReport } from '@/lib/services/learning-report';
 import { createProblem, findActiveProblem, finishProblem } from '@/lib/services/problem';
 import { appendMessage, listMessages } from '@/lib/services/message';
+import { pickConcept } from '@/lib/services/concept';
 import { EVENT, record } from '@/lib/analytics/events';
 import { saveEvaluation, saveLogicGaps } from '@/lib/services/evaluation';
 import { Constants, type Database } from '@/types/database';
@@ -199,6 +200,8 @@ function buildModeAInput(args: {
   studentTexts: string[];
   supportLevel: number;
   latest: string | null;
+  /** COM-001 §9 로 고른 개념. 없으면 02 가 학년에 맞춰 알아서 낸다 */
+  concept?: string | null;
 }): string {
   const stage = stageOf('02 MODE A');
   let input: unknown = JSON.parse(stage.sampleInput);
@@ -295,13 +298,20 @@ export async function startProblem(): Promise<ProblemReply> {
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
   const { supabase, student, session } = ctx;
 
+  const problemNumber = session.completed_problem_count + 1;
+  const picked = await pickConcept(supabase, student.student_id, problemNumber);
+  if (picked.concept !== null) {
+    console.log(`[mission] 개념 선정: ${picked.concept} (${picked.reason})`);
+  }
+
   const input = buildModeAInput({
     studentId: student.student_id,
     grade: student.grade,
     persona: student.persona_type,
     sessionId: session.session_id,
-    problemNumber: session.completed_problem_count + 1,
+    problemNumber,
     totalProblems: session.target_problem_count,
+    concept: picked.concept,
     phase: 'PREPARE',
     problem: null,
     studentTexts: [],
@@ -330,8 +340,9 @@ export async function startProblem(): Promise<ProblemReply> {
     studentId: student.student_id,
     problemSource: 'ai',
     problemText,
-    // 개념 선정(COM-001 §9)이 아직 없다. 지어낸 이름을 넣지 않는다.
-    concept: '미지정',
+    // 고른 개념을 그대로 남긴다. 못 골랐으면(첫날) 05 가 이 문제에서
+    // 개념을 정해 주므로, 그때까지는 '미지정' 이다.
+    concept: picked.concept ?? '미지정',
     difficulty: student.current_difficulty,
     learningMode: 'mode_a',
     verifiedAnswer: verified ?? null,
@@ -677,10 +688,27 @@ async function evaluateProblem(
       finalAccuracy: args.correct,
     });
 
+    // 첫날에는 고를 개념이 없어서 '미지정' 으로 문제를 만든다. 05 가
+    // 이름을 붙여 주면 그때 채운다 — 그래야 다음 문제부터 §9 의 비율
+    // (취약 4 · 현재 4 · 복습 2)이 돌기 시작한다.
+    //
+    // 교육과정 taxonomy 가 정해지면(COM-002 §20) 그 목록에서 고르는 것으로
+    // 바꾼다. 지금은 이 학생이 지나온 이름만 쓴다.
+    const named = str(read(result.output, 'next_learning.target_concept'));
+    if (named !== '' && args.problem.concept === '미지정') {
+      const { error: nameError } = await supabase
+        .from('problem')
+        .update({ concept: named })
+        .eq('problem_id', args.problem.problem_id);
+      if (nameError !== null) {
+        console.error(`[mission] 개념 이름 저장 실패: ${nameError.message}`);
+      }
+    }
+
     await saveLogicGaps(supabase, {
       problemId: args.problem.problem_id,
       studentId: args.student.student_id,
-      concept: str(read(result.output, 'next_learning.target_concept')) || args.problem.concept,
+      concept: named || args.problem.concept,
       gaps: [
         gapOf(read(evaluation, 'primary_logic_gap')),
         gapOf(read(evaluation, 'secondary_logic_gap')),
@@ -977,12 +1005,15 @@ export async function confirmSourceProblem(
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
   const { supabase, student, session } = ctx;
 
+  const problemNumber = session.completed_problem_count + 1;
+  const picked = await pickConcept(supabase, student.student_id, problemNumber);
+
   const input = buildModeBInput({
     studentId: student.student_id,
     grade: student.grade,
     persona: student.persona_type,
     sessionId: session.session_id,
-    problemNumber: session.completed_problem_count + 1,
+    problemNumber,
     totalProblems: session.target_problem_count,
     phase: 'PREPARE',
     rawText: recognized,
@@ -1021,7 +1052,9 @@ export async function confirmSourceProblem(
     studentId: student.student_id,
     problemSource: fromPhoto ? 'photo' : 'text',
     problemText,
-    concept: '미지정',
+    // 학생이 가져온 문제라 개념을 우리가 정하지 않는다. 05 가 이름을
+    // 붙여 주면 그때 채운다.
+    concept: picked.concept ?? '미지정',
     difficulty: student.current_difficulty,
     learningMode: 'mode_b',
     verifiedAnswer: verified,
@@ -1170,4 +1203,92 @@ export async function readPhotoProblem(formData: FormData): Promise<SourceStep> 
     message,
     choices: readChoices(result.output),
   };
+}
+
+// ============================================================
+// 04 HINT · 막혔을 때
+// ============================================================
+
+export type HintReply =
+  | { ok: true; message: string; supportLevel: number }
+  | { ok: false; message: string };
+
+/**
+ * 힌트를 준다 (04 HINT).
+ *
+ * **문제를 대신 풀거나 정답을 알려주지 않는다**(04 프롬프트). 다음 한
+ * 걸음만 짚어 준다.
+ *
+ * 힌트를 받으면 `support_level` 이 1 이상이 된다. 그 값은 평가에 그대로
+ * 들어가고(05) 부모 화면의 "도움을 얼마나 받았는지" 가 된다. **학생에게
+ * 감점처럼 보이면 안 된다**(CLAUDE.md UI) — 화면에 점수로 표시하지 않는다.
+ *
+ * 턴은 쓰지 않는다. 힌트는 학생의 발화가 아니라 도움 요청이다 —
+ * 5턴 한도(COM-001 §8)를 힌트로 깎지 않는다.
+ */
+export async function askHint(): Promise<HintReply> {
+  const ctx = await context();
+  if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
+  const { supabase, student, session } = ctx;
+
+  const problem = await findActiveProblem(supabase, session.session_id);
+  if (problem === null) return { ok: false, message: '지금은 풀고 있는 문제가 없어.' };
+
+  const before = await listMessages(supabase, problem.problem_id);
+  const studentTexts = before
+    .filter((m) => m.speaker === 'student')
+    .map((m) => m.message_text);
+  const supportLevel = before.reduce((max, m) => Math.max(max, m.support_level), 0);
+
+  const stage = stageOf('04 HINT');
+  let input: unknown = JSON.parse(stage.sampleInput);
+
+  input = write(input, 'student.student_id', student.student_id);
+  input = write(input, 'student.grade', student.grade);
+  input = write(input, 'student.selected_persona', student.persona_type.toUpperCase());
+  input = write(input, 'payload.learning_mode', problem.learning_mode === 'mode_b' ? 'B' : 'A');
+  input = write(input, 'payload.problem.problem_text', problem.problem_text);
+  input = write(input, 'payload.problem.verified_answer', problem.verified_answer);
+  // MODE B 에서는 AI 가 만든 틀린 풀이도 함께 본다. 그래야 "내 풀이의 어디를
+  // 보라" 는 힌트를 줄 수 있다.
+  input = write(input, 'payload.problem.ai_wrong_solution', problem.ai_wrong_reasoning);
+  input = write(input, 'payload.interaction.current_request_type', 'HINT');
+  input = write(input, 'payload.interaction.latest_response', studentTexts[studentTexts.length - 1] ?? null);
+  input = write(
+    input,
+    'payload.interaction.response_history',
+    studentTexts.map((text) => ({
+      response_role: null,
+      response_type: 'FREE_TEXT',
+      choice_id: null,
+      content: text,
+    })),
+  );
+  input = write(input, 'payload.interaction.support_level', supportLevel);
+  input = write(input, 'payload.interaction.hint_count', 0);
+  input = write(input, 'payload.interaction.hint_history', []);
+
+  const result = await runStage('04 HINT', JSON.stringify(input, null, 2), student.persona_type);
+  if (!result.ok) {
+    console.error(`[mission] 04 실패: ${result.error}`);
+    return { ok: false, message: '잠깐 멈췄어. 다시 눌러줄래?' };
+  }
+
+  const message = str(read(result.output, 'hint.message'));
+  if (message === '') return { ok: false, message: '지금은 줄 힌트가 마땅치 않아.' };
+
+  // 힌트도 대화의 일부다. 안 남기면 다음 턴의 입력에서 사라지고, 05 가
+  // "도움을 받았다" 를 모른다.
+  const next = Math.max(supportLevel, num(read(result.output, 'hint.support_level'), 1), 1);
+  await appendMessage(supabase, {
+    problemId: problem.problem_id,
+    sessionId: session.session_id,
+    studentId: student.student_id,
+    speaker: 'ai',
+    text: message,
+    turnNumber: before.length + 1,
+    supportLevel: next,
+  });
+
+  return { ok: true, message, supportLevel: next };
 }
