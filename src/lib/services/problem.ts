@@ -26,6 +26,10 @@ export async function createProblem(
     learningMode: Enums['learning_mode'];
     verifiedAnswer: unknown;
     answerLock: boolean;
+    /** MODE B 에서 AI 가 만든 의도적 오답. 화면에 나가지 않는다(COM-002 §20-A) */
+    wrongAnswer?: unknown;
+    wrongReasoning?: string | null;
+    misconception?: string | null;
   },
 ): Promise<Problem> {
   const { data, error } = await client
@@ -41,6 +45,9 @@ export async function createProblem(
       // 검증 실패면 NULL 이다(COM-002 §6). 지어내지 않는다.
       verified_answer: (input.verifiedAnswer ?? null) as never,
       answer_lock_status: input.answerLock ? 'locked' : 'recheck',
+      ai_wrong_answer: (input.wrongAnswer ?? null) as never,
+      ai_wrong_reasoning: input.wrongReasoning ?? null,
+      target_misconception: input.misconception ?? null,
     })
     .select('*')
     .single();
