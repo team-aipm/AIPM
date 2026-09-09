@@ -31,6 +31,7 @@ import {
 } from '../_field-rules';
 import {
   applyMapping,
+  mergeOutput,
   BLANK_MAP_ROW,
   hasMapping,
   MAP_SOURCES,
@@ -320,6 +321,7 @@ function toSaved(stage: Stage): SavedStage {
     checkRule: stage.checkRule,
     historyKey: stage.historyKey,
     replyKey: stage.replyKey,
+    recordKey: stage.recordKey,
     studentTurn: stage.studentTurn,
     studentField: stage.studentField,
     aiTurn: stage.aiTurn,
@@ -424,6 +426,7 @@ function upgradeStage(
   // 빈 단계의 기본값 그대로면 사람이 정한 적이 없다는 뜻이다.
   const untouched = [
     'historyKey',
+    'recordKey',
     'studentTurn',
     'studentField',
     'aiTurn',
@@ -909,6 +912,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         checkRule: stage.checkRule,
         historyKey: stage.historyKey,
         replyKey: stage.replyKey,
+        recordKey: stage.recordKey,
         useCommonPrompt: stage.useCommonPrompt,
         forceJsonMimeType: stage.forceJsonMimeType,
         provider: settings.provider,
@@ -1324,6 +1328,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
     const shapeAtSend = chatShape;
     const replyKey = active.replyKey;
+    const recordKey = active.recordKey;
 
     setDraft('');
     patchThread(index, threadIndex, { input: withUser });
@@ -1339,13 +1344,19 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       const pick = pickReply(result.raw, outputMode, replyKey);
       setReplyNote(pick.show ? null : pick.reason);
 
+      // 화면에는 문제를 매 턴 다시 보여 주고, 기록에는 말풍선만 남긴다.
+      // 기록용 경로가 아무것도 못 찾으면 보여 준 것을 그대로 남긴다.
+      const narrow =
+        recordKey.trim() === '' ? null : pickReply(result.raw, outputMode, recordKey);
+      const recorded = narrow !== null && narrow.show ? narrow : pick;
+
       // 말풍선을 만들지 않아도 stage_status 같은 상태 이월은 그대로 한다.
       const withAi = appendAiTurn(
         withUser,
         shapeAtSend,
         replyKey,
         parsed,
-        pick.show ? pick.text : null,
+        recorded.show ? recorded.text : null,
       );
       if (withAi !== null) patchThread(index, threadIndex, { input: withAi });
     });
@@ -1388,12 +1399,20 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     } else {
       // 출력만이 아니라 이 단계의 입력도 넘긴다. 대화 기록이 거기 있다.
       const mapped = bridge(active.checkRule, output, thread.input, targetInput);
-      nextInput = mapped ?? raw;
-      notes.push(
-        mapped !== null
-          ? '검증 규칙에 맞춰 옮겼습니다.'
-          : '옮길 규칙이 없어 결과 원문을 그대로 넣었습니다.',
-      );
+      if (mapped !== null) {
+        nextInput = mapped;
+        notes.push('검증 규칙에 맞춰 옮겼습니다.');
+      } else {
+        // 통째로 갈아치우지 않는다. 받는 쪽 입력에 있던 student_id ·
+        // grade · turn_limit 같은 값이 사라지면 프롬프트가 못 읽는다.
+        const merged = mergeOutput(targetInput, output);
+        nextInput = merged ?? raw;
+        notes.push(
+          merged !== null
+            ? '옮길 규칙이 없어 결과를 입력에 얹었습니다. 없던 칸은 그대로 둡니다.'
+            : '옮길 규칙이 없고 입력이 JSON이 아니라 결과 원문을 그대로 넣었습니다.',
+        );
+      }
     }
 
     // 규칙이 대화를 다루지 않을 때만 체크박스가 일한다.
@@ -2663,6 +2682,24 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-700 dark:disabled:bg-neutral-800"
                     />
                   </label>
+                  <label className="flex items-center gap-2">
+                    <span
+                      className={`shrink-0 ${
+                        replyKeyOff ? 'text-neutral-400' : 'text-neutral-500'
+                      }`}
+                    >
+                      기록 필드
+                    </span>
+                    <input
+                      value={active.recordKey}
+                      onChange={(event) =>
+                        patch(activeIndex, { recordKey: event.target.value })
+                      }
+                      disabled={replyKeyOff}
+                      placeholder={replyKeyOff ? '해당 없음' : '비우면 응답 필드와 같음'}
+                      className="w-32 rounded border border-neutral-300 bg-transparent px-2 py-1 disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-700 dark:disabled:bg-neutral-800"
+                    />
+                  </label>
                   {replyKeyOff && (
                     <span className="text-[11px] text-neutral-500">
                       출력이 텍스트라 원문을 그대로 보여줍니다
@@ -2707,6 +2744,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       : active.replyKey.trim() === ''
                         ? ' 지금은 비어 있어 아무것도 표시하지 않습니다. 데이터만 만드는 단계에 맞습니다.'
                         : ' 보여줄 문장이 없는 단계(평가·기억 저장 등)는 비워 두세요.'}
+                  </p>
+                  <p>
+                    <b>기록 필드</b>는 그중 <b>대화 기록에 남길</b> 부분입니다.
+                    화면에는 문제를 매 턴 다시 보여 줘야 하지만, 기록에까지 매 턴
+                    넣으면 같은 문단이 열 번 쌓입니다. 모델은 문제를{' '}
+                    <code>problem_state</code> 에서 읽으므로 기록에는 말풍선만
+                    남기면 됩니다. 비우면 응답 필드와 같습니다.
                   </p>
                 </div>
               </div>
