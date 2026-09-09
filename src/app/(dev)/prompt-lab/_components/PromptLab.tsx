@@ -72,6 +72,7 @@ import {
 import {
   cleanStudentReply,
   DEFAULT_LIMITS,
+  callCap,
   isTransient,
   waitFor,
   FINISH,
@@ -767,11 +768,6 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     const need = autoLimits.laps * perLap;
     if (autoLimits.students < need) {
       return `최대 바퀴 ${autoLimits.laps}을 돌려면 발화가 ${need} 쯤 필요합니다. 지금 ${autoLimits.students}이면 ${Math.floor(autoLimits.students / perLap)}바퀴에서 멈춥니다.`;
-    }
-    // 호출은 걸음마다 단계와 학생을 한 번씩 부른다. 재시도까지 여유를 둔다.
-    const calls = need * 2 + autoLimits.laps * 2;
-    if (autoLimits.calls < calls) {
-      return `최대 바퀴 ${autoLimits.laps}을 돌려면 호출이 ${calls} 쯤 필요합니다. 지금 ${autoLimits.calls}이면 중간에 멈춥니다.`;
     }
     if (autoLimits.moves < autoLimits.laps * 3) {
       return `한 바퀴에 단계를 3번 옮깁니다. 최대 바퀴 ${autoLimits.laps}이면 이동이 ${autoLimits.laps * 3} 쯤 필요합니다.`;
@@ -1758,7 +1754,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         reason = 'stopped';
         break;
       }
-      if (calls >= autoLimits.calls) {
+      if (calls >= callCap(autoLimits)) {
         reason = 'call-limit';
         break;
       }
@@ -2007,7 +2003,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       for (let round = 0; round < rounds; round += 1) {
         if (stopFlag.current) break;
         n += 1;
-        setAutoAt(`${n} / ${list.length * rounds} · ${profile.name} ${round + 1}회차`);
+        setAutoAt(`${n} / ${list.length * rounds} · ${profile.name} ${round + 1}번째`);
 
         const done = await runOnce(profile.prompt, false);
         const checked = auditRun(done.steps, shapes);
@@ -2934,7 +2930,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                 [
                   ['최대 발화', '상대가 말할 수 있는 횟수', '여기서 멈추면 종료 분기가 없다는 뜻'],
                   ['최대 이동', '단계를 옮길 수 있는 횟수', '여기서 멈추면 분기가 돌고 있다는 뜻'],
-                  ['최대 호출', '모델을 부를 수 있는 횟수 · 단계 + 상대 + 재시도', '요금 안전장치'],
+                  ['최대 호출', '위의 셋에서 계산합니다 · 마지막 안전장치', '화면에서 안 받습니다'],
                   ['최대 재시도', '오류로 다시 부를 횟수', '3 · 8 · 20 · 45초 쉬고 다시'],
                   ['최대 바퀴', '시작 단계로 돌아올 횟수', '여기서 멈추는 것이 정상 종료'],
                 ] as const
@@ -3001,11 +2997,6 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     'moves',
                     '최대 이동',
                     '단계를 옮길 수 있는 횟수. 여기서 멈추면 분기가 돌고 있다는 뜻입니다',
-                  ],
-                  [
-                    'calls',
-                    '최대 호출',
-                    '모델을 부를 수 있는 횟수. 단계와 상대와 재시도를 합쳐 셉니다 · 요금 안전장치',
                   ],
                   [
                     'retries',
@@ -3216,7 +3207,6 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     setAutoLimits((prev) => ({
                       ...prev,
                       students: Math.max(prev.students, prev.laps * perLap),
-                      calls: Math.max(prev.calls, prev.laps * perLap * 2 + prev.laps * 2),
                       moves: Math.max(prev.moves, prev.laps * 3),
                     }))
                   }
@@ -3306,7 +3296,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
                 <details className="text-[11px]">
                   <summary className="cursor-pointer text-neutral-500">
-                    회차별로 보기
+                    한 번씩 나눠 보기
                   </summary>
                   <div className="flex flex-col gap-0.5 pt-1">
                     {trials.map((trial) => (
@@ -3397,7 +3387,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       [
                         ['발화', autoUsed.students, autoLimits.students],
                         ['이동', autoUsed.moves, autoLimits.moves],
-                        ['호출', autoUsed.calls, autoLimits.calls],
+                        ['호출', autoUsed.calls, callCap(autoLimits)],
                         ['바퀴', autoUsed.laps, autoLimits.laps],
                       ] as const
                     ).map(([label, used, limit], index) => (

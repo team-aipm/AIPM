@@ -58,12 +58,10 @@ export const STOP_TEXT: Record<StopReason, string> = {
 };
 
 export type AutoLimits = {
-  /** 학생이 말할 수 있는 총 횟수 */
+  /** 상대가 말할 수 있는 총 횟수 */
   students: number;
   /** 단계를 옮길 수 있는 총 횟수 */
   moves: number;
-  /** 모델 호출 총 횟수. 단계와 학생을 합쳐서 센다 */
-  calls: number;
   /** 일시적 오류일 때 다시 부를 횟수 */
   retries: number;
   /**
@@ -88,10 +86,28 @@ export type AutoLimits = {
 export const DEFAULT_LIMITS: AutoLimits = {
   students: 20,
   moves: 12,
-  calls: 90,
   retries: 3,
   laps: 3,
 };
+
+/**
+ * 호출 상한. **화면에서 받지 않고 계산한다.**
+ *
+ * "최대 발화는 최대 호출에서 단계 호출만 뺀 숫자 아니냐" 는 물음.
+ * 맞다 — 겹친다. 그리고 나머지 셋이 이미 루프를 막고 있으므로 호출은
+ * **마지막 그물**일 뿐이다. 숫자를 하나 더 받을 이유가 없다.
+ *
+ * ```text
+ * 걸음    발화 + 이동 + 바퀴 + 1        단계를 부르는 횟수의 상한
+ * 호출    (걸음 + 발화) × (1 + 재시도)
+ * ```
+ *
+ * 넉넉하게 잡는다. 여기 걸린다면 다른 셋이 먼저 걸렸어야 한다.
+ */
+export function callCap(limits: AutoLimits): number {
+  const steps = limits.students + limits.moves + limits.laps + 1;
+  return (steps + limits.students) * (1 + limits.retries);
+}
 
 /** 실행 기록 한 줄 */
 export type AutoStep = {
