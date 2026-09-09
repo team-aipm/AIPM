@@ -68,6 +68,18 @@ export const AUDIT_RULES: AuditRule[] = [
     level: 'warn',
     source: 'MODE A §4 · §7',
   },
+  {
+    id: 'answer-choice',
+    label: '보기에 정답이 들어 있습니다',
+    level: 'fail',
+    source: 'FOUR CHOICES · MODE A §4',
+  },
+  {
+    id: 'numeric-choices',
+    label: '보기가 값 후보입니다',
+    level: 'warn',
+    source: 'FOUR CHOICES',
+  },
 ];
 
 export type Finding = {
@@ -182,7 +194,7 @@ export function auditRun(steps: AuditStep[], shapes: AuditShape[]): AuditResult 
     const answer = read(output, 'problem_state.verified_answer');
     const locked = read(output, 'problem_state.answer_lock');
     const status = read(output, 'completion.status');
-    const choicesKey = shape?.choicesKey.trim() ?? '';
+    const choicesKey = shape?.choicesKey?.trim() ?? '';
     const choices = choicesKey === '' ? undefined : read(output, choicesKey);
     const going = typeof status === 'string' && status === CONTINUING;
 
@@ -194,6 +206,23 @@ export function auditRun(steps: AuditStep[], shapes: AuditShape[]): AuditResult 
       // 문제를 낼 때는 보기가 있어야 한다.
       if (Array.isArray(choices) && choices.length === 0) {
         add('no-choices', step, '문제를 내면서 ui.choices 가 비었습니다');
+      }
+    }
+
+    // ── 보기가 답을 알려주는가 ───────────────────────────────────
+    const labels = choiceLabels(choices);
+    if (labels.length > 0) {
+      // 정답이 보기에 있으면 고르기만 하면 된다.
+      const leaks = labels.filter((label) => answerInText(answer, label));
+      if (leaks.length > 0) {
+        add('answer-choice', step, leaks.join(' · '));
+      }
+
+      // 값 후보를 늘어놓은 것. 정답이 아니어도 "찍기" 가 된다 —
+      // 중간 계산의 답을 보기로 주는 경우가 여기 걸린다.
+      const numeric = labels.filter((label) => /^[^0-9]*-?[0-9]+([.,][0-9]+)?[^0-9]*$/.test(label));
+      if (numeric.length >= 2) {
+        add('numeric-choices', step, numeric.join(' · '));
       }
     }
 
@@ -241,6 +270,32 @@ function answerInText(answer: unknown, text: string): boolean {
   const numeric = /^-?[0-9]+(\.[0-9]+)?$/.test(value);
   const edge = numeric ? '[^0-9]' : '[^0-9A-Za-z가-힣]';
   return new RegExp(`(^|${edge})${escaped}(${edge}|$)`).test(text);
+}
+
+/**
+ * 보기의 글자만 뽑는다.
+ *
+ * `_chat.ts` 의 `readChoices` 와 같은 일이지만 여기서는 이미 파싱된
+ * 값을 받는다. 두 벌을 두는 대신 모양을 넓게 받는 규칙만 맞춘다.
+ */
+function choiceLabels(choices: unknown): string[] {
+  if (!Array.isArray(choices)) return [];
+  const out: string[] = [];
+  for (const item of choices) {
+    if (typeof item === 'string') {
+      if (item.trim() !== '') out.push(item);
+      continue;
+    }
+    if (!isRecord(item)) continue;
+    for (const key of ['label', 'text', 'value'] as const) {
+      const value = item[key];
+      if (typeof value === 'string' && value.trim() !== '') {
+        out.push(value);
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 function read(root: unknown, path: string): unknown {
