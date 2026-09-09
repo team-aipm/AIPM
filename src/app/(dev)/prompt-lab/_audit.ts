@@ -265,3 +265,78 @@ function parse(text: string): unknown {
 function cut(text: string, limit = 40): string {
   return text.length <= limit ? text : `${text.slice(0, limit)}…`;
 }
+
+/**
+ * 여러 번 돌린 결과를 모은다.
+ *
+ * **한 번 돌린 걸로는 판정이 안 된다.** 모델은 매번 다르게 답한다.
+ * 한 번 통과했다고 괜찮은 게 아니고, 한 번 실패했다고 망가진 것도
+ * 아니다. 프롬프트를 고쳤을 때 나아졌는지 말하려면 통과율이 있어야
+ * 한다.
+ */
+export type Trial = {
+  n: number;
+  /** 어느 학생으로 돌렸나 */
+  profile: string;
+  reason: string;
+  steps: number;
+  students: number;
+  findings: Finding[];
+};
+
+export type RuleTally = {
+  rule: AuditRule;
+  /** 이 규칙이 걸린 회차 수 */
+  trials: number;
+  /** 총 몇 건 */
+  total: number;
+};
+
+export type Tally = {
+  runs: number;
+  /** 위반이 하나도 없던 회차 수 */
+  clean: number;
+  avgSteps: number;
+  avgStudents: number;
+  /** 규칙 전부. 안 걸린 것도 0 으로 넣는다 — 무엇이 통과했는지 보여야 한다 */
+  rules: RuleTally[];
+  /** 어떻게 끝났나 */
+  reasons: { reason: string; count: number }[];
+};
+
+export function tally(trials: Trial[]): Tally {
+  const runs = trials.length;
+  const rules = AUDIT_RULES.map((rule) => {
+    const hit = trials.filter((trial) =>
+      trial.findings.some((found) => found.rule === rule.id),
+    );
+    const total = trials.reduce(
+      (sum, trial) => sum + trial.findings.filter((f) => f.rule === rule.id).length,
+      0,
+    );
+    return { rule, trials: hit.length, total };
+  });
+
+  const counts = new Map<string, number>();
+  for (const trial of trials) {
+    counts.set(trial.reason, (counts.get(trial.reason) ?? 0) + 1);
+  }
+
+  return {
+    runs,
+    clean: trials.filter((trial) => trial.findings.length === 0).length,
+    avgSteps: mean(trials.map((trial) => trial.steps)),
+    avgStudents: mean(trials.map((trial) => trial.students)),
+    // 자주 걸린 것부터. 통과한 규칙은 아래로 모인다.
+    rules: rules.sort((a, b) => b.trials - a.trials || b.total - a.total),
+    reasons: [...counts.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count),
+  };
+}
+
+function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sum = values.reduce((a, b) => a + b, 0);
+  return Math.round((sum / values.length) * 10) / 10;
+}

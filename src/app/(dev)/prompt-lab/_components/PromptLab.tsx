@@ -47,17 +47,24 @@ import {
   type RouteRow,
   type Routing,
 } from '../_routing';
-import { auditRun, AUDIT_RULES, type Finding } from '../_audit';
+import {
+  auditRun,
+  AUDIT_RULES,
+  tally,
+  type Finding,
+  type Trial,
+} from '../_audit';
 import {
   cleanStudentReply,
   DEFAULT_LIMITS,
-  DEFAULT_STUDENT_PROMPT,
   FINISH,
+  PROFILE_PRESET,
   STAY,
   STOP_TEXT,
   studentInput,
   type AutoLimits,
   type AutoStep,
+  type Profile,
   type StopReason,
 } from '../_autorun';
 import { parsePath, setPath } from '../_paths';
@@ -564,7 +571,14 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * 중지는 ref 로 본다. 루프가 도는 동안 state 는 옛 값이 잡혀 있어
    * 버튼을 눌러도 루프가 못 본다.
    */
-  const [autoPrompt, setAutoPrompt] = useState(DEFAULT_STUDENT_PROMPT);
+  const [profiles, setProfiles] = useState<Profile[]>(PROFILE_PRESET);
+  const [activeProfile, setActiveProfile] = useState(0);
+  /** 반복 실행 회차. 프로필마다 이만큼씩 돈다 */
+  const [autoRepeat, setAutoRepeat] = useState(3);
+  const [autoAll, setAutoAll] = useState(true);
+  const [trials, setTrials] = useState<Trial[]>([]);
+  /** 몇 번째를 돌고 있나. 반복 중에만 채운다 */
+  const [autoAt, setAutoAt] = useState<string | null>(null);
   const [autoLimits, setAutoLimits] = useState<AutoLimits>(DEFAULT_LIMITS);
   const [autoStart, setAutoStart] = useState(0);
   const [autoLog, setAutoLog] = useState<AutoStep[]>([]);
@@ -589,6 +603,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
             limitKey: stage.limitKey,
           })),
         );
+
+  /** 반복 실행 통과율. 회차가 없으면 안 보여 준다 */
+  const rate = trials.length === 0 ? null : tally(trials);
 
   /** 규칙별로 묶는다. 같은 위반이 열 번 나오면 한 줄로 접어야 읽힌다 */
   const byRule: { rule: (typeof AUDIT_RULES)[number]; hits: Finding[] }[] =
@@ -693,14 +710,23 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           stages?: SavedStage[];
           prices?: Record<string, Price>;
           krwRate?: string;
+          /** 예전 저장본. 학생이 하나였다 */
           autoPrompt?: string;
+          profiles?: Profile[];
           autoLimits?: Partial<AutoLimits>;
         };
         if (parsed.prices && typeof parsed.prices === 'object') {
           setPrices(parsed.prices);
         }
         if (typeof parsed.krwRate === 'string') setKrwRate(parsed.krwRate);
-        if (typeof parsed.autoPrompt === 'string') setAutoPrompt(parsed.autoPrompt);
+        if (Array.isArray(parsed.profiles) && parsed.profiles.length > 0) {
+          setProfiles(parsed.profiles);
+        } else if (typeof parsed.autoPrompt === 'string') {
+          // 예전 저장본은 학생이 하나였다. 첫 프로필로 옮긴다.
+          setProfiles((prev) =>
+            prev.map((item, i) => (i === 0 ? { ...item, prompt: parsed.autoPrompt! } : item)),
+          );
+        }
         if (parsed.autoLimits && typeof parsed.autoLimits === 'object') {
           setAutoLimits({ ...DEFAULT_LIMITS, ...parsed.autoLimits });
         }
@@ -806,7 +832,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           stages: stages.map(toSaved),
           prices,
           krwRate,
-          autoPrompt,
+          profiles,
           autoLimits,
         }),
       );
@@ -826,7 +852,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     stages,
     prices,
     krwRate,
-    autoPrompt,
+    profiles,
     autoLimits,
   ]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -1293,12 +1319,12 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   }
 
   /** 학생 역할 모델. 공통 설정을 쓰고 평문으로 주고받는다 */
-  async function callStudent(text: string): Promise<RunResult> {
+  async function callStudent(prompt: string, text: string): Promise<RunResult> {
     const model = common.model.trim() || DEFAULT_MODEL[common.provider];
     const result = await runStage({
       provider: common.provider,
       model,
-      system: autoPrompt,
+      system: prompt,
       input: text,
       inputMode: 'text',
       outputMode: 'text',
@@ -1333,14 +1359,18 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * 입력 JSON 은 루프가 손에 들고 다닌다. 화면 상태로 오가면 렌더를
    * 기다려야 해서 옛 값을 읽는다. 화면에는 매 걸음 결과만 적어 준다.
    */
-  async function runAuto() {
-    if (autoRunning || stages.length === 0) return;
-    stopFlag.current = false;
-    setAutoRunning(true);
-    setAutoStop(null);
-    setAutoLog([]);
-    setPanel('auto');
-
+  /**
+   * 한 회차. **화면을 갱신할지는 부르는 쪽이 정한다.**
+   *
+   * 한 번만 돌릴 때는 걸음마다 로그와 입력을 화면에 적어 준다.
+   * 반복할 때는 안 적는다 — 아홉 번 돌면서 매번 입력을 덮으면 화면이
+   * 요동치고, 다음 회차가 앞 회차의 끝 상태에서 시작하게 된다.
+   */
+  async function runOnce(
+    prompt: string,
+    live: boolean,
+  ): Promise<{ steps: AutoStep[]; reason: StopReason }> {
+    const log: AutoStep[] = [];
     const names = stages.map((stage) => stage.name);
     let at = Math.min(Math.max(0, autoStart), stages.length - 1);
     let input = stages[at].threads[stages[at].activeThread]?.input ?? '';
@@ -1352,7 +1382,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
     const add = (step: Omit<AutoStep, 'n'>) => {
       n += 1;
-      setAutoLog((prev) => [...prev, { ...step, n }]);
+      log.push({ ...step, n });
+      if (live) setAutoLog([...log]);
     };
 
     // 한 바퀴가 끝날 때까지 순서대로 부른다. 병렬로 돌 수 없는 일이다.
@@ -1423,7 +1454,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       );
       if (withAi !== null) input = withAi;
       // 화면에도 남긴다. 끝나고 단계를 열면 마지막 상태가 보인다.
-      patchThread(at, stage.activeThread, { input, result });
+      if (live) patchThread(at, stage.activeThread, { input, result });
 
       // ── 어디로 갈지 ──────────────────────────────────────────────
       const matched = matchRoute(stage.routing, parsed);
@@ -1459,8 +1490,10 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
         add({ stage: next, kind: 'move', text: `${names[at]} → ${to}`, note: matched?.note });
         at = next;
-        patchThread(at, target.activeThread, { input });
-        setActiveIndex(at);
+        if (live) {
+          patchThread(at, target.activeThread, { input });
+          setActiveIndex(at);
+        }
         continue;
       }
 
@@ -1477,7 +1510,10 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
       students += 1;
       calls += 1;
-      const said = await callStudent(studentInput(readTurns(input, stage.historyKey), pick.text));
+      const said = await callStudent(
+        prompt,
+        studentInput(readTurns(input, stage.historyKey), pick.text),
+      );
       if (!said.ok) {
         add({ stage: at, kind: 'error', text: said.error ?? '학생 모델 호출 실패' });
         reason = 'error';
@@ -1493,10 +1529,82 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         break;
       }
       input = withUser;
-      patchThread(at, stage.activeThread, { input });
+      if (live) patchThread(at, stage.activeThread, { input });
     }
 
-    setAutoStop(reason);
+    return { steps: log, reason };
+  }
+
+  /** 한 번 돌린다. 걸음이 화면에 그대로 쌓인다 */
+  async function runAuto() {
+    if (autoRunning || stages.length === 0) return;
+    stopFlag.current = false;
+    setAutoRunning(true);
+    setAutoStop(null);
+    setAutoLog([]);
+    setTrials([]);
+    setAutoAt(null);
+    setPanel('auto');
+
+    const done = await runOnce(profiles[activeProfile]?.prompt ?? '', true);
+    setAutoStop(done.reason);
+    setAutoRunning(false);
+  }
+
+  /**
+   * 여러 번 돌려 통과율을 낸다.
+   *
+   * 한 번 통과했다고 괜찮은 게 아니고, 한 번 실패했다고 망가진 것도
+   * 아니다. 프롬프트를 고쳤을 때 나아졌는지 말하려면 이게 있어야 한다.
+   *
+   * 회차 사이에 화면 상태를 안 건드리므로 매번 같은 자리에서 시작한다.
+   */
+  async function repeatAuto() {
+    if (autoRunning || stages.length === 0) return;
+    const list = autoAll ? profiles : [profiles[activeProfile]];
+    const rounds = Math.max(1, autoRepeat);
+
+    stopFlag.current = false;
+    setAutoRunning(true);
+    setAutoStop(null);
+    setAutoLog([]);
+    setTrials([]);
+    setPanel('auto');
+
+    const shapes = stages.map((stage) => ({
+      name: stage.name,
+      turnCountKey: stage.turnCountKey,
+      limitKey: stage.limitKey,
+    }));
+
+    const got: Trial[] = [];
+    let n = 0;
+    for (const profile of list) {
+      for (let round = 0; round < rounds; round += 1) {
+        if (stopFlag.current) break;
+        n += 1;
+        setAutoAt(`${n} / ${list.length * rounds} · ${profile.name} ${round + 1}회차`);
+
+        const done = await runOnce(profile.prompt, false);
+        const checked = auditRun(done.steps, shapes);
+        got.push({
+          n,
+          profile: profile.name,
+          reason: done.reason,
+          steps: checked.steps,
+          students: checked.students,
+          findings: checked.findings,
+        });
+        setTrials([...got]);
+        // 마지막 회차의 걸음은 화면에 남긴다. 통과율만 보면 무슨 말이
+        // 오갔는지 알 수 없다.
+        setAutoLog(done.steps);
+      }
+      if (stopFlag.current) break;
+    }
+
+    setAutoAt(null);
+    setAutoStop(stopFlag.current ? 'stopped' : 'finished');
     setAutoRunning(false);
   }
 
@@ -2389,30 +2497,204 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   중지
                 </button>
               ) : (
-                <button
-                  onClick={runAuto}
-                  className="rounded bg-neutral-900 px-4 py-2 text-white dark:bg-white dark:text-neutral-900"
-                >
-                  실행
-                </button>
+                <>
+                  <button
+                    onClick={runAuto}
+                    className="rounded bg-neutral-900 px-4 py-2 text-white dark:bg-white dark:text-neutral-900"
+                  >
+                    한 번
+                  </button>
+                  <button
+                    onClick={repeatAuto}
+                    className="rounded border border-neutral-400 px-4 py-2 dark:border-neutral-600"
+                    title={`${(autoAll ? profiles.length : 1) * Math.max(1, autoRepeat)}회 돌립니다`}
+                  >
+                    반복 {(autoAll ? profiles.length : 1) * Math.max(1, autoRepeat)}회
+                  </button>
+                  <label className="flex items-center gap-2">
+                    <span className="shrink-0 text-neutral-500">회차</span>
+                    <input
+                      value={String(autoRepeat)}
+                      onChange={(event) =>
+                        setAutoRepeat(Math.max(1, Number(event.target.value) || 1))
+                      }
+                      inputMode="numeric"
+                      className="w-14 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                  </label>
+                  <Toggle checked={autoAll} onChange={setAutoAll} label="학생 전부" />
+                </>
               )}
             </div>
 
-            <label className="flex flex-col gap-1">
-              <span className="text-neutral-500">
-                학생 역할 프롬프트{' '}
-                <span className="text-[11px]">
-                  · 공통 설정의 모델을 씁니다 · 평문으로 주고받습니다
+            <div className="flex flex-col gap-1">
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-neutral-500">학생</span>
+                {profiles.map((profile, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setActiveProfile(index)}
+                    className={`rounded border px-2 py-1 ${
+                      activeProfile === index
+                        ? 'border-neutral-400 font-bold dark:border-neutral-500'
+                        : 'border-neutral-200 text-neutral-500 dark:border-neutral-800'
+                    }`}
+                  >
+                    {profile.name || '(이름 없음)'}
+                  </button>
+                ))}
+                <button
+                  onClick={() =>
+                    setProfiles((prev) => [
+                      ...prev,
+                      { name: `학생 ${prev.length + 1}`, prompt: prev[0]?.prompt ?? '' },
+                    ])
+                  }
+                  disabled={autoRunning}
+                  className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
+                >
+                  +
+                </button>
+                {profiles.length > 1 && (
+                  <button
+                    onClick={() => {
+                      setProfiles((prev) => prev.filter((_, i) => i !== activeProfile));
+                      setActiveProfile(0);
+                    }}
+                    disabled={autoRunning}
+                    className="px-2 text-neutral-400 hover:text-red-600"
+                    title="이 학생 삭제"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              <label className="flex items-center gap-2">
+                <span className="shrink-0 text-neutral-500">이름</span>
+                <input
+                  value={profiles[activeProfile]?.name ?? ''}
+                  onChange={(event) =>
+                    setProfiles((prev) =>
+                      prev.map((item, i) =>
+                        i === activeProfile ? { ...item, name: event.target.value } : item,
+                      ),
+                    )
+                  }
+                  disabled={autoRunning}
+                  className="w-40 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                />
+                <span className="text-[11px] text-neutral-500">
+                  공통 설정의 모델을 씁니다 · 평문으로 주고받습니다
                 </span>
-              </span>
+              </label>
+
               <textarea
-                value={autoPrompt}
-                onChange={(event) => setAutoPrompt(event.target.value)}
+                value={profiles[activeProfile]?.prompt ?? ''}
+                onChange={(event) =>
+                  setProfiles((prev) =>
+                    prev.map((item, i) =>
+                      i === activeProfile ? { ...item, prompt: event.target.value } : item,
+                    ),
+                  )
+                }
                 disabled={autoRunning}
                 spellCheck={false}
                 className="h-40 w-full resize-y rounded border border-neutral-300 bg-transparent p-2 outline-none dark:border-neutral-700"
               />
-            </label>
+            </div>
+
+            {autoAt !== null && (
+              <p className="text-neutral-500">돌아가는 중… {autoAt}</p>
+            )}
+
+            {rate !== null && (
+              <div className="flex flex-col gap-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                <p>
+                  <b>{rate.runs}회</b> · 위반 없이 끝난 회차{' '}
+                  <b
+                    className={
+                      rate.clean === rate.runs
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }
+                  >
+                    {rate.clean} / {rate.runs}
+                  </b>{' '}
+                  · 걸음 평균 {rate.avgSteps} · 학생 발화 평균 {rate.avgStudents}
+                </p>
+
+                {rate.rules.map(({ rule, trials: hit, total }) => (
+                  <div key={rule.id} className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="w-16 shrink-0 tabular-nums">
+                      <b
+                        className={
+                          hit === 0
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : rule.level === 'fail'
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-amber-700 dark:text-amber-500'
+                        }
+                      >
+                        {hit} / {rate.runs}
+                      </b>
+                    </span>
+                    <span className={hit === 0 ? 'text-neutral-400' : ''}>
+                      {hit === 0 ? '○' : rule.level === 'fail' ? '✕' : '△'} {rule.label}
+                    </span>
+                    <span className="text-[11px] text-neutral-500">
+                      {rule.source}
+                      {total > 0 && ` · 총 ${total}건`}
+                    </span>
+                  </div>
+                ))}
+
+                <p className="text-[11px] text-neutral-500">
+                  멈춘 이유 ·{' '}
+                  {rate.reasons
+                    .map((row) => `${STOP_TEXT[row.reason as StopReason]} ${row.count}`)
+                    .join(' / ')}
+                </p>
+
+                <details className="text-[11px]">
+                  <summary className="cursor-pointer text-neutral-500">
+                    회차별로 보기
+                  </summary>
+                  <div className="flex flex-col gap-0.5 pt-1">
+                    {trials.map((trial) => (
+                      <div key={trial.n} className="flex gap-2">
+                        <span className="w-6 shrink-0 text-right text-neutral-400">
+                          {trial.n}
+                        </span>
+                        <span className="w-28 shrink-0 text-neutral-500">
+                          {trial.profile}
+                        </span>
+                        <span
+                          className={
+                            trial.findings.length === 0
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : 'text-red-600 dark:text-red-400'
+                          }
+                        >
+                          {trial.findings.length === 0
+                            ? '통과'
+                            : `${trial.findings.length}건`}
+                        </span>
+                        <span className="text-neutral-500">
+                          걸음 {trial.steps} · 학생 {trial.students} ·{' '}
+                          {STOP_TEXT[trial.reason as StopReason]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+
+                <p className="text-[11px] text-neutral-500">
+                  아래 걸음 기록은 <b>마지막 회차</b>의 것입니다. 통과율만 보면
+                  무슨 말이 오갔는지 알 수 없습니다.
+                </p>
+              </div>
+            )}
 
             {(autoLog.length > 0 || autoStop !== null) && (
               <div className="flex flex-col gap-1 border-t border-neutral-200 pt-2 dark:border-neutral-800">
