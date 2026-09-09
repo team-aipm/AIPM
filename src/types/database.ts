@@ -59,6 +59,93 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_user: {
+        Row: {
+          admin_id: string
+          admin_name: string
+          admin_role: Database["public"]["Enums"]["admin_role"]
+          created_at: string
+          email: string
+          is_active: boolean
+          last_seen_at: string | null
+        }
+        Insert: {
+          admin_id: string
+          admin_name: string
+          admin_role?: Database["public"]["Enums"]["admin_role"]
+          created_at?: string
+          email: string
+          is_active?: boolean
+          last_seen_at?: string | null
+        }
+        Update: {
+          admin_id?: string
+          admin_name?: string
+          admin_role?: Database["public"]["Enums"]["admin_role"]
+          created_at?: string
+          email?: string
+          is_active?: boolean
+          last_seen_at?: string | null
+        }
+        Relationships: []
+      }
+      audit_log: {
+        Row: {
+          action: string
+          admin_id: string
+          audit_id: string
+          created_at: string
+          reason: string | null
+          target_id: string
+          target_type: string
+        }
+        Insert: {
+          action: string
+          admin_id: string
+          audit_id?: string
+          created_at?: string
+          reason?: string | null
+          target_id: string
+          target_type: string
+        }
+        Update: {
+          action?: string
+          admin_id?: string
+          audit_id?: string
+          created_at?: string
+          reason?: string | null
+          target_id?: string
+          target_type?: string
+        }
+        Relationships: []
+      }
+      consent_log: {
+        Row: {
+          account_id: string
+          agreed: boolean
+          agreed_at: string
+          consent_id: string
+          consent_type: string
+          document_version: string
+        }
+        Insert: {
+          account_id: string
+          agreed: boolean
+          agreed_at?: string
+          consent_id?: string
+          consent_type: string
+          document_version: string
+        }
+        Update: {
+          account_id?: string
+          agreed?: boolean
+          agreed_at?: string
+          consent_id?: string
+          consent_type?: string
+          document_version?: string
+        }
+        Relationships: []
+      }
       evaluation: {
         Row: {
           evaluated_at: string
@@ -674,6 +761,7 @@ export type Database = {
       owns_student: { Args: { p_student_id: string }; Returns: boolean }
     }
     Enums: {
+      admin_role: "full" | "cs" | "readonly"
       answer_lock_status: "locked" | "recheck" | "invalid_problem"
       drilldown_stage:
         | "judgment"
@@ -843,6 +931,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      admin_role: ["full", "cs", "readonly"],
       answer_lock_status: ["locked", "recheck", "invalid_problem"],
       drilldown_stage: [
         "judgment",
