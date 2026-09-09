@@ -64,7 +64,7 @@ export type Database = {
           evaluated_at: string
           evaluation_id: string
           final_accuracy: boolean
-          initial_accuracy: boolean
+          initial_accuracy: boolean | null
           problem_id: string
           reasoning_score: number
           reflection_score: number | null
@@ -78,7 +78,7 @@ export type Database = {
           evaluated_at?: string
           evaluation_id?: string
           final_accuracy: boolean
-          initial_accuracy: boolean
+          initial_accuracy?: boolean | null
           problem_id: string
           reasoning_score: number
           reflection_score?: number | null
@@ -92,7 +92,7 @@ export type Database = {
           evaluated_at?: string
           evaluation_id?: string
           final_accuracy?: boolean
-          initial_accuracy?: boolean
+          initial_accuracy?: boolean | null
           problem_id?: string
           reasoning_score?: number
           reflection_score?: number | null
