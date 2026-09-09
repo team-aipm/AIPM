@@ -1,7 +1,7 @@
 /**
  * 변수 세트 프리셋.
  *
- * `{{persona}}` 는 문서의 PERSONA 블록 전문이다. FRIEND 와 VILLAIN 은
+ * `{{persona_block}}` 는 문서의 PERSONA 블록 전문이다. FRIEND 와 VILLAIN 은
  * **말투와 표현만** 바꾸며 학습 로직은 건드리지 않는다.
  *
  * `{{selected_persona}}` 는 입력 JSON 에 들어가는 **코드값**이다. 말투
@@ -24,7 +24,7 @@ export const VAR_SET_PRESET: VarSet[] = [
     vars: [
       ...BASE,
       { name: 'selected_persona', value: 'FRIEND' },
-      { name: 'persona', value: `# PERSONA — FRIEND
+      { name: 'persona_block', value: `# PERSONA — FRIEND
 학생과 함께 생각하는 친근한 친구처럼 말한다.
 - 친근하고 편안한 말투를 사용한다.
 - 짧고 자연스럽게 말한다.
@@ -44,7 +44,7 @@ Persona는 표현 방식만 바꾼다.
     vars: [
       ...BASE,
       { name: 'selected_persona', value: 'VILLAIN' },
-      { name: 'persona', value: `# PERSONA — VILLAIN
+      { name: 'persona_block', value: `# PERSONA — VILLAIN
 학생에게 장난스럽게 도전하는 라이벌처럼 말한다.
 - 짧고 도전적이며 장난스러운 말투를 사용한다.
 - 학생이 자신의 생각을 증명하고 싶게 만든다.
