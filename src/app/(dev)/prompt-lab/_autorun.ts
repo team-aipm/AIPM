@@ -238,8 +238,8 @@ export function studentInput(
     // 학생 모델이 상대를 선생님으로 여기고 그렇게 부른다. Persona 를
     // FRIEND 로 골라도 대화에는 선생님이 나온다 — 도구가 페르소나를
     // 덮어쓰는 셈이다. "상대" 는 부르는 말이 아니라 표시일 뿐이다.
-    .map((turn) => `${turn.who === 'user' ? '나' : '상대'}: ${turn.text}`);
-  lines.push(`상대: ${latest}`);
+    .map((turn) => `${turn.who === 'user' ? '나' : 'AI'}: ${turn.text}`);
+  lines.push(`AI: ${latest}`);
 
   // 보기가 있으면 보여 준다. 화면의 학생은 버튼을 보는데 자동 실행의
   // 학생만 못 보면, 우리가 시험하려는 것과 다른 상황을 시험하게 된다.
