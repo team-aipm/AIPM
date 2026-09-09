@@ -464,6 +464,7 @@ END:
   "latest_response": null,
   "payload": {
     "session_phase": "START",
+    "problem_evaluations": [],
     "is_first_use": false,
     "student_memory": null,
     "previous_daily_summary": null,
@@ -862,7 +863,8 @@ target_logic_gap,
     "total_problems": 10
   },
   "payload": {
-    "mode_phase": "PREPARE | INTERACT",
+    "problem_evaluations": [],
+    "mode_phase": "PREPARE",
     "learning_target": {
       "concept": "string",
       "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
@@ -1053,10 +1055,11 @@ PREPARE 단계로 넘어가지 않는다.
 5. PREPARE
 ────────────────────────────────────
 mode_phase = "PREPARE"는
-recognition_status = "CONFIRMED"
-그리고
-student_confirmed = true
-인 경우에만 실행한다.
+recognition_status = "CONFIRMED"인 경우에 실행한다.
+recognition_status는 앞 턴에 AI가 스스로 낸 값이다.
+학생이 "맞아" 라고 확인했을 때만 CONFIRMED로 바꾼다.
+student_confirmed가 함께 주어지면 그것도 참이어야 한다.
+값이 없으면 recognition_status만 본다.
 먼저 문제를 직접 해결하여
 실제 정답을 검증한다.
 다음을 확인한다.
@@ -1338,7 +1341,8 @@ completion.action = "COMPLETE"
     "total_problems": 10
   },
   "payload": {
-    "mode_phase": "RECOGNIZE | PREPARE | INTERACT",
+    "problem_evaluations": [],
+    "mode_phase": "RECOGNIZE",
     "learning_target": {
       "concept": "string | null",
       "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
@@ -1644,6 +1648,7 @@ action = "DAILY_ANALYSIS"
     "total_problems": 10
   },
   "payload": {
+    "problem_evaluations": [],
     "learning_mode": "A | B",
     "problem_result": {
       "problem_text": "string",
@@ -1812,25 +1817,7 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
     "total_problems": 10
   },
   "payload": {
-    "problem_evaluations": [
-      {
-        "problem_number": 1,
-        "learning_mode": "A | B",
-        "concept": "string",
-        "evaluation": {
-          "initial_accuracy": "true | false | null",
-          "reasoning_score": "0 | 1 | 2 | null",
-          "rule_score": "0 | 1 | 2 | null",
-          "self_correction": "true | false | null",
-          "transfer_score": "0 | 1 | 2 | null",
-          "reflection_score": "0 | 1 | 2 | null",
-          "support_level": 0,
-          "primary_logic_gap": "string | null",
-          "secondary_logic_gap": "string | null"
-        },
-        "hint_count": 0
-      }
-    ],
+    "problem_evaluations": [],
     "mode_status": {
       "mode_a_count": 5,
       "mode_b_count": 5

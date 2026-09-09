@@ -37,6 +37,7 @@ import {
   MAP_SOURCES,
   type MapRow,
   type MapSource,
+  defaultCarry,
   defaultMapping,
   resetWritten,
   writtenPaths,
@@ -184,6 +185,14 @@ type Stage = StagePreset & {
   rules: CustomRules;
   /** 다음 단계로 무엇을 옮길지. 비어 있으면 AIPM 규칙 → 원문 순으로 넘어간다 */
   mapping: MapRow[];
+  /**
+   * **같은 단계에서 다음 턴으로 이어질 값.**
+   *
+   * 답을 받은 뒤 이 표대로 결과를 자기 입력에 써 넣는다. 프롬프트가
+   * 여러 턴에 걸쳐 상태를 들고 가야 할 때 쓴다 — MODE B 의 의도적
+   * 오답처럼.
+   */
+  carry: MapRow[];
   /** 결과를 보고 보낼 단계를 고르는 규칙. 비어 있으면 바로 다음 단계 */
   routing: Routing;
   threads: Thread[];
@@ -227,8 +236,8 @@ const LOG_LABEL: Record<AutoStep['kind'], string> = {
 
 /** 견줄 칸만 뽑는다. routing 은 프리셋 쪽 출처가 달라 부르는 쪽이 붙인다 */
 function pickComparable(
-  from: Omit<Comparable, 'routing' | 'mapping'>,
-): Omit<Comparable, 'routing' | 'mapping'> {
+  from: Omit<Comparable, 'routing' | 'mapping' | 'carry'>,
+): Omit<Comparable, 'routing' | 'mapping' | 'carry'> {
   return {
     prompt: from.prompt,
     inputMode: from.inputMode,
@@ -266,6 +275,17 @@ function freshInput(
   return resetConversation(resetWritten(input, sample, written), shapeOf(stage));
 }
 
+/**
+ * 답을 자기 입력에 이어 넣는다.
+ *
+ * 단계가 여러 턴에 걸쳐 상태를 들고 가야 할 때 쓴다. `appendAiTurn`
+ * 의 이월 규칙은 **출력의 최상위 키 중 입력에도 같은 이름이 있는
+ * 것**만 옮긴다. 이름이 다르면 아무것도 안 넘어간다.
+ */
+function carryState(rows: MapRow[], output: unknown, input: string): string {
+  return applyMapping(rows, output, input, input)?.json ?? input;
+}
+
 /** 단계에서 대화 모양만 뽑는다 */
 function shapeOf(stage: Stage): ChatShape {
   return {
@@ -300,6 +320,7 @@ function toStage(base: StagePreset, key: string): Stage {
     rules: EMPTY_RULES,
     // 이름으로 찾는다. AIPM 프리셋이 아니면 빈 값이다.
     mapping: defaultMapping(base.name),
+    carry: defaultCarry(base.name),
     // 이름으로 찾는다. AIPM 프리셋이 아니면 빈 값이다.
     routing: defaultRouting(base.name),
     threads: [newThread(`${key}-t0`, '대화 1', base.sampleInput)],
@@ -415,6 +436,7 @@ type SavedStage = StagePreset & {
   forceJsonMimeType: boolean;
   rules: CustomRules;
   mapping: MapRow[];
+  carry: MapRow[];
   routing: Routing;
   /** 대화는 이름과 입력만 남긴다. 결과는 다시 실행하면 되고 이미지는 무겁다 */
   threads: { name: string; input: string }[];
@@ -460,6 +482,7 @@ function toSaved(stage: Stage): SavedStage {
     ownSettings: stage.ownSettings,
     rules: stage.rules,
     mapping: stage.mapping,
+    carry: stage.carry,
     routing: stage.routing,
   };
 }
@@ -501,6 +524,7 @@ function fromSaved(
     },
     // 예전 저장본에는 없다. 이름이 프리셋과 같으면 기본 매핑을 준다.
     mapping: Array.isArray(item.mapping) ? item.mapping : defaultMapping(item.name ?? ''),
+    carry: Array.isArray(item.carry) ? item.carry : defaultCarry(item.name ?? ''),
     // 예전 저장본에는 없다. 이름이 프리셋과 같으면 기본 분기를 준다.
     routing:
       typeof item.routing?.from === 'string' && Array.isArray(item.routing.rows)
@@ -823,7 +847,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * 그렇다고 이어 붙이면 펼쳤을 때 너무 길다. 탭이 답이다.
    */
   const [settingTab, setSettingTab] = useState<
-    'model' | 'chat' | 'rules' | 'mapping' | 'routing'
+    'model' | 'chat' | 'rules' | 'mapping' | 'carry' | 'routing'
   >('model');
 
   function togglePanel(name: keyof typeof openPanel) {
@@ -1144,11 +1168,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         ...pickComparable(found),
         routing: defaultRouting(found.name),
         mapping: defaultMapping(found.name),
+        carry: defaultCarry(found.name),
       };
       const mine: Comparable = {
         ...pickComparable(stage),
         routing: stage.routing,
         mapping: stage.mapping,
+        carry: stage.carry,
       };
       const diffs = diffAgainst(mine, base);
       return diffs.length === 0 ? null : { index, stage, mine, base, diffs };
@@ -1194,10 +1220,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       ...pickComparable(found),
       routing: defaultRouting(found.name),
       mapping: defaultMapping(found.name),
+      carry: defaultCarry(found.name),
     };
     const mine = pickComparable(active);
     const diffs = diffAgainst(
-      { ...mine, routing: active.routing, mapping: active.mapping },
+      { ...mine, routing: active.routing, mapping: active.mapping, carry: active.carry },
       base,
     );
     return diffs.length === 0 ? null : { diffs, base };
@@ -1459,6 +1486,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   function removeMapRow(index: number) {
     if (!active) return;
     patch(activeIndex, { mapping: active.mapping.filter((_, i) => i !== index) });
+  }
+
+  function setCarryRow(index: number, next: Partial<MapRow>) {
+    if (!active) return;
+    patch(activeIndex, {
+      carry: active.carry.map((row, i) => (i === index ? { ...row, ...next } : row)),
+    });
   }
 
   function setRouting(next: Partial<Routing>) {
@@ -1822,7 +1856,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         parsed,
         recorded.show ? recorded.text : null,
       );
-      if (withAi !== null) input = withAi;
+      if (withAi !== null) input = carryState(stage.carry, parsed, withAi);
       // 화면에도 남긴다. 끝나고 단계를 열면 마지막 상태가 보인다.
       final.set(at, { thread: stage.activeThread, input, result });
       if (live) patchThread(at, stage.activeThread, { input, result });
@@ -2174,6 +2208,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     }
 
     const shapeAtSend = chatShape;
+    const carryAtSend = active.carry;
     const replyKey = active.replyKey;
     const recordKey = active.recordKey;
 
@@ -2205,7 +2240,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         parsed,
         recorded.show ? recorded.text : null,
       );
-      if (withAi !== null) patchThread(index, threadIndex, { input: withAi });
+      if (withAi !== null) {
+        patchThread(index, threadIndex, {
+          input: carryState(carryAtSend, parsed, withAi),
+        });
+      }
     });
 
     // 이미지는 그 턴에만 붙는다. 대화 기록에는 파일명만 남는다.
@@ -3905,6 +3944,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                               ...pickComparable(active),
                               routing: active.routing,
                               mapping: active.mapping,
+                              carry: active.carry,
                             },
                             drift.base,
                             [group.id],
@@ -3938,6 +3978,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                             ...pickComparable(active),
                             routing: active.routing,
                             mapping: active.mapping,
+                            carry: active.carry,
                           },
                           drift.base,
                           drift.diffs.map(({ group }) => group.id),
@@ -3990,6 +4031,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       'mapping',
                       '다음 단계',
                       active.mapping.length > 0 ? String(active.mapping.length) : '',
+                    ],
+                    [
+                      'carry',
+                      '이어지는 값',
+                      active.carry.length > 0 ? String(active.carry.length) : '',
                     ],
                     [
                       'routing',
@@ -4761,6 +4807,77 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   대화는 결과가 아니라 입력에 쌓여 있기 때문입니다.
                   <b> 직접 적기</b>는 고정값입니다. 새 문제로 넘어갈 때
                   대화를 비우려면 <code>[]</code> 를 넣으세요.
+                </p>
+              </div>
+
+              <div hidden={settingTab !== 'carry'} className="flex flex-col gap-2 p-3">
+                <p className="text-[11px] text-neutral-500">
+                  답을 받은 뒤 <b>이 단계 자기 입력에</b> 써 넣을 값입니다. 단계가
+                  여러 턴에 걸쳐 상태를 들고 가야 할 때 씁니다 — 앞 턴에 만든
+                  값을 다음 턴에도 기억해야 하는 경우입니다.
+                </p>
+
+                {active.carry.map((row, index) => (
+                  <div key={index} className="flex flex-wrap items-center gap-1">
+                    <select
+                      value={row.source}
+                      onChange={(event) =>
+                        setCarryRow(index, { source: event.target.value as MapSource })
+                      }
+                      className="w-28 rounded border border-neutral-300 bg-transparent px-1 py-1 dark:border-neutral-700"
+                    >
+                      {MAP_SOURCES.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={row.from}
+                      onChange={(event) => setCarryRow(index, { from: event.target.value })}
+                      placeholder="예: problem_state"
+                      spellCheck={false}
+                      className="w-44 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <span className="text-neutral-400">→</span>
+                    <input
+                      value={row.to}
+                      onChange={(event) => setCarryRow(index, { to: event.target.value })}
+                      placeholder="예: payload.problem"
+                      spellCheck={false}
+                      className="w-44 rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+                    />
+                    <button
+                      onClick={() =>
+                        patch(activeIndex, {
+                          carry: active.carry.filter((_, i) => i !== index),
+                        })
+                      }
+                      className="px-2 text-neutral-400 hover:text-red-600"
+                      title="이 줄 삭제"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+
+                <div>
+                  <button
+                    onClick={() =>
+                      patch(activeIndex, { carry: [...active.carry, BLANK_MAP_ROW] })
+                    }
+                    className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
+                  >
+                    + 이어질 값
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  적어 두지 않으면 <b>출력의 최상위 이름이 입력에도 있는 것</b>만
+                  이어집니다. 출력은 <code>problem_state</code> 인데 입력은{' '}
+                  <code>payload.problem</code> 처럼 이름이 다르면 아무것도 안
+                  넘어갑니다. 앞 턴에 만든 값을 다음 턴에 못 쓰면, 단계가 매번
+                  처음처럼 굽니다.
                 </p>
               </div>
 
