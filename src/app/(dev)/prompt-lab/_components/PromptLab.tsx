@@ -691,6 +691,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   const [autoLog, setAutoLog] = useState<AutoStep[]>([]);
   const [autoRunning, setAutoRunning] = useState(false);
   const [autoStop, setAutoStop] = useState<StopReason | null>(null);
+  /** 마지막 회차가 상한을 얼마나 썼나 */
+  const [autoUsed, setAutoUsed] = useState<{
+    students: number;
+    moves: number;
+    calls: number;
+    laps: number;
+  } | null>(null);
   const stopFlag = useRef(false);
 
   /**
@@ -1688,6 +1695,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     visited: string[];
     /** 단계별 마지막 입력과 결과. 반복 실행이 끝나고 화면에 옮긴다 */
     final: Map<number, { thread: number; input: string; result: RunResult | null }>;
+    /** 상한을 얼마나 썼나. 어디에 걸렸는지 화면에서 바로 보이게 한다 */
+    used: { students: number; moves: number; calls: number; laps: number };
   }> {
     const log: AutoStep[] = [];
     const final = new Map<
@@ -1909,7 +1918,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       if (live) patchThread(at, stage.activeThread, { input });
     }
 
-    return { steps: log, reason, visited, final };
+    return {
+      steps: log,
+      reason,
+      visited,
+      final,
+      used: { students, moves, calls, laps },
+    };
   }
 
   /** 한 번 돌린다. 걸음이 화면에 그대로 쌓인다 */
@@ -1918,12 +1933,14 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     stopFlag.current = false;
     setAutoRunning(true);
     setAutoStop(null);
+    setAutoUsed(null);
     setAutoLog([]);
     setTrials([]);
     setAutoAt(null);
     setPanel('auto');
 
     const done = await runOnce(profiles[activeProfile]?.prompt ?? '', true);
+    setAutoUsed(done.used);
     setAutoStop(done.reason);
     setAutoRunning(false);
   }
@@ -1944,6 +1961,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     stopFlag.current = false;
     setAutoRunning(true);
     setAutoStop(null);
+    setAutoUsed(null);
     setAutoLog([]);
     setTrials([]);
     setPanel('auto');
@@ -1979,6 +1997,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         // 알 수 없고, 로그만 보면 어느 단계의 입력이 어떤 모양이었는지
         // 알 수 없다. **회차마다 덮으므로 마지막 것이 남는다.**
         setAutoLog(done.steps);
+        setAutoUsed(done.used);
         for (const [index, at] of done.final) {
           patchThread(index, at.thread, { input: at.input, result: at.result });
         }
@@ -3294,6 +3313,37 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   >
                     {STOP_TEXT[autoStop]} 각 단계를 열면 마지막 입력과 결과가
                     그대로 남아 있습니다.
+                  </p>
+                )}
+
+                {/* 어느 상한에 걸렸는지 숫자로 보여 준다. "학생 발화
+                    상한에 걸렸다" 만 보면 종료 분기가 없는 줄 알지만,
+                    바퀴를 한 번 돌았으면 그냥 상한이 낮았던 것이다. */}
+                {autoUsed !== null && (
+                  <p className="text-[11px] text-neutral-500">
+                    {(
+                      [
+                        ['학생 발화', autoUsed.students, autoLimits.students],
+                        ['단계 이동', autoUsed.moves, autoLimits.moves],
+                        ['호출', autoUsed.calls, autoLimits.calls],
+                        ['바퀴', autoUsed.laps, autoLimits.laps],
+                      ] as const
+                    ).map(([label, used, limit], index) => (
+                      <span key={label}>
+                        {index > 0 && ' · '}
+                        {label}{' '}
+                        <b className={used >= limit ? 'text-amber-700 dark:text-amber-500' : ''}>
+                          {used}/{limit}
+                        </b>
+                      </span>
+                    ))}
+                    {autoUsed.laps > 0 && autoStop === 'student-limit' && (
+                      <>
+                        {' '}· 바퀴를 {autoUsed.laps}번 돌았으니 분기는 도는
+                        중입니다. 상한이 낮았을 뿐입니다 — 한 바퀴에 학생 발화가
+                        6~7 필요합니다.
+                      </>
+                    )}
                   </p>
                 )}
 

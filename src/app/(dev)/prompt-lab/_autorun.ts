@@ -76,12 +76,21 @@ export type AutoLimits = {
   laps: number;
 };
 
+/**
+ * 기본 상한.
+ *
+ * **바퀴 수에 맞춰 잡는다.** 한 바퀴에 학생 발화가 6~7 든다 —
+ * 01 에서 모드를 고르는 데 1~2, 문제를 푸는 데 5. 바퀴만 늘리고
+ * 학생 발화를 그대로 두면 두 번째 문제가 나오기 전에 멈춘다.
+ *
+ * 호출은 그보다 두 배쯤 든다. 걸음마다 단계와 학생을 한 번씩 부른다.
+ */
 export const DEFAULT_LIMITS: AutoLimits = {
   students: 20,
   moves: 12,
-  calls: 60,
+  calls: 90,
   retries: 3,
-  laps: 2,
+  laps: 3,
 };
 
 /** 실행 기록 한 줄 */
