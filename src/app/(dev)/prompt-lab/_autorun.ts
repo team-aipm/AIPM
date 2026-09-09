@@ -23,10 +23,6 @@
  * 상한에 걸릴 때까지 대화를 이어간다.
  */
 
-/** 분기 표에서 고를 수 있는 예약 대상. 단계 이름과 겹치지 않게 괄호를 쓴다 */
-export const STAY = '(계속)';
-export const FINISH = '(끝)';
-
 export type AutoDecision =
   | { kind: 'stay' }
   | { kind: 'finish' }

@@ -20,7 +20,7 @@
  */
 
 import type { Check } from '@/lib/ai/schema-check';
-import { getPath, parsePath, preview } from './_paths';
+import { getPath, parsePath, preview } from '@/lib/ai/pipeline/paths';
 
 export type FieldType =
   | 'any'

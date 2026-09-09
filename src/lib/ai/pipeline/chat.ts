@@ -1,13 +1,17 @@
 /**
  * 대화 턴 관리. 입력이 JSON 인 단계에서 쓴다.
  *
+ * **제품과 개발 도구가 함께 쓴다.** 원래 `(dev)/prompt-lab/_chat.ts`
+ * 였다. 학생 화면의 말풍선과 보기도 결국 이 함수들이 만든 배열을
+ * 그린다.
+ *
  * 대화 기록을 별도 상태로 두지 않는다. **입력 JSON 안의 배열이 곧 대화
  * 기록이다.** 그래서 화면의 대화창과 실제로 모델에 보내는 값이 절대
  * 어긋나지 않고, JSON을 직접 고치면 대화도 그대로 바뀐다.
  */
 
 import { stripFence } from '@/lib/ai/schema-check';
-import { getPath, parsePath, setPath } from './_paths';
+import { getPath, parsePath, setPath } from '@/lib/ai/pipeline/paths';
 
 /**
  * 대화 배열과 응답 필드는 **중첩 경로**를 받는다.
