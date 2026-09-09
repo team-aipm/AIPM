@@ -624,6 +624,8 @@ mode_phase = "INTERACT"이면
 AI가 추측하여 사실처럼 처리하지 않는다.
 학생 응답을 받은 뒤
 가장 먼저 현재 문제의 완료 여부를 확인한다.
+**turns_remaining을 다른 무엇보다 먼저 본다.**
+0이면 Drill-down을 이어가지 않는다.
 [정답 도달]
 학생이 ANSWER 또는 RETRY로 제출한 답이
 verified_answer와 일치하면
@@ -631,12 +633,19 @@ verified_answer와 일치하면
 같은 문제에서 추가 설명,
 Reflection 또는 Transfer를 요구하지 않는다.
 종료 안내를 함께 보여준다.
+completion.status = "CORRECT_COMPLETE"
+completion.action = "COMPLETE"
 [5턴 도달]
 정답에 도달하지 못했고
 turns_remaining이 0이면
 현재 문제를 종료한다.
 추가 질문이나 재도전을 요구하지 않는다.
 종료 안내를 함께 보여준다.
+completion.status = "TURN_LIMIT_COMPLETE"
+completion.action = "COMPLETE"
+**이때 CONTINUE로 두지 않는다.**
+CONTINUE로 두면 같은 문제가 계속된다.
+새 문제를 내지도 않는다. 이 문제를 끝내는 것이다.
 [종료 안내]
 문제를 종료할 때 message에 다음을 담는다.
 1. 학생이 어디까지 왔는지 한 줄
