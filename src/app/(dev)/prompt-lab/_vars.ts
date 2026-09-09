@@ -109,3 +109,49 @@ export function usageOf(
   }
   return parts.length === 0 ? '안 쓰임' : parts.join(' · ');
 }
+
+/**
+ * 따옴표 없이 값 자리에 놓인 `{{변수}}` 를 지금 값으로 바꾼다.
+ *
+ * 입력 JSON 은 **치환 전에도 유효해야 한다.** 대화가 입력 JSON 안의
+ * 배열이라 대화창이 보내기 전에 입력을 읽어야 하기 때문이다.
+ *
+ * 안내만 하고 사용자가 손으로 고치게 두면, 저장된 설정을 쓰는 사람은
+ * 매번 같은 벽을 만난다. 그래서 그 자리에서 고쳐 준다.
+ *
+ * **따옴표로 감싸지 않고 값으로 바꾼다.** `"grade": {{grade}}` 를
+ * `"grade": "5"` 로 만들면 숫자여야 할 값이 문자가 된다. 지금 값을
+ * 그대로 넣으면 `"grade": 5` 가 되어 뜻이 유지된다.
+ *
+ * 고칠 게 없거나 고쳐도 여전히 깨지면 `null` 을 돌려준다.
+ */
+export function repairBareVars(
+  input: string,
+  vars: Variable[],
+): { text: string; replaced: string[] } | null {
+  const table = new Map<string, string>();
+  for (const item of vars) {
+    const name = item.name.trim();
+    if (name !== '') table.set(name, item.value);
+  }
+
+  const replaced: string[] = [];
+  // 값 자리 = `:` `[` `,` 다음에 따옴표 없이 오는 것
+  const text = input.replace(
+    /([:[,]\s*)\{\{\s*([^{}\s]+)\s*\}\}/g,
+    (whole, lead: string, name: string) => {
+      const value = table.get(name);
+      replaced.push(`{{${name}}}`);
+      // 정의되지 않았으면 null 로 둔다. 빈칸으로 두면 JSON 이 또 깨진다.
+      return `${lead}${value === undefined || value.trim() === '' ? 'null' : value}`;
+    },
+  );
+
+  if (replaced.length === 0) return null;
+  try {
+    JSON.parse(text);
+  } catch {
+    return null;
+  }
+  return { text, replaced };
+}
