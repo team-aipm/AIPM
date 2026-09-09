@@ -78,6 +78,8 @@ export type StagePreset = {
   /** 남은 횟수. turnCountKey · limitKey 가 함께 있어야 계산한다 */
   remainingKey: string;
   limitKey: string;
+  /** 문제가 바뀐 것을 알아보는 자리. 바뀌면 기록과 횟수를 새로 시작한다 */
+  resetKey: string;
 };
 
 /** 단계를 새로 추가할 때의 빈 값 */
@@ -101,6 +103,7 @@ export const BLANK_STAGE: StagePreset = {
   turnCountKey: '',
   remainingKey: '',
   limitKey: '',
+  resetKey: '',
 };
 
 export const AIPM_PRESET: StagePreset[] = [
@@ -227,6 +230,7 @@ END:
     turnCountKey: '',
     remainingKey: '',
     limitKey: '',
+    resetKey: '',
   },
   {
     name: '02 MODE A',
@@ -589,6 +593,7 @@ target_logic_gap,
     turnCountKey: 'payload.interaction.student_turn_count',
     remainingKey: 'payload.interaction.turns_remaining',
     limitKey: 'payload.interaction.turn_limit',
+    resetKey: 'problem_state.problem_text',
   },
   {
     name: '03 MODE B',
@@ -1057,6 +1062,7 @@ completion.action = "COMPLETE"
     turnCountKey: 'payload.interaction.student_turn_count',
     remainingKey: 'payload.interaction.turns_remaining',
     limitKey: 'payload.interaction.turn_limit',
+    resetKey: 'problem_state.problem_text',
   },
   {
     name: '04 HINT',
@@ -1159,6 +1165,7 @@ AI의 핵심 오류를 직접 알려주지 않는다.
     turnCountKey: 'payload.interaction.student_turn_count',
     remainingKey: 'payload.interaction.turns_remaining',
     limitKey: 'payload.interaction.turn_limit',
+    resetKey: '',
   },
   {
     name: '05 EVALUATOR',
@@ -1323,6 +1330,7 @@ action = "DAILY_ANALYSIS"
     turnCountKey: 'payload.problem_result.student_turn_count',
     remainingKey: '',
     limitKey: '',
+    resetKey: '',
   },
   {
     name: '06 DAILY ANALYZER',
@@ -1477,6 +1485,7 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
     turnCountKey: '',
     remainingKey: '',
     limitKey: '',
+    resetKey: '',
   },
   {
     name: '07 WEEKLY REPORT',
@@ -1606,5 +1615,6 @@ monitoring_gap
     turnCountKey: '',
     remainingKey: '',
     limitKey: '',
+    resetKey: '',
   },
 ];
