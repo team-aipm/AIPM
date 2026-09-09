@@ -9,8 +9,7 @@ import { createServerClient } from '@supabase/ssr';
  *
  * 하지 않는 일 — 여기에 넣지 말 것
  *   - 로그인 여부에 따른 Route 보호 · 리다이렉트
- *   - 부모 PIN 게이트(PAR-001)
- *   위 둘은 AUTH 영역이며 COM-003 확정 후 회원·유입 PM이 담당한다.
+ *   위는 AUTH 영역이다. 보호자 PIN 게이트는 2026-09-10 에 없애기로 정했다.
  */
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -45,6 +44,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // 정적 파일과 이미지 최적화 요청은 제외한다.
-    '/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    //
+    // **배치(api/batch)도 제외한다.** 세션 쿠키가 없는 요청이라 여기서
+    // 토큰을 갱신할 것이 없고, Cron 이 부를 때마다 헛일을 한다.
+    '/((?!_next/static|_next/image|favicon.ico|api/batch|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
