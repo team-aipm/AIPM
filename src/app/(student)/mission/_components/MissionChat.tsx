@@ -14,7 +14,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import type { Database } from '@/types/database';
 import { learningModeLabel } from '@/lib/constants/copy';
+import { PartnerFace } from '@/components/ui/PartnerFace';
 import {
   answerProblem,
   startProblem,
@@ -42,9 +44,13 @@ export type Initial =
   | { kind: 'host' }
   | { kind: 'problem'; problemText: string; turns: Turn[]; turnsLeft: number };
 
-type Props = { partner: string; initial: Initial };
+type Props = {
+  partner: string;
+  persona: Database['public']['Enums']['persona_type'];
+  initial: Initial;
+};
 
-export function MissionChat({ partner, initial }: Props) {
+export function MissionChat({ partner, persona, initial }: Props) {
   const [turns, setTurns] = useState<Turn[]>(
     initial.kind === 'problem' ? initial.turns : [],
   );
@@ -191,11 +197,8 @@ export function MissionChat({ partner, initial }: Props) {
         {turns.map((turn, index) =>
           turn.who === 'ai' ? (
             <div key={index} className="flex items-start gap-2">
-              <span
-                aria-hidden
-                className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-sm shadow-sm"
-              >
-                🐣
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
+                <PartnerFace persona={persona} size={26} />
               </span>
               <p className="max-w-[78%] whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-white px-3.5 py-2.5 text-[14px] leading-relaxed text-meti-ink shadow-sm">
                 {turn.text}
