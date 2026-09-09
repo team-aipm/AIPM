@@ -56,6 +56,15 @@ export type StagePreset = {
    * 프롬프트가 있다.
    */
   replyKey: string;
+  /**
+   * 대화 **기록**에 남길 출력 필드. 비우면 `replyKey` 와 같다.
+   *
+   * 화면에는 문제를 매 턴 다시 보여 줘야 한다 — 학생이 무슨 문제를 푸는
+   * 중인지 잊는다. 하지만 그걸 대화 기록에까지 매 턴 넣으면 같은 문단이
+   * 열 번 쌓인다. 모델은 문제를 `problem_state` 에서 읽으므로 기록에는
+   * 말풍선 문장만 남기면 된다.
+   */
+  recordKey: string;
   /** 학생 턴 JSON 템플릿. 말이 들어갈 자리는 studentField 로 지정 */
   studentTurn: string;
   studentField: string;
@@ -83,6 +92,7 @@ export const BLANK_STAGE: StagePreset = {
   checkRule: null,
   historyKey: 'conversation',
   replyKey: 'message',
+  recordKey: '',
   studentTurn: '{ "speaker": "student", "message_text": "" }',
   studentField: 'message_text',
   aiTurn: '{ "speaker": "ai", "message_text": "" }',
@@ -208,6 +218,7 @@ END:
     checkRule: null,
     historyKey: 'conversation',
     replyKey: 'message',
+    recordKey: '',
     studentTurn: '{ "speaker": "student", "message_text": "" }',
     studentField: 'message_text',
     aiTurn: '{ "speaker": "ai", "message_text": "" }',
@@ -326,7 +337,13 @@ answer_lock = true
 학생에게 문제를 제시할 때는
 풀이 방법이나 힌트를 먼저 제공하지 않는다.
 학생이 먼저 답하도록 한다.
-첫 답은 원칙적으로 학생이 직접 입력하게 한다.
+문제와 함께 접근 방법 선택지 4개를 제시한다.
+선택지 규칙은 7. FOUR CHOICES 를 따른다.
+allow_free_text = true 를 유지한다.
+선택지를 고르지 않고 바로 답을 쓰는 길을 항상 열어 둔다.
+message 는 두 길을 모두 안내한다.
+선택지는 정답 후보가 아니다.
+어떻게 풀기 시작할지를 고르는 것이다.
 문제 자체가 원래 객관식인 경우가 아니라면
 AI가 임의로 정답 후보 4개를 만들어
 문제를 객관식으로 변경하지 않는다.
@@ -389,6 +406,22 @@ turns_remaining이 1 이상이면
 선택지 규칙은 COMMON SYSTEM 의 FOUR CHOICES 를 따른다.
 
 MODE A 에서는 학생이 자신의 사고를 표현하도록 만든다.
+
+문제를 처음 제시하는 PREPARE 턴에도 선택지를 붙인다.
+이때 선택지는 답이 아니라 어떻게 시작할지이다.
+예:
+문제:
+"어떤 수를 8로 나누어야 할 것을 실수로 8을 곱했더니
+128이 되었어. 바르게 계산한 답은?"
+선택지:
+1. 128 ÷ 8 을 먼저 해본다
+2. 128 × 8 을 먼저 해본다
+3. 128 에 8 을 더해본다
+4. 잘 모르겠어
+message:
+"어떻게 풀지 골라도 되고, 답을 바로 써도 좋아."
+
+INTERACT 턴에서는 학생이 자신의 사고를 설명하게 한다.
 예:
 질문:
 "왜 그렇게 계산했어?"
@@ -546,6 +579,7 @@ target_logic_gap,
     checkRule: null,
     historyKey: 'payload.interaction.response_history',
     replyKey: 'ui.problem_text, ui.message',
+    recordKey: 'ui.message',
     studentTurn:
       '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
     studentField: 'content',
@@ -1013,6 +1047,7 @@ completion.action = "COMPLETE"
     checkRule: null,
     historyKey: 'payload.interaction.response_history',
     replyKey: 'ui.problem_text, ui.ai_wrong_solution, ui.message',
+    recordKey: 'ui.message',
     studentTurn:
       '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
     studentField: 'content',
@@ -1114,6 +1149,7 @@ AI의 핵심 오류를 직접 알려주지 않는다.
     checkRule: null,
     historyKey: 'payload.interaction.response_history',
     replyKey: 'hint.message',
+    recordKey: '',
     studentTurn:
       '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
     studentField: 'content',
@@ -1277,6 +1313,7 @@ action = "DAILY_ANALYSIS"
     checkRule: null,
     historyKey: 'payload.problem_result.response_history',
     replyKey: '',
+    recordKey: '',
     studentTurn:
       '{ "response_role": "ANSWER", "response_type": "FREE_TEXT", "choice_id": null, "content": "" }',
     studentField: 'content',
@@ -1431,6 +1468,7 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
     checkRule: null,
     historyKey: 'conversation',
     replyKey: '',
+    recordKey: '',
     studentTurn: '{ "speaker": "student", "message_text": "" }',
     studentField: 'message_text',
     aiTurn: '{ "speaker": "ai", "message_text": "" }',
@@ -1559,6 +1597,7 @@ monitoring_gap
     checkRule: null,
     historyKey: 'conversation',
     replyKey: '',
+    recordKey: '',
     studentTurn: '{ "speaker": "student", "message_text": "" }',
     studentField: 'message_text',
     aiTurn: '{ "speaker": "ai", "message_text": "" }',
