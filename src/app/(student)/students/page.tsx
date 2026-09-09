@@ -4,6 +4,7 @@
  * 한 계정에 학생이 여럿일 수 있다(COM-002 §4). 누구로 들어갈지 먼저 고른다.
  */
 
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { listStudents } from '@/lib/services/student';
@@ -24,13 +25,19 @@ export default async function StudentsPage() {
       <h1 className="text-xl font-extrabold text-meti-ink">누구로 시작할까?</h1>
 
       {students.length === 0 ? (
-        // 온보딩(STU-001 첫 학생 등록)은 아직 없다. 빈 화면에 아무 말도 없이
-        // 두면 고장으로 보이므로, 무엇이 없는지 그대로 적는다.
-        <p className="rounded-2xl bg-white p-5 text-[14px] leading-relaxed text-meti-sub shadow-sm">
-          아직 등록된 학생이 없어요.
-          <br />
-          학생 등록 화면은 준비 중입니다.
-        </p>
+        <div className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
+          <p className="text-[14px] leading-relaxed text-meti-sub">
+            아직 등록된 학생이 없어요.
+            <br />
+            아이를 먼저 등록해주세요.
+          </p>
+          <Link
+            href="/onboarding/student"
+            className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
+          >
+            학생 등록하기
+          </Link>
+        </div>
       ) : (
         <ul className="flex flex-col gap-3">
           {students.map((student) => (
@@ -60,6 +67,15 @@ export default async function StudentsPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {students.length > 0 && (
+        <Link
+          href="/onboarding/student"
+          className="text-center text-[13px] font-semibold text-meti-sub underline"
+        >
+          학생 한 명 더 등록하기
+        </Link>
       )}
     </main>
   );

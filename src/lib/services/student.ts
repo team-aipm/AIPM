@@ -61,3 +61,65 @@ export async function getStudent(
   if (error !== null) throw new Error(`학생을 불러오지 못했습니다: ${error.message}`);
   return data;
 }
+
+/**
+ * 학생을 만든다 (STU-001).
+ *
+ * `account_id` 를 로그인한 사람으로 채운다. RLS 는 `account_id = auth.uid()`
+ * 인 행만 넣게 하므로(`student_insert_own`) 남의 계정에 학생을 붙일 수
+ * 없다. 그래도 여기서 명시적으로 넣는 이유는 **컬럼이 NOT NULL** 이기
+ * 때문이다.
+ *
+ * `persona_type` 은 NOT NULL 인데 고르는 화면(STU-003)이 다음이다. 그래서
+ * `friend` 로 두고 다음 화면에서 바꾼다 — 퍼널이 "첫 학생 등록" 과
+ * "Persona 선택" 을 다른 칸으로 세기 때문에(ADM-002) 학생 행은 여기서
+ * 생겨야 한다.
+ *
+ * `current_difficulty` 는 3 이다. COM-001 §9 "학생 grade 를 기준으로 중간
+ * 난이도에서 시작한다", COM-002 §4 예시도 3.
+ */
+export async function createStudent(
+  client: Client,
+  accountId: string,
+  input: {
+    studentName: string;
+    nickname: string;
+    nicknameSource: Database['public']['Enums']['nickname_source'];
+    birthDate: string;
+    grade: number;
+  },
+): Promise<Student> {
+  const { data, error } = await client
+    .from('student')
+    .insert({
+      account_id: accountId,
+      student_name: input.studentName,
+      nickname: input.nickname,
+      nickname_source: input.nicknameSource,
+      birth_date: input.birthDate,
+      grade: input.grade,
+      persona_type: 'friend',
+      current_difficulty: 3,
+    })
+    .select('*')
+    .single();
+
+  if (error !== null || data === null) {
+    throw new Error(`학생을 등록하지 못했습니다: ${error?.message ?? '알 수 없음'}`);
+  }
+  return data;
+}
+
+/** Persona 를 정한다 (STU-003). 말투와 연출만 바뀐다 — COM-001 §19 */
+export async function setPersona(
+  client: Client,
+  studentId: string,
+  persona: Database['public']['Enums']['persona_type'],
+): Promise<void> {
+  const { error } = await client
+    .from('student')
+    .update({ persona_type: persona })
+    .eq('student_id', studentId);
+
+  if (error !== null) throw new Error(`파트너를 저장하지 못했습니다: ${error.message}`);
+}
