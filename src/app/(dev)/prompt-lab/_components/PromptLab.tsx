@@ -67,7 +67,6 @@ import {
   type Profile,
   type StopReason,
 } from '../_autorun';
-import { parsePath, setPath } from '../_paths';
 import { stageColor } from '../_stage-colors';
 import {
   toCasesJson,
@@ -2178,6 +2177,43 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         >
           단계 초기화
         </button>
+        <button
+          onClick={() => {
+            if (
+              !window.confirm(
+                '모든 단계의 대화와 응답 횟수를 비웁니다.\n' +
+                  '프롬프트 · 설정 · student_id · grade · turn_limit 은 그대로 둡니다.\n\n' +
+                  '계속할까요?',
+              )
+            ) {
+              return;
+            }
+            setStages((prev) =>
+              prev.map((stage) => ({
+                ...stage,
+                threads: stage.threads.map((t) => ({
+                  ...t,
+                  transcript: [],
+                  result: null,
+                  images: [],
+                  input:
+                    stage.inputMode === 'json'
+                      ? resetConversation(t.input, shapeOf(stage))
+                      : t.input,
+                })),
+              })),
+            );
+            setAutoLog([]);
+            setTrials([]);
+            setAutoStop(null);
+            setSendNote(null);
+            setReplyNote(null);
+          }}
+          className="rounded border border-dashed border-neutral-300 px-2 py-1 dark:border-neutral-700"
+          title="프롬프트와 설정은 그대로 둡니다"
+        >
+          대화 비우기
+        </button>
       </nav>
 
       {panel === 'settings' && (
@@ -4075,8 +4111,10 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                 onClear={() =>
                   patchActive({
                     transcript: [],
+                    // 대화만 지우면 student_turn_count 가 그대로 남는다.
+                    // 다음 턴이 6번째로 세어져 시작부터 한도를 넘는다.
                     ...(active.inputMode === 'json'
-                      ? { input: clearHistory(thread.input, active.historyKey) }
+                      ? { input: resetConversation(thread.input, chatShape) }
                       : {}),
                   })
                 }
@@ -4693,22 +4731,6 @@ function inputParseHint(input: string): string {
     '입력이 JSON 객체가 아닙니다. 대화를 쌓으려면 { } 로 감싼 객체여야 합니다.',
     '대화가 필요 없는 단계라면 단계 설정에서 입력을 평문으로 바꾸세요.',
   ].join('\n');
-}
-
-/** 입력 JSON 의 대화 배열만 비운다. 나머지 필드는 그대로 둔다. */
-function clearHistory(inputJson: string, historyKey: string): string {
-  try {
-    const root = JSON.parse(inputJson);
-    if (typeof root !== 'object' || root === null || Array.isArray(root)) {
-      return inputJson;
-    }
-    // 대화 배열 키는 중첩 경로일 수 있다.
-    const segments = parsePath(historyKey);
-    if (segments === null) return inputJson;
-    return JSON.stringify(setPath(root, segments, []), null, 2);
-  } catch {
-    return inputJson;
-  }
 }
 
 /** ArrayBuffer -> base64. 큰 파일에서 스택이 넘치지 않게 나눠 처리한다. */
