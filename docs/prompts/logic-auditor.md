@@ -112,19 +112,6 @@ finalSupportLevel(levels)  그 문제에서 나온 값의 최대값
 자리에 다른 모양으로 들어간다. 하나는 프롬프트에 붙는 말투 전문이고 하나는
 입력 JSON의 코드값이다.
 
-## 입력 JSON에서는 문자열 자리에만 쓴다
-
-```text
-되는 것    "student_id": "{{student_id}}"
-안 되는 것  "grade": {{grade}}
-```
-
-치환은 **보낼 때만** 일어나는데, prompt-lab의 대화창은 그 전에 입력을
-읽어야 한다(대화가 입력 JSON 안의 배열이므로). 그래서 **입력 JSON은 치환
-전에도 유효해야 한다.** 숫자는 변수 대신 값을 직접 적는다.
-
-프롬프트 안에서는 어디에나 쓸 수 있다. 프롬프트는 파싱하지 않는다.
-
 말투 블록은 **표현만 바꾼다.** 문제·정답·질문 목적·Hint·Support Level·
 평가·완료 조건 등 학습 로직은 바꾸지 않는다.
 
@@ -377,7 +364,7 @@ END:
   "module": "SESSION_HOST",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}},
+    "grade": 5,
     "selected_persona": "{{selected_persona}}"
   },
   "session": {
@@ -414,7 +401,7 @@ AI가 문제를 내고 학생이 푼다
 
 ```text
 입력 형식   json          대화 배열   payload.interaction.response_history
-출력 형식   json          응답 필드   ui.message
+출력 형식   json          응답 필드   ui.problem_text, ui.message
 낼 수 있는 action   WAIT_STUDENT · COMPLETE
 ```
 
@@ -527,7 +514,13 @@ answer_lock = true
 학생에게 문제를 제시할 때는
 풀이 방법이나 힌트를 먼저 제공하지 않는다.
 학생이 먼저 답하도록 한다.
-첫 답은 원칙적으로 학생이 직접 입력하게 한다.
+문제와 함께 접근 방법 선택지 4개를 제시한다.
+선택지 규칙은 7. FOUR CHOICES 를 따른다.
+allow_free_text = true 를 유지한다.
+선택지를 고르지 않고 바로 답을 쓰는 길을 항상 열어 둔다.
+message 는 두 길을 모두 안내한다.
+선택지는 정답 후보가 아니다.
+어떻게 풀기 시작할지를 고르는 것이다.
 문제 자체가 원래 객관식인 경우가 아니라면
 AI가 임의로 정답 후보 4개를 만들어
 문제를 객관식으로 변경하지 않는다.
@@ -590,6 +583,22 @@ turns_remaining이 1 이상이면
 선택지 규칙은 COMMON SYSTEM 의 FOUR CHOICES 를 따른다.
 
 MODE A 에서는 학생이 자신의 사고를 표현하도록 만든다.
+
+문제를 처음 제시하는 PREPARE 턴에도 선택지를 붙인다.
+이때 선택지는 답이 아니라 어떻게 시작할지이다.
+예:
+문제:
+"어떤 수를 8로 나누어야 할 것을 실수로 8을 곱했더니
+128이 되었어. 바르게 계산한 답은?"
+선택지:
+1. 128 ÷ 8 을 먼저 해본다
+2. 128 × 8 을 먼저 해본다
+3. 128 에 8 을 더해본다
+4. 잘 모르겠어
+message:
+"어떻게 풀지 골라도 되고, 답을 바로 써도 좋아."
+
+INTERACT 턴에서는 학생이 자신의 사고를 설명하게 한다.
 예:
 질문:
 "왜 그렇게 계산했어?"
@@ -708,7 +717,7 @@ target_logic_gap,
   "module": "MODE_A",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}},
+    "grade": 5,
     "selected_persona": "{{selected_persona}}"
   },
   "session": {
@@ -766,7 +775,7 @@ target_logic_gap,
 
 ```text
 입력 형식   json          대화 배열   payload.interaction.response_history
-출력 형식   json          응답 필드   ui.message
+출력 형식   json          응답 필드   ui.problem_text, ui.ai_wrong_solution, ui.message
 낼 수 있는 action   WAIT_CONFIRMATION · WAIT_STUDENT · COMPLETE · REQUEST_NEW_PROBLEM
 ```
 
@@ -1176,7 +1185,7 @@ completion.action = "COMPLETE"
   "module": "MODE_B",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}},
+    "grade": 5,
     "selected_persona": "{{selected_persona}}"
   },
   "session": {
@@ -1323,7 +1332,7 @@ AI의 핵심 오류를 직접 알려주지 않는다.
   "module": "HINT",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}},
+    "grade": 5,
     "selected_persona": "{{selected_persona}}"
   },
   "payload": {
@@ -1355,10 +1364,10 @@ AI의 핵심 오류를 직접 알려주지 않는다.
 
 ## 05 EVALUATOR
 
-한 문제를 평가하고 다음 학습을 정한다 · 대화 없음
+한 문제를 평가하고 다음 학습을 정한다
 
 ```text
-입력 형식   json          대화 배열   conversation
+입력 형식   json          대화 배열   payload.problem_result.response_history
 출력 형식   json          응답 필드   (없음. 데이터만 만든다)
 낼 수 있는 action   NEXT_MODE_SELECTION · DAILY_ANALYSIS
 ```
@@ -1484,7 +1493,7 @@ action = "DAILY_ANALYSIS"
   "module": "EVALUATOR",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}}
+    "grade": 5
   },
   "session": {
     "problem_number": 1,
@@ -1652,7 +1661,7 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
   "module": "DAILY_ANALYZER",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}}
+    "grade": 5
   },
   "session": {
     "session_id": "{{session_id}}",
@@ -1796,7 +1805,7 @@ monitoring_gap
   "module": "WEEKLY_REPORT",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}}
+    "grade": 5
   },
   "payload": {
     "daily_summaries": [
