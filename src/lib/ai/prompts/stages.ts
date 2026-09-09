@@ -157,7 +157,7 @@ END:
   "module": "SESSION_HOST",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}},
+    "grade": 5,
     "selected_persona": "{{selected_persona}}"
   },
   "session": {
@@ -469,7 +469,7 @@ target_logic_gap,
   "module": "MODE_A",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}},
+    "grade": 5,
     "selected_persona": "{{selected_persona}}"
   },
   "session": {
@@ -915,7 +915,7 @@ completion.action = "COMPLETE"
   "module": "MODE_B",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}},
+    "grade": 5,
     "selected_persona": "{{selected_persona}}"
   },
   "session": {
@@ -1038,7 +1038,7 @@ AI의 핵심 오류를 직접 알려주지 않는다.
   "module": "HINT",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}},
+    "grade": 5,
     "selected_persona": "{{selected_persona}}"
   },
   "payload": {
@@ -1180,7 +1180,7 @@ action = "DAILY_ANALYSIS"
   "module": "EVALUATOR",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}}
+    "grade": 5
   },
   "session": {
     "problem_number": 1,
@@ -1324,7 +1324,7 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
   "module": "DAILY_ANALYZER",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}}
+    "grade": 5
   },
   "session": {
     "session_id": "{{session_id}}",
@@ -1449,7 +1449,7 @@ monitoring_gap
   "module": "WEEKLY_REPORT",
   "student": {
     "student_id": "{{student_id}}",
-    "grade": {{grade}}
+    "grade": 5
   },
   "payload": {
     "daily_summaries": [
