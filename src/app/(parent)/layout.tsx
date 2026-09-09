@@ -14,7 +14,7 @@ const TABS = [
   { href: '/parent', label: '홈', ready: true },
   { href: '/parent/reports', label: '리포트', ready: true },
   { href: '/parent/billing', label: '구독', ready: false },
-  { href: '/parent/my', label: '마이', ready: false },
+  { href: '/parent/my', label: '마이', ready: true },
 ] as const;
 
 export default function ParentLayout({ children }: { children: React.ReactNode }) {

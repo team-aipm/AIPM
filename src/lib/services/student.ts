@@ -123,3 +123,54 @@ export async function setPersona(
 
   if (error !== null) throw new Error(`파트너를 저장하지 못했습니다: ${error.message}`);
 }
+
+/**
+ * 학생 삭제 요청 (COM-002 §18 · COM-007 §5-1).
+ *
+ * **행을 지우지 않는다.** `deleted_pending` 으로 두고 `deleted_at` 을
+ * 남긴다. 학습기록은 1년 뒤에 지운다 — 되돌릴 수 있는 기간은 30일이다.
+ *
+ * 아이가 여럿인 계정에서 실수로 다른 아이를 지우는 일이 실제로 생기고,
+ * 학습기록은 다시 만들 수 없다.
+ */
+export async function softDeleteStudent(client: Client, studentId: string): Promise<void> {
+  const now = new Date();
+  const retainUntil = new Date(now);
+  retainUntil.setFullYear(now.getFullYear() + 1);
+
+  const { error } = await client
+    .from('student')
+    .update({
+      student_status: 'deleted_pending',
+      deleted_at: now.toISOString(),
+      learning_data_retain_until: retainUntil.toISOString(),
+    })
+    .eq('student_id', studentId);
+
+  if (error !== null) throw new Error(`삭제 요청을 저장하지 못했습니다: ${error.message}`);
+}
+
+/** 30일 안이면 되돌린다 (COM-007 §5-1) */
+export async function restoreStudent(client: Client, studentId: string): Promise<void> {
+  const { error } = await client
+    .from('student')
+    .update({
+      student_status: 'active',
+      deleted_at: null,
+      learning_data_retain_until: null,
+    })
+    .eq('student_id', studentId);
+
+  if (error !== null) throw new Error(`되돌리지 못했습니다: ${error.message}`);
+}
+
+/** 삭제 대기 중인 학생도 함께. MY-002 는 되돌릴 수 있게 보여줘야 한다 */
+export async function listAllStudents(client: Client): Promise<Student[]> {
+  const { data, error } = await client
+    .from('student')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error !== null) throw new Error(`학생 목록을 불러오지 못했습니다: ${error.message}`);
+  return data ?? [];
+}
