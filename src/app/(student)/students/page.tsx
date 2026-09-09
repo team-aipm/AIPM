@@ -79,8 +79,7 @@ export default async function StudentsPage() {
       {/*
         부모 영역으로 가는 길은 여기 하나뿐이다. 학생 화면(홈 · 미션)에는
         두지 않는다 — 상세 평가점수가 있는 곳이라 아이가 볼 자리가 아니다.
-        PIN 게이트(PAR-001)는 아직 없다. COM-002 에 PIN 을 담을 칸이 없어서
-        변경 제안이 먼저다.
+        보호자 PIN 은 두지 않기로 했다(2026-09-10).
       */}
       <Link
         href="/parent"
