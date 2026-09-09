@@ -57,6 +57,8 @@ import {
 import {
   cleanStudentReply,
   DEFAULT_LIMITS,
+  isTransient,
+  waitFor,
   FINISH,
   PROFILE_PRESET,
   STAY,
@@ -200,6 +202,7 @@ const LOG_LABEL: Record<AutoStep['kind'], string> = {
   move: '이동',
   end: '끝',
   error: '오류',
+  retry: '재시도',
 };
 
 /** 단계에서 대화 모양만 뽑는다 */
@@ -1374,6 +1377,45 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * 기다려야 해서 옛 값을 읽는다. 화면에는 매 걸음 결과만 적어 준다.
    */
   /**
+   * 멈추라는 신호를 보면서 기다린다.
+   *
+   * 45초를 통째로 자면 [중지] 를 눌러도 그동안 안 멈춘다.
+   */
+  async function pause(seconds: number): Promise<void> {
+    for (let left = seconds; left > 0; left -= 1) {
+      if (stopFlag.current) return;
+      await new Promise((done) => window.setTimeout(done, 1000));
+    }
+  }
+
+  /**
+   * 일시적 오류면 다시 해 본다.
+   *
+   * 503 은 "지금 붐빈다" 는 뜻이지 우리가 뭘 잘못한 게 아니다.
+   * 그런데 지금까지는 그걸로 실행 전체가 죽었다 — 아홉 회차를 돌리다
+   * 여섯 번째에 503 이 나면 앞의 다섯 회차까지 같이 버려졌다.
+   *
+   * 400 · 401 · 404 는 다시 불러도 똑같으므로 바로 포기한다.
+   */
+  async function withRetry(
+    call: () => Promise<RunResult | null>,
+    limit: number,
+    onWait: (attempt: number, seconds: number, error: string) => void,
+  ): Promise<RunResult | null> {
+    for (let attempt = 0; ; attempt += 1) {
+      const result = await call();
+      if (result === null || result.ok) return result;
+      if (attempt >= limit || !isTransient(result.error) || stopFlag.current) {
+        return result;
+      }
+      const seconds = waitFor(attempt);
+      onWait(attempt + 1, seconds, result.error ?? '');
+      await pause(seconds);
+      if (stopFlag.current) return result;
+    }
+  }
+
+  /**
    * 한 회차. **화면을 갱신할지는 부르는 쪽이 정한다.**
    *
    * 한 번만 돌릴 때는 걸음마다 로그와 입력을 화면에 적어 준다.
@@ -1416,7 +1458,17 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       const shape = shapeOf(stage);
 
       calls += 1;
-      const result = await callStage(stage, input);
+      const result = await withRetry(
+        () => callStage(stage, input),
+        autoLimits.retries,
+        (attempt, seconds, error) =>
+          add({
+            stage: at,
+            kind: 'retry',
+            text: `${seconds}초 뒤 다시 (${attempt}/${autoLimits.retries})`,
+            note: error.split('\n')[0],
+          }),
+      );
       if (result === null || !result.ok) {
         add({
           stage: at,
@@ -1518,12 +1570,20 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
       students += 1;
       calls += 1;
-      const said = await callStudent(
-        prompt,
-        studentInput(readTurns(input, stage.historyKey), pick.text),
+      const said = await withRetry(
+        () =>
+          callStudent(prompt, studentInput(readTurns(input, stage.historyKey), pick.text)),
+        autoLimits.retries,
+        (attempt, seconds, error) =>
+          add({
+            stage: at,
+            kind: 'retry',
+            text: `${seconds}초 뒤 다시 (${attempt}/${autoLimits.retries})`,
+            note: error.split('\n')[0],
+          }),
       );
-      if (!said.ok) {
-        add({ stage: at, kind: 'error', text: said.error ?? '학생 모델 호출 실패' });
+      if (said === null || !said.ok) {
+        add({ stage: at, kind: 'error', text: said?.error ?? '학생 모델 호출 실패' });
         reason = 'error';
         break;
       }
@@ -2492,6 +2552,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
             </p>
 
             <p className="text-[11px] text-neutral-500">
+              <b>503</b> 같은 일시적 오류는 <b>3 · 8 · 20 · 45초</b> 를 쉬며 다시
+              해 봅니다. 붐빌 때 바로 다시 부르면 더 붐빕니다. 반면{' '}
+              <b>400 · 401 · 404</b> 는 다시 불러도 똑같으므로 바로 멈춥니다 —
+              기다리는 동안 원인만 늦게 압니다. 재시도를 0 으로 두면 안 합니다.
+            </p>
+
+            <p className="text-[11px] text-neutral-500">
               단계를 실행하고, 학생에게 보일 말을 <b>학생 역할 모델</b>에 넘기고,
               그 답을 다시 단계에 넣습니다. 어디로 갈지는 각 단계의{' '}
               <b>[분기]</b> 표가 정합니다 — 거기서 <code>{STAY}</code> 와{' '}
@@ -2521,16 +2588,23 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   ['students', '학생 발화'],
                   ['moves', '단계 이동'],
                   ['calls', '호출'],
+                  ['retries', '재시도'],
                 ] as const
               ).map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2">
-                  <span className="shrink-0 text-neutral-500">{label} 상한</span>
+                  <span className="shrink-0 text-neutral-500">
+                    {label} {key === 'retries' ? '' : '상한'}
+                  </span>
                   <input
                     value={String(autoLimits[key])}
                     onChange={(event) =>
                       setAutoLimits((prev) => ({
                         ...prev,
-                        [key]: Math.max(1, Number(event.target.value) || 1),
+                        // 재시도는 0 이 "안 한다" 라서 아래를 열어 둔다.
+                        [key]:
+                          key === 'retries'
+                            ? Math.max(0, Number(event.target.value) || 0)
+                            : Math.max(1, Number(event.target.value) || 1),
                       }))
                     }
                     disabled={autoRunning}
