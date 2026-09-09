@@ -75,8 +75,12 @@ export type AutoStep = {
   text: string;
   /** 옮긴 이유, 검증 실패 같은 곁가지 */
   note?: string;
-  /** 이 줄이 만든 결과 원문. 접어 두었다가 펼쳐 본다 */
+  /** 이 줄이 만든 결과 원문 */
   raw?: string;
+  /** 그때 보낸 입력 JSON. 점검이 turn_limit 같은 값을 여기서 읽는다 */
+  input?: string;
+  /** 검증 실패 건수 */
+  failed?: number;
 };
 
 /**

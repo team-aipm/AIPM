@@ -47,6 +47,7 @@ import {
   type RouteRow,
   type Routing,
 } from '../_routing';
+import { auditRun, AUDIT_RULES, type Finding } from '../_audit';
 import {
   cleanStudentReply,
   DEFAULT_LIMITS,
@@ -570,6 +571,33 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   const [autoRunning, setAutoRunning] = useState(false);
   const [autoStop, setAutoStop] = useState<StopReason | null>(null);
   const stopFlag = useRef(false);
+
+  /**
+   * 실행 점검. 로그가 바뀔 때마다 다시 센다.
+   *
+   * 실행 중에도 쌓이는 대로 보여 준다. 스무 걸음을 다 기다린 뒤에야
+   * "3걸음째부터 같은 말을 하고 있었다" 를 알면 늦다.
+   */
+  const audit =
+    autoLog.length === 0
+      ? null
+      : auditRun(
+          autoLog,
+          stages.map((stage) => ({
+            name: stage.name,
+            turnCountKey: stage.turnCountKey,
+            limitKey: stage.limitKey,
+          })),
+        );
+
+  /** 규칙별로 묶는다. 같은 위반이 열 번 나오면 한 줄로 접어야 읽힌다 */
+  const byRule: { rule: (typeof AUDIT_RULES)[number]; hits: Finding[] }[] =
+    audit === null
+      ? []
+      : AUDIT_RULES.map((rule) => ({
+          rule,
+          hits: audit.findings.filter((found) => found.rule === rule.id),
+        })).filter((row) => row.hits.length > 0);
 
   /** 결과를 보낼 단계. null 이면 기본값(다음 단계, 마지막이면 처음) */
   const [sendTarget, setSendTarget] = useState<number | null>(null);
@@ -1380,6 +1408,10 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         text: pick.show ? pick.text : '(보여줄 말 없음)',
         note: failed.length > 0 ? `검증 실패 ${failed.length}건` : undefined,
         raw: result.raw,
+        // 점검이 나중에 읽는다. 보낸 뒤가 아니라 **보낸 그 입력**이어야
+        // turn_limit 과 student_turn_count 가 그 걸음의 값이 된다.
+        input,
+        failed: failed.length,
       });
 
       const withAi = appendAiTurn(
@@ -2423,6 +2455,53 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     {STOP_TEXT[autoStop]} 각 단계를 열면 마지막 입력과 결과가
                     그대로 남아 있습니다.
                   </p>
+                )}
+
+                {audit !== null && (
+                  <div className="flex flex-col gap-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                    <p className="text-neutral-500">
+                      걸음 {audit.steps} · 학생 발화 {audit.students} · 단계 이동{' '}
+                      {audit.moves} ·{' '}
+                      {byRule.length === 0 ? (
+                        <b className="text-emerald-700 dark:text-emerald-400">
+                          점검 통과
+                        </b>
+                      ) : (
+                        <b className="text-red-600 dark:text-red-400">
+                          {audit.findings.length}건
+                        </b>
+                      )}
+                    </p>
+
+                    {byRule.map(({ rule, hits }) => (
+                      <div key={rule.id} className="flex flex-wrap items-baseline gap-x-2">
+                        <span
+                          className={`shrink-0 ${
+                            rule.level === 'fail'
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-amber-700 dark:text-amber-500'
+                          }`}
+                        >
+                          {rule.level === 'fail' ? '✕' : '△'} {rule.label}
+                        </span>
+                        <span className="text-[11px] text-neutral-500">
+                          {rule.source} · {hits.length}건 ·{' '}
+                          {hits
+                            .slice(0, 4)
+                            .map((found) => `${found.step}걸음 ${found.detail}`)
+                            .join(' / ')}
+                          {hits.length > 4 && ` 외 ${hits.length - 4}건`}
+                        </span>
+                      </div>
+                    ))}
+
+                    <p className="text-[11px] text-neutral-500">
+                      <b>✕</b> 는 문서가 금지한 것, <b>△</b> 는 확인해 볼 것입니다.
+                      전부 코드로 판정합니다 — 모델에게 채점시키지 않습니다.
+                      되묻기가 좋았는지 같은 <b>품질</b>은 여기서 못 봅니다.
+                      로그를 읽으세요.
+                    </p>
+                  </div>
                 )}
               </div>
             )}
