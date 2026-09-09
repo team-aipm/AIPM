@@ -21,8 +21,8 @@
 
 import type { OutputMode, CheckRuleId } from '@/lib/ai/schema-check';
 
-import type { MapRow } from './_mapping';
-import type { Routing } from './_routing';
+import type { MapRow } from '@/lib/ai/pipeline/mapping';
+import type { Routing } from '@/lib/ai/pipeline/routing';
 
 /**
  * 견줄 수 있는 만큼.
