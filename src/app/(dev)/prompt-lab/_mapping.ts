@@ -381,3 +381,64 @@ export function resetWritten(
   }
   return JSON.stringify(next, null, 2);
 }
+
+/**
+ * **단계 안에서 이어질 값.**
+ *
+ * `AIPM_MAPS` 는 단계를 옮길 때 쓰고, 이건 **같은 단계에서 다음 턴**
+ * 으로 넘길 때 쓴다.
+ *
+ * 지금까지는 규칙이 하나뿐이었다 — "출력의 최상위 키 중 입력에도 같은
+ * 이름이 있으면 덮는다". 그런데 v3.0 은 출력을 `mode_phase` ·
+ * `problem_state` 로 내고 입력은 `payload.mode_phase` ·
+ * `payload.problem` 으로 받는다. **이름이 하나도 안 맞아 아무것도
+ * 안 넘어갔다.**
+ *
+ * MODE B 가 특히 망가졌다. AI 가 만든 의도적 오답(`ai_wrong_answer`)
+ * 이 다음 턴에 사라지고 `mode_phase` 도 안 넘어가서, RECOGNIZE →
+ * PREPARE → INTERACT 로 가지 못하고 매번 처음처럼 굴었다. 그래서
+ * "문제를 누가 내는지만 다르지 MODE A 와 같다" 가 됐다.
+ */
+export const AIPM_CARRY: Record<string, MapRow[]> = {
+  '02 MODE A': [
+    { source: 'output', from: 'mode_phase', to: 'payload.mode_phase' },
+    { source: 'output', from: 'problem_state', to: 'payload.problem' },
+    {
+      source: 'output',
+      from: 'interaction_update.support_level',
+      to: 'payload.interaction.support_level',
+    },
+  ],
+  '03 MODE B': [
+    { source: 'output', from: 'mode_phase', to: 'payload.mode_phase' },
+    // 인식 결과와 확인 상태. 이게 안 넘어가면 PREPARE 로 못 간다.
+    {
+      source: 'output',
+      from: 'source_problem_update.recognized_problem',
+      to: 'payload.source_problem.recognized_problem',
+    },
+    {
+      source: 'output',
+      from: 'source_problem_update.recognition_status',
+      to: 'payload.source_problem.recognition_status',
+    },
+    // 검증된 정답과 **의도적 오답**. MODE B 의 핵심이다.
+    { source: 'output', from: 'problem_state', to: 'payload.problem' },
+    {
+      source: 'output',
+      from: 'interaction_update.support_level',
+      to: 'payload.interaction.support_level',
+    },
+  ],
+  '04 HINT': [
+    {
+      source: 'output',
+      from: 'interaction_update.support_level',
+      to: 'payload.interaction.support_level',
+    },
+  ],
+};
+
+export function defaultCarry(name: string): MapRow[] {
+  return (AIPM_CARRY[name] ?? []).map((row) => ({ ...row }));
+}
