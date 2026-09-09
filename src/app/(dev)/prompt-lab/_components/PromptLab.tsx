@@ -3453,13 +3453,29 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
               <div className="flex flex-col gap-2 rounded border border-amber-400 p-3 dark:border-amber-600">
                 <p>
                   <b className="text-amber-700 dark:text-amber-500">
-                    프리셋과 다른 곳이 {drift.diffs.length}군데 있습니다.
-                  </b>{' '}
-                  <span className="text-[11px] text-neutral-500">
-                    직접 고치신 것일 수도, 저장본이 프리셋보다 오래된 것일 수도
-                    있습니다. 받아오면 <b>그 묶음만</b> 프리셋 값으로 바뀝니다.
-                  </span>
+                    이 단계의 설정 {drift.diffs.length}군데가 프리셋과 다릅니다.
+                  </b>
                 </p>
+
+                {/* "프리셋" 이 무슨 값인지 모르면 이 알림이 무슨 말인지
+                    알 수 없다. 값이 두 벌이라는 것부터 말해 준다. */}
+                <div className="text-[11px] text-neutral-500">
+                  <p>
+                    <b>프리셋</b>은 코드에 들어 있는 기본값입니다. 배포할 때마다
+                    갱신됩니다. 화면은 <b>브라우저에 저장된 내 설정</b>을 읽으므로,
+                    프리셋이 갱신돼도 자동으로 따라가지 않습니다 — 고쳐 두신 값을
+                    말없이 덮으면 안 되기 때문입니다.
+                  </p>
+                  <p className="pt-1">
+                    갈라지는 이유는 둘뿐입니다.{' '}
+                    <b>① 직접 고치셨다</b> → 그대로 두세요.{' '}
+                    <b>② 프리셋이 갱신됐다</b> → 받아오셔야 새 것이 적용됩니다.
+                  </p>
+                  <p className="pt-1">
+                    <b>[받아오기]</b> 는 그 묶음만 프리셋 값으로 덮어씁니다. 다른
+                    묶음 · 대화 · 모델 설정은 건드리지 않습니다.
+                  </p>
+                </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   {drift.diffs.map(({ group, fields }) => (
@@ -3484,11 +3500,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       title={`받아올 칸: ${fields.join(' · ')}`}
                     >
                       {group.label} 받아오기
-                      {fields.length > 1 && (
-                        <span className="ml-1 text-[11px] text-neutral-500">
-                          {fields.length}칸
-                        </span>
-                      )}
+                      <span className="ml-1 text-[11px] text-neutral-500">
+                        {fields.length > 2 ? `${fields.length}칸` : fields.join(' · ')}
+                      </span>
                     </button>
                   ))}
                   <button
