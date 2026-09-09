@@ -1,6 +1,6 @@
 # COM-002 · 공통 데이터 구조 정의서 --- 개발용
 
-> **Version:** 1.2 · **Updated:** 2026-09-09 · **Owner:** (미지정)\
+> **Version:** 1.3 · **Updated:** 2026-09-09 · **Owner:** (미지정)\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -196,7 +196,8 @@ Rules: - 하루 기본 목표는 10문제. - 학생 중간 종료 가능. - 다�
 `difficulty`: 1\~5. 3 = 학년 중간 난이도.
 
 Rules: - `verified_answer`는 학습 시작 전에 검증되어야 한다. - 검증 실패
-문제는 평가 학습에 사용하지 않는다. - 사진 입력은 학생 확인 후
+문제는 평가 학습에 사용하지 않는다. - 문제 진행 중에는 학생에게 노출하지
+않으며, 종료 시점에만 정답 안내로 사용한다(§17, COM-001 §8). - 사진 입력은 학생 확인 후
 `problem_text`를 확정한다. - `answer_lock_status`가 `invalid_problem`이면
 `problem_status`를 `verification_failed`로 둔다. - 세 값의 판정 기준은
 `prompts/logic-auditor.md`의 Prompt 02에서
@@ -444,8 +445,11 @@ Rules: - 학생용은 단순하고 긍정적인 학습 요약. - 학부모용은
 -   JSONB는 구조가 자주 변하거나 목록/요약에 적합한 데이터에 제한적으로
     사용한다.
 -   검색·관계·상태판단에 자주 쓰는 값은 별도 컬럼으로 둔다.
--   `verified_answer`와 Answer Lock 데이터는 학생에게 직접 노출하지
-    않는다.
+-   `verified_answer`는 **문제가 진행 중인 동안** 학생에게 노출하지
+    않는다. 문제를 종료할 때는 정답과 해설로 보여준다.
+    (COM-001 §8 종료 안내)
+-   Answer Lock 데이터(`answer_lock_status` 등)는 어느 시점에도 학생에게
+    노출하지 않는다. 검증 상태는 내부 값이다.
 -   시스템 오류 데이터는 학습능력 평가에 섞지 않는다.
 
 ## 18. 삭제 및 보관
@@ -507,6 +511,7 @@ COM-002의 논리 구조는 확정하되, 실제 구현 전에 다음은 별도 
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.3 | 2026-09-09 | §17 `verified_answer` 노출 금지를 **"문제가 진행 중인 동안"** 으로 한정. 종료 시점에는 정답·해설로 보여준다(COM-001 §8 종료 안내). Answer Lock 데이터는 시점과 무관하게 계속 비노출 — 검증 상태는 내부 값이다. §8 Rules에도 같은 단서 추가 | — |
 | 1.0 | 2026-08-28 | `docs/` 이관 및 문서 헤더 도입. **본문 변경 없음** | — |
 | 1.2 | 2026-09-09 | §8 `initial_accuracy` Required {YES} → `NO`. 관찰하지 못한 최초 정답을 `false`가 아닌 NULL 로 둔다 — MODE B 는 학생이 AI 오류를 찾는 구조라 "최초 정답"이 성립하지 않는 경우가 정상적으로 생긴다. `support_level` 최종값은 턴별 값의 최대값이며 서버가 계산한다는 규칙 추가. LOGIC AUDITOR 프롬프트 v3.0 과 맞춤 (Issue #28) | — |
 | 1.1 | 2026-09-01 | PM 전원 합의로 미정 값 5건 확정. §6에 `learning_mode`(`mode_a`/`mode_b`) · `answer_lock_status`(`locked`/`recheck`/`invalid_problem`) 값 목록과 `difficulty` 1\~5 추가. §8 점수 범위 0\~2 확정 및 예시값을 범위 안으로 수정(3·4 → 2·2·1·2), **`transfer_score`·`reflection_score`의 Required를 `YES` → `NO`** (Drill-down 조기 종료 시 `0`과 구분). §10 레벨 1\~5 명시, JSONB schema를 `prompts/logic-auditor.md` Prompt 05로 위임. §20에서 확정 3건 이관. **엔티티·필드·관계 변경 없음** | — |

@@ -55,7 +55,9 @@
 
 ### UI (`docs/COM-003`)
 - State/Modal을 별도 Route로 만들지 않는다
-- 학생 화면에 상세 평가점수 · Logic Gap · `verified_answer`를 노출하지 않는다
+- 학생 화면에 상세 평가점수 · Logic Gap · Answer Lock 데이터를 노출하지 않는다
+- `verified_answer`는 문제 진행 중에만 감춘다. 종료할 때는 정답과 해설을
+  보여준다 (COM-001 §8 · COM-002 §17)
 - 학생 화면에서 `needs_review`를 "실패"로, 힌트 사용을 감점으로 표현하지 않는다
 - 오류를 학생의 잘못처럼 표현하지 않는다
 
