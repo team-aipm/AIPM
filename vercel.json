@@ -4,6 +4,10 @@
     {
       "path": "/api/batch/photo-sweep",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/batch/weekly-report",
+      "schedule": "0 19 * * 0"
     }
   ]
 }
