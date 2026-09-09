@@ -14,7 +14,8 @@
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { getStudent } from '@/lib/services/student';
-import { findTodaySession, countCompleted } from '@/lib/services/learning-session';
+import { findTodaySession, countCompleted, today } from '@/lib/services/learning-session';
+import { findDailyReport, saveDailyReport } from '@/lib/services/learning-report';
 import { createProblem, findActiveProblem, finishProblem } from '@/lib/services/problem';
 import { appendMessage, listMessages } from '@/lib/services/message';
 import { EVENT, record } from '@/lib/analytics/events';
@@ -506,7 +507,20 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
   await record(supabase, correct ? EVENT.problemCompleted : EVENT.problemNeedsReview, who);
 
   const { sessionCompleted } = await countCompleted(supabase, session);
-  if (sessionCompleted) await record(supabase, EVENT.sessionCompleted, who);
+  if (sessionCompleted) {
+    await record(supabase, EVENT.sessionCompleted, who);
+    await summarizeDay(supabase, {
+      student: {
+        student_id: student.student_id,
+        grade: student.grade,
+        persona_type: student.persona_type,
+      },
+      session: {
+        session_id: session.session_id,
+        target_problem_count: session.target_problem_count,
+      },
+    });
+  }
 
   return {
     ok: true,
@@ -647,5 +661,93 @@ async function evaluateProblem(
     });
   } catch (error) {
     console.error(`[mission] 평가 저장 실패: ${String(error)}`);
+  }
+}
+
+// ============================================================
+// 06 DAILY ANALYZER · 하루를 마무리한다
+// ============================================================
+
+/**
+ * 오늘 몫을 다 채웠을 때 하루 총평을 만든다.
+ *
+ * **한 번만 만든다.** 화면을 열 때마다 부르면 새로고침마다 돈이 나가고,
+ * 같은 하루의 총평이 매번 다른 말로 바뀐다. `learning_report` 에 남기고
+ * 오늘의 기록 화면은 그걸 읽는다.
+ *
+ * 실패해도 던지지 않는다. 총평이 없으면 화면이 그 자리를 안 그릴 뿐이다.
+ */
+async function summarizeDay(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  args: {
+    student: { student_id: string; grade: number; persona_type: 'friend' | 'villain' };
+    session: { session_id: string; target_problem_count: number };
+  },
+): Promise<void> {
+  const date = today();
+
+  try {
+    const already = await findDailyReport(supabase, args.student.student_id, date);
+    if (already !== null) return;
+  } catch (error) {
+    console.error(`[mission] 06 중복 확인 실패: ${String(error)}`);
+    return;
+  }
+
+  // 오늘 푼 문제와 그 평가를 모은다. 06 은 이것만 보고 하루를 읽는다.
+  const { data: rows, error } = await supabase
+    .from('problem')
+    .select('problem_id, learning_mode, problem_status, evaluation(*)')
+    .eq('session_id', args.session.session_id);
+
+  if (error !== null) {
+    console.error(`[mission] 06 입력 수집 실패: ${error.message}`);
+    return;
+  }
+
+  const problems = rows ?? [];
+  const evaluations = problems
+    .map((row) => (Array.isArray(row.evaluation) ? row.evaluation[0] : row.evaluation))
+    .filter((item): item is NonNullable<typeof item> => item !== null && item !== undefined);
+
+  const stage = stageOf('06 DAILY ANALYZER');
+  let input: unknown = JSON.parse(stage.sampleInput);
+  input = write(input, 'student.student_id', args.student.student_id);
+  input = write(input, 'student.grade', args.student.grade);
+  input = write(input, 'session.session_id', args.session.session_id);
+  input = write(input, 'session.total_problems', args.session.target_problem_count);
+  input = write(input, 'payload.problem_evaluations', evaluations);
+  input = write(
+    input,
+    'payload.mode_status.mode_a_count',
+    problems.filter((row) => row.learning_mode === 'mode_a').length,
+  );
+  input = write(
+    input,
+    'payload.mode_status.mode_b_count',
+    problems.filter((row) => row.learning_mode === 'mode_b').length,
+  );
+
+  const result = await runStage(
+    '06 DAILY ANALYZER',
+    JSON.stringify(input, null, 2),
+    args.student.persona_type,
+  );
+  if (!result.ok) {
+    console.error(`[mission] 06 실패: ${result.error}`);
+    return;
+  }
+
+  try {
+    await saveDailyReport(supabase, {
+      studentId: args.student.student_id,
+      date,
+      summary: result.output,
+    });
+    // 이벤트는 남기지 않는다. COM-002 §14 의 16개에 하루 리포트에
+    // 해당하는 이름이 없다 — `weekly_report_generated` 를 갖다 쓰면
+    // 주간 리포트 수가 부풀려진다. 이름이 필요하면 문서를 먼저 고친다.
+  } catch (saveError) {
+    console.error(`[mission] 06 저장 실패: ${String(saveError)}`);
   }
 }
