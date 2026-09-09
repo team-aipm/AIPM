@@ -99,6 +99,8 @@ import {
 import {
   appendAiTurn,
   appendUserTurn,
+  DEFAULT_CHAT_SHAPE,
+  resetConversation,
   parseOutput,
   pickReply,
   readTurns,
@@ -200,6 +202,22 @@ const LOG_LABEL: Record<AutoStep['kind'], string> = {
   end: '끝',
   error: '오류',
 };
+
+/** 단계에서 대화 모양만 뽑는다 */
+function shapeOf(stage: Stage): ChatShape {
+  return {
+    historyKey: stage.historyKey,
+    studentTurn: stage.studentTurn,
+    studentField: stage.studentField,
+    aiTurn: stage.aiTurn,
+    aiField: stage.aiField,
+    latestKey: stage.latestKey,
+    turnCountKey: stage.turnCountKey,
+    remainingKey: stage.remainingKey,
+    limitKey: stage.limitKey,
+    resetKey: stage.resetKey,
+  };
+}
 
 /** 프리셋 한 줄을 화면 상태로 바꾼다. key는 React 전용이며 DOM에 넣지 않는다. */
 function toStage(base: StagePreset, key: string): Stage {
@@ -576,6 +594,14 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   /** 반복 실행 회차. 프로필마다 이만큼씩 돈다 */
   const [autoRepeat, setAutoRepeat] = useState(3);
   const [autoAll, setAutoAll] = useState(true);
+  /**
+   * 대화를 비우고 시작할지.
+   *
+   * 켜 두는 게 맞다. 손으로 대화하던 입력이나 앞 회차의 끝 상태에서
+   * 시작하면 모델이 예전 대화를 이어받는다. 끄는 건 "다섯 턴째부터
+   * 어떻게 되나" 를 일부러 볼 때다.
+   */
+  const [autoFresh, setAutoFresh] = useState(true);
   const [trials, setTrials] = useState<Trial[]>([]);
   /** 몇 번째를 돌고 있나. 반복 중에만 채운다 */
   const [autoAt, setAutoAt] = useState<string | null>(null);
@@ -919,18 +945,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     : [];
 
   /** 지금 단계의 대화 모양. 여러 곳에서 쓰므로 한 번만 만든다 */
-  const chatShape: ChatShape = {
-    historyKey: active?.historyKey ?? 'conversation',
-    studentTurn: active?.studentTurn ?? '',
-    studentField: active?.studentField ?? '',
-    aiTurn: active?.aiTurn ?? '',
-    aiField: active?.aiField ?? '',
-    latestKey: active?.latestKey ?? '',
-    turnCountKey: active?.turnCountKey ?? '',
-    remainingKey: active?.remainingKey ?? '',
-    limitKey: active?.limitKey ?? '',
-    resetKey: active?.resetKey ?? '',
-  };
+  const chatShape: ChatShape = active === undefined ? DEFAULT_CHAT_SHAPE : shapeOf(active);
 
   /** 지금 단계가 실제로 쓸 모델 설정. 공통을 따를 수도, 직접 정했을 수도 */
   const eff = active ? effective(active, common) : common;
@@ -1374,6 +1389,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     const names = stages.map((stage) => stage.name);
     let at = Math.min(Math.max(0, autoStart), stages.length - 1);
     let input = stages[at].threads[stages[at].activeThread]?.input ?? '';
+    if (autoFresh) input = resetConversation(input, shapeOf(stages[at]));
     let n = 0;
     let students = 0;
     let moves = 0;
@@ -1398,18 +1414,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       }
 
       const stage = stages[at];
-      const shape: ChatShape = {
-        historyKey: stage.historyKey,
-        studentTurn: stage.studentTurn,
-        studentField: stage.studentField,
-        aiTurn: stage.aiTurn,
-        aiField: stage.aiField,
-        latestKey: stage.latestKey,
-        turnCountKey: stage.turnCountKey,
-        remainingKey: stage.remainingKey,
-        limitKey: stage.limitKey,
-        resetKey: stage.resetKey,
-      };
+      const shape = shapeOf(stage);
 
       calls += 1;
       const result = await callStage(stage, input);
@@ -1481,12 +1486,16 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
         const target = stages[next];
         const targetInput = target.threads[target.activeThread]?.input ?? '{}';
-        const carried =
-          applyMapping(stage.mapping, parsed, input, targetInput) ??
-          (bridge(stage.checkRule, parsed, input, targetInput) === null
-            ? null
-            : { json: bridge(stage.checkRule, parsed, input, targetInput) as string });
-        input = carried?.json ?? mergeOutput(targetInput, parsed) ?? result.raw;
+        // 받는 쪽 입력에 남아 있던 대화도 지운다. 옮겨온 대화가 그
+        // 위에 얹히면 두 번 나온다.
+        const cleanTarget = autoFresh
+          ? resetConversation(targetInput, shapeOf(target))
+          : targetInput;
+        input =
+          applyMapping(stage.mapping, parsed, input, cleanTarget)?.json ??
+          bridge(stage.checkRule, parsed, input, cleanTarget) ??
+          mergeOutput(cleanTarget, parsed) ??
+          result.raw;
 
         add({ stage: next, kind: 'move', text: `${names[at]} → ${to}`, note: matched?.note });
         at = next;
@@ -2439,6 +2448,14 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         >
           <div className="flex flex-col gap-3 p-3">
             <p className="text-[11px] text-neutral-500">
+              <b>대화 비우고 시작</b>이 켜져 있으면 시작 단계와 옮겨 갈 단계의
+              대화를 지우고 돕니다. 끄면 지금 입력에 쌓인 대화를 이어받습니다 —
+              &ldquo;다섯 턴째부터 어떻게 되나&rdquo; 를 일부러 볼 때만 끄세요.{' '}
+              <code>student_id</code> · <code>grade</code> ·{' '}
+              <code>turn_limit</code> 같은 설정은 어느 쪽이든 그대로 둡니다.
+            </p>
+
+            <p className="text-[11px] text-neutral-500">
               단계를 실행하고, 학생에게 보일 말을 <b>학생 역할 모델</b>에 넘기고,
               그 답을 다시 단계에 넣습니다. 어디로 갈지는 각 단계의{' '}
               <b>[분기]</b> 표가 정합니다 — 거기서 <code>{STAY}</code> 와{' '}
@@ -2523,6 +2540,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     />
                   </label>
                   <Toggle checked={autoAll} onChange={setAutoAll} label="학생 전부" />
+                  <Toggle
+                    checked={autoFresh}
+                    onChange={setAutoFresh}
+                    label="대화 비우고 시작"
+                  />
                 </>
               )}
             </div>
