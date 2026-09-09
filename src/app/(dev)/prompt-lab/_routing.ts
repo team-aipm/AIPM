@@ -21,6 +21,7 @@
  * 옮겨도 따라간다.
  */
 
+import { FINISH, STAY } from './_autorun';
 import { getPath, parsePath, preview } from './_paths';
 
 export type RouteRow = {
@@ -160,11 +161,19 @@ function asText(value: unknown): string {
  * 결과가 아니라 서버가 세는 값이라 여기서 읽을 수 없다.
  */
 export const AIPM_ROUTES: Record<string, Routing> = {
+  // recommended_mode 는 AI 의 **추천**이다. 그걸 보고 옮기면 학생이
+  // 고를 기회가 없다 — 01 이 WAIT_MODE_SELECTION 을 내는데 도구가 안
+  // 기다리고 넘어가 버렸다. 추천은 대개 A 라 늘 A 로만 돌았다.
+  //
+  // next_module 은 01 이 "다음에 무엇을 할지" 하나로 말해 주는 값이다.
   '01 SESSION HOST': {
-    from: 'recommended_mode',
+    from: 'next_module',
     rows: [
-      { equals: 'A', to: '02 MODE A' },
-      { equals: 'B', to: '03 MODE B' },
+      { equals: 'MODE_A', to: '02 MODE A' },
+      { equals: 'MODE_B', to: '03 MODE B' },
+      { equals: 'END', to: FINISH },
+      // SESSION_HOST — 아직 안 골랐다. 학생이 말할 차례다.
+      { equals: '', to: STAY },
     ],
   },
   // 자동 실행이 어디서 멈출지를 정한다. 손으로 누를 때는 (계속)·(끝)이
@@ -183,9 +192,12 @@ export const AIPM_ROUTES: Record<string, Routing> = {
       { equals: '', to: '05 EVALUATOR' },
     ],
   },
+  // 평가가 끝나면 01 로 돌아간다. COM-001 §5 "첫 문제 완료 후 AI가
+  // 자연스럽게 다음 행동을 제안한다" 가 거기서 일어난다. 한 문제만
+  // 돌고 끝내면 MODE B 를 한 번도 안 지난다.
   '05 EVALUATOR': {
     from: 'module',
-    rows: [{ equals: '', to: '(끝)' }],
+    rows: [{ equals: '', to: '01 SESSION HOST' }],
   },
 };
 

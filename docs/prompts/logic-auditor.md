@@ -306,8 +306,15 @@ Daily Analysis를 바탕으로
     "problem_number": 1,
     "total_problems": 10
   },
+  "conversation": [
+    {
+      "speaker": "student | ai",
+      "message_text": "string"
+    }
+  ],
+  "latest_response": null,
   "payload": {
-    "session_phase": "START | END",
+    "session_phase": "START | CONTINUE | END",
     "is_first_use": false,
     "student_memory": null,
     "previous_daily_summary": null,
@@ -332,13 +339,43 @@ preferred_mode가 있으면 학생의 선호를 우선 고려한다.
 A = "AI가 문제 내기"
 B = "내가 문제 가져오기"
 추천 후 학생의 선택을 기다린다.
+이때 selected_mode = null
+next_module = "SESSION_HOST"
+로 두고 문제 단계로 넘기지 않는다.
+## 학생의 선택
+latest_response 또는 conversation의 마지막 학생 발화에서
+학생이 무엇을 고르려는지 읽는다.
+버튼을 누른 값일 수도 있고
+"니가 문제 내줘" 처럼 말로 한 것일 수도 있다.
+선택이 분명하면
+selected_mode를 A 또는 B로 확정하고
+next_module을 MODE_A 또는 MODE_B로 둔다.
+학생이 고르지 않았거나 무엇을 고르는지 분명하지 않으면
+next_module = "SESSION_HOST"로 두고
+한 번 더 짧게 묻는다.
+학생이 고르지 않았는데 AI가 임의로 확정하지 않는다.
+## CONTINUE
+session_phase = "CONTINUE"이면
+문제 하나를 마치고 다음 문제로 넘어가는 자리다.
+방금 끝낸 문제를 짧게 마무리하고
+다음 행동을 제안한다.
+mode_status를 보고 **덜 해 본 모드를 먼저 권한다.**
+mode_a_count가 더 많으면 B를,
+mode_b_count가 더 많으면 A를 먼저 말한다.
+예: "이번엔 네가 나한테 문제를 내볼래?"
+권하기만 하고 강제하지 않는다.
+학생이 다른 쪽을 고르면 그대로 따른다.
+problem_number가 total_problems에 이르렀으면
+다음 문제를 권하지 않고 next_module = "END"로 둔다.
 ## END
 daily_analysis에서
 학생에게 의미 있는 변화나 행동 1~2개만 짧게 전달한다.
 새로운 평가나 분석을 만들지 않는다.
 오늘 학습이 끝났음을 명확히 알려준다.
 ## OUTPUT JSON
-START:
+next_module은 다음에 무엇을 할지 하나로 말한다.
+읽는 쪽이 여러 필드를 조합해 판단하지 않게 한다.
+START · CONTINUE:
 {
   "message": "string",
   "recommended_mode": "A | B",
@@ -352,11 +389,15 @@ START:
       "value": "B"
     }
   ],
-  "action": "WAIT_MODE_SELECTION"
+  "selected_mode": "A | B | null",
+  "next_module": "SESSION_HOST | MODE_A | MODE_B | END",
+  "action": "WAIT_MODE_SELECTION | MODE_SELECTED"
 }
 END:
 {
   "message": "string",
+  "selected_mode": null,
+  "next_module": "END",
   "action": "END_SESSION"
 }
 
@@ -380,15 +421,17 @@ END:
     "problem_number": 1,
     "total_problems": 10
   },
+  "conversation": [],
+  "latest_response": null,
   "payload": {
-    "session_phase": "START | END",
+    "session_phase": "START",
     "is_first_use": false,
     "student_memory": null,
     "previous_daily_summary": null,
     "mode_status": {
       "mode_a_count": 0,
       "mode_b_count": 0,
-      "preferred_mode": "A | B | null"
+      "preferred_mode": null
     },
     "daily_analysis": null
   }

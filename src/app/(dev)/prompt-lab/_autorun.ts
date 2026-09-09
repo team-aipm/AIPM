@@ -43,6 +43,7 @@ export type StopReason =
   | 'student-limit'
   | 'move-limit'
   | 'call-limit'
+  | 'lap-limit'
   | 'stopped'
   | 'error';
 
@@ -50,6 +51,7 @@ export const STOP_TEXT: Record<StopReason, string> = {
   finished: '분기 규칙이 (끝)에 닿아 마쳤습니다.',
   'student-limit': '학생 발화 상한에 걸려 멈췄습니다. 종료 분기가 없는지 보세요.',
   'move-limit': '단계 이동 상한에 걸려 멈췄습니다. 분기가 돌고 있는지 보세요.',
+  'lap-limit': '정해 둔 바퀴를 다 돌고 마쳤습니다.',
   'call-limit': '호출 상한에 걸려 멈췄습니다.',
   stopped: '중지했습니다.',
   error: '오류로 멈췄습니다.',
@@ -64,6 +66,14 @@ export type AutoLimits = {
   calls: number;
   /** 일시적 오류일 때 다시 부를 횟수 */
   retries: number;
+  /**
+   * 몇 바퀴 돌지. **시작 단계로 돌아오면 한 바퀴다.**
+   *
+   * AIPM 에서는 01 → 02/03 → 05 → 01 이 한 문제다. 한 바퀴만 돌면
+   * MODE B 를 한 번도 안 지난다. 두 바퀴면 01 이 "이번엔 네가
+   * 내볼래?" 를 권할 자리가 생긴다.
+   */
+  laps: number;
 };
 
 export const DEFAULT_LIMITS: AutoLimits = {
@@ -71,6 +81,7 @@ export const DEFAULT_LIMITS: AutoLimits = {
   moves: 12,
   calls: 60,
   retries: 3,
+  laps: 2,
 };
 
 /** 실행 기록 한 줄 */
