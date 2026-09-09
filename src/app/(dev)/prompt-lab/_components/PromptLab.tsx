@@ -1032,6 +1032,66 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   }
 
   /**
+   * 모든 단계에서 정의 안 된 변수.
+   *
+   * 맨 위 알림에 쓴다. 지금 보는 단계만 보면, 02 를 보는 동안 01 의
+   * `{{persona_block}}` 이 비어 있는 걸 알 수 없다.
+   */
+  const allMissingVars = undefinedRefs(
+    [commonPrompt, ...stages.flatMap((stage) => [stage.prompt, ...stage.threads.map((t) => t.input)])],
+    vars,
+  );
+
+  /**
+   * **모든** 단계의 차이. 단계마다 찾아 누르게 하면 못 찾는다.
+   *
+   * 세 번을 알려 드렸는데 세 번 다 안 눌렸다. 알림이 지금 보고 있는
+   * 단계에만 뜨니, 02 를 보는 동안 01 · 05 가 낡은 걸 알 방법이 없다.
+   */
+  const allDrift = stages
+    .map((stage, index) => {
+      const found = preset.find((item) => item.name === stage.name);
+      if (found === undefined) return null;
+      const base: Comparable = {
+        ...pickComparable(found),
+        routing: defaultRouting(found.name),
+        mapping: defaultMapping(found.name),
+      };
+      const mine: Comparable = {
+        ...pickComparable(stage),
+        routing: stage.routing,
+        mapping: stage.mapping,
+      };
+      const diffs = diffAgainst(mine, base);
+      return diffs.length === 0 ? null : { index, stage, mine, base, diffs };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  /** 한 번에 전부 프리셋으로 되돌린다. 프롬프트까지 바뀐다 */
+  function pullEverything() {
+    const names = allDrift.map((item) => item.stage.name).join(' · ');
+    if (
+      !window.confirm(
+        `${allDrift.length}개 단계를 프리셋 값으로 받아옵니다.\n${names}\n\n` +
+          '고쳐 두신 프롬프트도 함께 바뀝니다.\n' +
+          '대화 · 모델 설정 · 변수는 건드리지 않습니다.\n\n계속할까요?',
+      )
+    ) {
+      return;
+    }
+    setStages((prev) =>
+      prev.map((stage, index) => {
+        const found = allDrift.find((item) => item.index === index);
+        if (found === undefined) return stage;
+        return {
+          ...stage,
+          ...pull(found.mine, found.base, found.diffs.map(({ group }) => group.id)),
+        };
+      }),
+    );
+  }
+
+  /**
    * 이 단계가 프리셋과 다른 곳.
    *
    * 저장본이 프리셋보다 오래됐는지 보라고 만든 것이다. 손으로 고친
@@ -3442,6 +3502,51 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           + 단계 추가
         </button>
       </nav>
+
+      {(allDrift.length > 0 || allMissingVars.length > 0) && (
+        <div className="mb-4 flex flex-col gap-2 rounded border border-amber-400 p-3 dark:border-amber-600">
+          {allDrift.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <b className="text-amber-700 dark:text-amber-500">
+                {allDrift.length}개 단계가 프리셋과 다릅니다
+              </b>
+              <span className="text-[11px] text-neutral-500">
+                {allDrift.map((item) => item.stage.name).join(' · ')}
+              </span>
+              <button
+                onClick={pullEverything}
+                className="rounded border border-amber-400 px-2 py-1 dark:border-amber-600"
+              >
+                모두 프리셋으로 받아오기
+              </button>
+              <span className="text-[11px] text-neutral-500">
+                직접 고치신 곳이 있으면 단계마다 묶음별로 고르세요
+              </span>
+            </div>
+          )}
+
+          {allMissingVars.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <b className="text-amber-700 dark:text-amber-500">
+                정의 안 된 변수 {allMissingVars.length}개
+              </b>
+              <span className="text-[11px]">
+                {allMissingVars.map((name) => `{{${name}}}`).join(' ')}
+              </span>
+              <button
+                onClick={() => setPanel('vars')}
+                className="rounded border border-amber-400 px-2 py-1 dark:border-amber-600"
+              >
+                변수 열기
+              </button>
+              <span className="text-[11px] text-neutral-500">
+                프롬프트에 그대로 남아 모델에게 갑니다. 페르소나가 안 먹는 것이
+                대개 이것입니다
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {active && thread && (
         <div className="flex flex-col gap-4">
