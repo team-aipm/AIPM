@@ -31,7 +31,7 @@
 | `COM-004-ai-coding-rules.md` | 바이브코딩 작업 규칙 | **초안 (작성 필요)** |
 | `COM-005-development-environment.md` | 기술 스택, 브랜치, 환경변수, 배포 | 확정 |
 | `COM-006` | (예약 · 용도 미확인) | — |
-| `COM-007-privacy-child-data.md` | 개인정보 · 아동 데이터 정책 | **초안 (작성 필요)** |
+| `COM-007-privacy-child-data.md` | 개인정보 · 아동 데이터 정책 | **검토 대기 (본문 작성 완료)** |
 | `DEV-001-folder-structure.md` | 폴더 세부 구조, PM 소유 경로, 명명 규칙 | 확정 |
 | `DEV-002-routes.md` | Screen ID ↔ Route 매핑 | 확정 |
 | `DEV-003-infra-setup.md` | GitHub · Vercel · Supabase 설정과 연동 절차 | 확정 |
@@ -113,8 +113,8 @@ COM  >  DEV
 | 항목 | 막고 있는 것 | 선행 |
 |---|---|---|
 | COM-004 미작성 | 개발 착수 | — (바로 작성 가능) |
-| COM-007 미작성 | 학생 삭제 · 탈퇴 · 사진 보관 구현 | — (바로 작성 가능) |
-| ADM(운영/백오피스) 영역 | 운영 PM의 담당 화면 | COM-007 → COM-002 → COM-003 |
+| COM-007 확정 | 사진 업로드 · Gemini 약관 확인 · 법률 검토 2건 | COM-007 §12 |
+| ADM(운영/백오피스) 영역 | 운영자 화면 | COM-002 변경 3건 (COM-007 §13) → COM-003 |
 | COM-006 용도 | 문서 번호 체계 | 팀 확인 |
 | 결제 PG사 | BIL-003 결제 진행 | COM-005 §13 |
 
