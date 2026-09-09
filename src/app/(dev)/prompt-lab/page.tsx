@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { hasGeminiApiKey } from '@/lib/gemini/client';
 import { AIPM_PRESET } from '@/lib/ai/prompts/stages';
+import { VAR_SET_PRESET } from '@/lib/ai/prompts/variables';
 import { allowServerApiKey, isConfigured, isUnlocked } from './_access';
 import { Gate } from './_components/Gate';
 import { PromptLab } from './_components/PromptLab';
@@ -41,6 +42,7 @@ export default async function PromptLabPage() {
   return (
     <PromptLab
       preset={AIPM_PRESET}
+      varPreset={VAR_SET_PRESET}
       hasEnvApiKey={allowServerApiKey() && hasGeminiApiKey()}
     />
   );
