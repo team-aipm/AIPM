@@ -709,6 +709,25 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    *
    * `단계 초기화` 로 되돌릴 수는 있지만 그건 프롬프트까지 날린다.
    */
+  /**
+   * 프리셋과 다른 학생 프로필.
+   *
+   * 프로필도 저장본이 프리셋을 덮는다. 프로필을 고칠 때마다 같은 일이
+   * 반복된다 — 학생이 늘 A 만 조르던 줄을 고쳐도 저장해 두신 분에게는
+   * 안 갔다.
+   *
+   * 세트와 달리 **글이 다른 것도** 짚는다. 이름은 같은데 안에 옛 글이
+   * 들어 있는 경우가 실제로 문제였다.
+   */
+  const profileDrift = {
+    added: PROFILE_PRESET.filter(
+      (item) => !profiles.some((mine) => mine.name === item.name),
+    ),
+    changed: PROFILE_PRESET.filter((item) =>
+      profiles.some((mine) => mine.name === item.name && mine.prompt !== item.prompt),
+    ),
+  };
+
   const missingSets = varPreset.filter(
     (item) => !varSets.some((mine) => mine.name === item.name),
   );
@@ -2974,6 +2993,45 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     onChange={setAutoFresh}
                     label="대화 비우고 시작"
                   />
+                  {profileDrift.added.length + profileDrift.changed.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const lines = [
+                          profileDrift.added.length > 0 &&
+                            `새로 추가: ${profileDrift.added.map((p) => p.name).join(' · ')}`,
+                          profileDrift.changed.length > 0 &&
+                            `프리셋으로 되돌림: ${profileDrift.changed
+                              .map((p) => p.name)
+                              .join(' · ')}`,
+                        ].filter((line): line is string => line !== false);
+                        if (
+                          !window.confirm(
+                            `${lines.join('\n')}\n\n` +
+                              '되돌리는 프로필은 고쳐 두신 글이 함께 바뀝니다.\n' +
+                              '프리셋에 없는 프로필은 그대로 둡니다.\n\n계속할까요?',
+                          )
+                        ) {
+                          return;
+                        }
+                        setProfiles((prev) => [
+                          ...prev.map((mine) => {
+                            const found = PROFILE_PRESET.find((p) => p.name === mine.name);
+                            return found === undefined ? mine : { ...found };
+                          }),
+                          ...profileDrift.added.map((p) => ({ ...p })),
+                        ]);
+                      }}
+                      className="rounded border border-amber-400 px-2 py-1 dark:border-amber-600"
+                      title={[...profileDrift.added, ...profileDrift.changed]
+                        .map((p) => p.name)
+                        .join(' · ')}
+                    >
+                      프리셋 학생 받아오기 ·{' '}
+                      {profileDrift.added.length > 0 && `새로 ${profileDrift.added.length}`}
+                      {profileDrift.added.length > 0 && profileDrift.changed.length > 0 && ' · '}
+                      {profileDrift.changed.length > 0 && `되돌림 ${profileDrift.changed.length}`}
+                    </button>
+                  )}
                 </>
               )}
             </div>
