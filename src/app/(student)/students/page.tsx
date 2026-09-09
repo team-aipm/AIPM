@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { listStudents } from '@/lib/services/student';
 import { PARTNER_NAME } from '@/lib/constants/copy';
+import { PartnerFace } from '@/components/ui/PartnerFace';
 import { selectStudent } from './_actions';
 
 export const metadata = { title: '누구로 시작할까 · 메티' };
@@ -48,11 +49,8 @@ export default async function StudentsPage() {
                   type="submit"
                   className="flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-sm"
                 >
-                  <span
-                    aria-hidden
-                    className="flex h-12 w-12 items-center justify-center rounded-full bg-meti-bg text-xl"
-                  >
-                    🐣
+                  <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-meti-bg">
+                    <PartnerFace persona={student.persona_type} size={40} />
                   </span>
                   <span className="flex flex-col">
                     <span className="text-[15px] font-bold text-meti-ink">

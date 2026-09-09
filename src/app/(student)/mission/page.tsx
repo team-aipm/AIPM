@@ -15,6 +15,7 @@ import { findActiveProblem } from '@/lib/services/problem';
 import { listMessages } from '@/lib/services/message';
 import { PARTNER_NAME } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import { PartnerFace } from '@/components/ui/PartnerFace';
 import { MissionChat, type Initial } from './_components/MissionChat';
 
 export const metadata = { title: '미션 · 메티' };
@@ -64,11 +65,8 @@ export default async function MissionPage() {
         <Link href="/home" aria-label="홈으로" className="text-lg text-meti-sub">
           ‹
         </Link>
-        <span
-          aria-hidden
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-meti-bg text-lg"
-        >
-          🐣
+        <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-meti-bg">
+          <PartnerFace persona={student.persona_type} size={34} />
         </span>
         <div className="flex flex-col">
           <p className="text-[14px] font-bold text-meti-ink">{partner}</p>
@@ -78,7 +76,7 @@ export default async function MissionPage() {
         </div>
       </header>
 
-      <MissionChat partner={partner} initial={initial} />
+      <MissionChat partner={partner} persona={student.persona_type} initial={initial} />
     </div>
   );
 }

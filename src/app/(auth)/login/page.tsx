@@ -8,6 +8,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { PartnerFace } from '@/components/ui/PartnerFace';
 import { LoginForm } from './_components/LoginForm';
 
 export const metadata = { title: '로그인 · 메티' };
@@ -26,6 +27,7 @@ export default async function LoginPage() {
         <p className="text-[13px] font-semibold text-meti-sub">
           생각하는 힘을 키우는 학습 친구
         </p>
+        <PartnerFace persona="friend" size={128} className="mt-1" />
       </header>
 
       <p className="rounded-2xl bg-white px-4 py-3 text-center text-[14px] font-bold text-meti-ink shadow-sm">

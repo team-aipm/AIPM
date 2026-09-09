@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getStudent } from '@/lib/services/student';
 import { PARTNER_NAME } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import { PartnerFace } from '@/components/ui/PartnerFace';
 import { choosePersona } from './_actions';
 
 export const metadata = { title: '파트너 고르기 · 메티' };
@@ -22,13 +23,11 @@ export const metadata = { title: '파트너 고르기 · 메티' };
 const PARTNERS = [
   {
     value: 'friend' as const,
-    emoji: '🐣',
     tag: '생각 코치 · 되묻기 중심',
     line: '"왜 그렇게 생각했어? 네 말로 설명해줘!"',
   },
   {
     value: 'villain' as const,
-    emoji: '🦊',
     tag: '흔들기 라이벌 · 반박 중심',
     line: '"정말? 나는 다르게 봤는데. 확실해?"',
   },
@@ -65,11 +64,8 @@ export default async function PersonaPage() {
               type="submit"
               className="flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-sm"
             >
-              <span
-                aria-hidden
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-meti-bg text-2xl"
-              >
-                {partner.emoji}
+              <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-meti-bg">
+                <PartnerFace persona={partner.value} size={54} />
               </span>
               <span className="flex flex-col gap-1">
                 <span className="text-[15px] font-bold text-meti-ink">
