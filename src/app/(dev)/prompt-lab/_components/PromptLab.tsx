@@ -48,6 +48,11 @@ import {
   type Routing,
 } from '../_routing';
 import {
+  diffAgainst,
+  pull,
+  type Comparable,
+} from '../_preset-diff';
+import {
   lineChange,
   newRevision,
   toHistoryCsv,
@@ -211,6 +216,28 @@ const LOG_LABEL: Record<AutoStep['kind'], string> = {
   error: '오류',
   retry: '재시도',
 };
+
+/** 견줄 칸만 뽑는다. routing 은 프리셋 쪽 출처가 달라 부르는 쪽이 붙인다 */
+function pickComparable(from: Omit<Comparable, 'routing'>): Omit<Comparable, 'routing'> {
+  return {
+    prompt: from.prompt,
+    inputMode: from.inputMode,
+    outputMode: from.outputMode,
+    checkRule: from.checkRule,
+    historyKey: from.historyKey,
+    replyKey: from.replyKey,
+    recordKey: from.recordKey,
+    studentTurn: from.studentTurn,
+    studentField: from.studentField,
+    aiTurn: from.aiTurn,
+    aiField: from.aiField,
+    latestKey: from.latestKey,
+    turnCountKey: from.turnCountKey,
+    remainingKey: from.remainingKey,
+    limitKey: from.limitKey,
+    resetKey: from.resetKey,
+  };
+}
 
 /** 단계에서 대화 모양만 뽑는다 */
 function shapeOf(stage: Stage): ChatShape {
@@ -992,6 +1019,23 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     setHistory((prev) => [...prev, made]);
     setReasonDraft(null);
   }
+
+  /**
+   * 이 단계가 프리셋과 다른 곳.
+   *
+   * 저장본이 프리셋보다 오래됐는지 보라고 만든 것이다. 손으로 고친
+   * 것도 여기 잡히므로 "다르다" 가 곧 "낡았다" 는 아니다. 무엇이
+   * 다른지 보고 사람이 정한다.
+   */
+  const drift = ((): { diffs: ReturnType<typeof diffAgainst>; base: Comparable } | null => {
+    if (active === undefined) return null;
+    const found = preset.find((item) => item.name === active.name);
+    if (found === undefined) return null;
+    const base: Comparable = { ...pickComparable(found), routing: defaultRouting(found.name) };
+    const mine = pickComparable(active);
+    const diffs = diffAgainst({ ...mine, routing: active.routing }, base);
+    return diffs.length === 0 ? null : { diffs, base };
+  })();
 
   /** 지금 단계의 대화 모양. 여러 곳에서 쓰므로 한 번만 만든다 */
   const chatShape: ChatShape = active === undefined ? DEFAULT_CHAT_SHAPE : shapeOf(active);
@@ -3364,6 +3408,77 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
               접어야 대화와 결과가 화면에 들어온다. 넓게 쓸 수 있어서
               검증 규칙 표도 여기가 낫다. */}
           <section className="flex flex-col gap-3">
+            {drift !== null && (
+              <div className="flex flex-col gap-2 rounded border border-amber-400 p-3 dark:border-amber-600">
+                <p>
+                  <b className="text-amber-700 dark:text-amber-500">
+                    프리셋과 다른 곳이 {drift.diffs.length}군데 있습니다.
+                  </b>{' '}
+                  <span className="text-[11px] text-neutral-500">
+                    직접 고치신 것일 수도, 저장본이 프리셋보다 오래된 것일 수도
+                    있습니다. 받아오면 <b>그 묶음만</b> 프리셋 값으로 바뀝니다.
+                  </span>
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {drift.diffs.map(({ group, fields }) => (
+                    <button
+                      key={group.id}
+                      onClick={() => {
+                        if (active === undefined) return;
+                        patch(
+                          activeIndex,
+                          pull(
+                            { ...pickComparable(active), routing: active.routing },
+                            drift.base,
+                            [group.id],
+                          ),
+                        );
+                      }}
+                      className="rounded border border-amber-400 px-2 py-1 dark:border-amber-600"
+                      title={`받아올 칸: ${fields.join(' · ')}`}
+                    >
+                      {group.label} 받아오기
+                      {fields.length > 1 && (
+                        <span className="ml-1 text-[11px] text-neutral-500">
+                          {fields.length}칸
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => {
+                      if (active === undefined) return;
+                      if (
+                        !window.confirm(
+                          '프리셋과 다른 곳을 모두 프리셋 값으로 바꿉니다.\n' +
+                            '고쳐 두신 프롬프트도 함께 바뀝니다.\n\n계속할까요?',
+                        )
+                      ) {
+                        return;
+                      }
+                      patch(
+                        activeIndex,
+                        pull(
+                          { ...pickComparable(active), routing: active.routing },
+                          drift.base,
+                          drift.diffs.map(({ group }) => group.id),
+                        ),
+                      );
+                    }}
+                    className="rounded border border-dashed border-neutral-400 px-2 py-1 text-neutral-500 dark:border-neutral-600"
+                  >
+                    전부 받아오기
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  프롬프트를 받아오기 전에 <b>[변경 기록]</b> 으로 지금 것을 남겨
+                  두면 무엇이 어떻게 바뀌었는지 나중에 볼 수 있습니다.
+                </p>
+              </div>
+            )}
+
             <Panel
               title="단계 설정"
               accent={accent}
