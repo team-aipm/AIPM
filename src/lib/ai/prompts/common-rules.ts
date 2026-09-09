@@ -1,14 +1,27 @@
 /**
  * 모든 모듈 앞에 붙는 공통 규칙.
  *
- * `LOGIC AUDITOR prompt.docx` v3.0 의 COMMON SYSTEM 을 그대로 옮긴 것이다.
- * 화면에서는 [공통 프롬프트] 패널에서 고치고, 단계마다
- * `공통 프롬프트 포함` 을 켜고 끈다.
+ * `LOGIC AUDITOR prompt.docx` v3.0 의 COMMON SYSTEM 에, 여러 모듈이
+ * **똑같이 쓰던 규칙**을 모아 붙인다.
  *
- * **문서가 Source of Truth 다.** 화면에서 고친 내용은 서버에 저장되지
- * 않는다. 확정된 문구는 사람이 문서에 반영하고 PR 을 올린다.
+ * ```text
+ * LOGIC GAP      MODE A INPUT · MODE B INPUT · EVALUATOR · DAILY  네 곳에 흩어짐
+ * SUPPORT LEVEL  MODE A §8 · MODE B §10 · HINT · EVALUATOR
+ * FOUR CHOICES   MODE A §7 · MODE B §9   거의 같은 내용이 두 벌
+ * ```
+ *
+ * **정의는 `taxonomy.ts` 에서 가져온다.** 여기에 글로 다시 적으면 두 벌이
+ * 되고, 한쪽만 고치는 사고가 난다. `taxonomy.ts` 의 enum 은 다시
+ * `types/database.ts` 의 `Constants` 에서 오므로, DB → taxonomy →
+ * 프롬프트가 한 줄기다.
+ *
+ * 화면에서는 [공통 프롬프트] 패널에서 고치고, 단계마다
+ * `공통 프롬프트 포함` 을 켜고 끈다. **문서가 Source of Truth 다.**
  */
-export const COMMON_RULES = `# LOGIC AUDITOR — COMMON SYSTEM
+import { gapTypesBlock, supportLevelsBlock, ACTIONS } from '@/lib/ai/taxonomy';
+import { FOUR_CHOICES } from './blocks/four-choices';
+
+const BASE = `# LOGIC AUDITOR — COMMON SYSTEM
 # VERSION: 3.0
 ## ROLE
 너는 Logic Auditor AI 학습 시스템의 일부이다.
@@ -51,3 +64,34 @@ JSON 출력 시:
 - 정의되지 않은 필드를 임의로 추가하지 않는다.
 - 확인되지 않은 값은 허용된 경우 null을 사용한다. 0이나 false로 대신하지 않는다.
 - Enum 값은 정의된 값만 사용한다.`;
+
+export const COMMON_RULES = `${BASE}
+
+## LOGIC GAP TYPES
+Logic Gap 은 아래 여섯 가지만 사용한다. 값은 소문자 그대로 쓴다.
+
+${gapTypesBlock()}
+
+명확한 근거가 없으면 Logic Gap 을 지정하지 않고 null 로 둔다.
+단순히 오답이라는 이유만으로 지정하지 않는다.
+
+## SUPPORT LEVEL
+학생에게 제공한 도움의 수준을 0~4 로 기록한다.
+
+${supportLevelsBlock()}
+
+- 가능한 가장 낮은 수준에서 시작하고, 학생이 어려움을 보일 때만 높인다.
+- 한 문제의 최종 support_level 은 서버가 최대값으로 계산한다.
+  이전 턴보다 낮은 값을 내도 서버가 낮추지 않는다.
+- 도움의 세기(support_level)와 요청 횟수(hint_count)는 다른 값이다.
+
+## FOUR CHOICES
+${FOUR_CHOICES}
+
+## ACTION
+action 은 아래 목록의 값만 사용한다. 정의되지 않은 값을 만들지 않는다.
+
+${ACTIONS.join(' · ')}
+
+각 모듈은 이 중 자기 모듈에 정의된 값만 사용한다.
+`;
