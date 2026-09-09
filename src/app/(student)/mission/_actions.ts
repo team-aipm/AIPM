@@ -823,6 +823,10 @@ function buildModeBInput(args: {
   studentTexts: string[];
   supportLevel: number;
   latest: string | null;
+  /** 사진으로 가져왔는지. 기본은 글이다 */
+  inputType?: 'TEXT' | 'IMAGE';
+  /** 버킷 안의 경로. 사진일 때만 */
+  imageReference?: string | null;
 }): string {
   const stage = stageOf('03 MODE B');
   let input: unknown = JSON.parse(stage.sampleInput);
@@ -841,10 +845,9 @@ function buildModeBInput(args: {
   input = write(input, 'payload.learning_target.target_logic_gap', null);
   input = write(input, 'payload.learning_target.difficulty', 'SAME');
 
-  // 지금은 글로만 받는다. 사진은 Storage 와 함께 붙인다(COM-007 §4-3).
-  input = write(input, 'payload.source_problem.input_type', 'TEXT');
+  input = write(input, 'payload.source_problem.input_type', args.inputType ?? 'TEXT');
   input = write(input, 'payload.source_problem.raw_text', args.rawText);
-  input = write(input, 'payload.source_problem.image_reference', null);
+  input = write(input, 'payload.source_problem.image_reference', args.imageReference ?? null);
   input = write(
     input,
     'payload.source_problem.recognized_problem.problem_text',
@@ -968,6 +971,7 @@ export async function offerSourceProblem(text: string): Promise<SourceStep> {
 export async function confirmSourceProblem(
   recognized: string,
   reply: string,
+  fromPhoto = false,
 ): Promise<SourceStep> {
   const ctx = await context();
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
@@ -1015,7 +1019,7 @@ export async function confirmSourceProblem(
   const problem = await createProblem(supabase, {
     sessionId: session.session_id,
     studentId: student.student_id,
-    problemSource: 'text',
+    problemSource: fromPhoto ? 'photo' : 'text',
     problemText,
     concept: '미지정',
     difficulty: student.current_difficulty,
@@ -1050,5 +1054,120 @@ export async function confirmSourceProblem(
     problemText,
     message: shown,
     choices: readChoices(output),
+  };
+}
+
+// ============================================================
+// 사진으로 문제 가져오기 (MIS-003)
+// ============================================================
+
+/** 버킷 이름. 마이그레이션 20260910023000 이 만든다 */
+const PHOTO_BUCKET = 'problem-photos';
+
+/** 5MB. 버킷도 같은 값으로 막는다 — 한쪽만 막으면 다른 경로로 들어온다 */
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+
+const extOf = (mediaType: string): string =>
+  mediaType === 'image/png'
+    ? 'png'
+    : mediaType === 'image/webp'
+      ? 'webp'
+      : mediaType === 'image/heic'
+        ? 'heic'
+        : 'jpg';
+
+/**
+ * 사진을 올리고 문제를 읽는다 (03 RECOGNIZE · 사진).
+ *
+ * 사진은 **학습 자료**로 분류하지만 아무나 열어보게 두지 않는다
+ * (COM-007 §3-1). 비공개 버킷의 `<student_id>/` 아래에만 넣고, 정책이
+ * 자기 학생 폴더만 허용한다.
+ *
+ * **인식에 실패하면 그 자리에서 지운다**(§4-3). 남길 이유가 없다.
+ */
+export async function readPhotoProblem(formData: FormData): Promise<SourceStep> {
+  const file = formData.get('photo');
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, message: '사진을 못 받았어. 다시 골라줄래?' };
+  }
+  if (!PHOTO_TYPES.includes(file.type)) {
+    return { ok: false, message: '사진 파일만 올릴 수 있어.' };
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    return { ok: false, message: '사진이 너무 커. 조금 작게 찍어줄래?' };
+  }
+
+  const ctx = await context();
+  if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
+  const { supabase, student, session } = ctx;
+
+  const path = `${student.student_id}/${crypto.randomUUID()}.${extOf(file.type)}`;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+
+  const upload = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .upload(path, bytes, { contentType: file.type, upsert: false });
+
+  if (upload.error !== null) {
+    console.error(`[mission] 사진 저장 실패: ${upload.error.message}`);
+    return { ok: false, message: '사진을 저장하지 못했어. 다시 해볼래?' };
+  }
+
+  const input = buildModeBInput({
+    studentId: student.student_id,
+    grade: student.grade,
+    persona: student.persona_type,
+    sessionId: session.session_id,
+    problemNumber: session.completed_problem_count + 1,
+    totalProblems: session.target_problem_count,
+    phase: 'RECOGNIZE',
+    rawText: null,
+    recognized: null,
+    confirmed: false,
+    problem: null,
+    studentTexts: [],
+    supportLevel: 0,
+    latest: null,
+    inputType: 'IMAGE',
+    imageReference: path,
+  });
+
+  const result = await runStage('03 MODE B', input, student.persona_type, [
+    { mediaType: file.type, data: Buffer.from(bytes).toString('base64') },
+  ]);
+
+  const drop = async () => {
+    const { error } = await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+    if (error !== null) console.error(`[mission] 사진 삭제 실패: ${error.message}`);
+  };
+
+  if (!result.ok) {
+    console.error(`[mission] 03 RECOGNIZE(사진) 실패: ${result.error}`);
+    await drop();
+    return { ok: false, message: '사진을 읽다가 잠깐 멈췄어. 다시 찍어줄래?' };
+  }
+
+  const status = str(read(result.output, 'source_problem_update.recognition_status'));
+  const recognized = str(
+    read(result.output, 'source_problem_update.recognized_problem.problem_text'),
+  );
+  const message = str(read(result.output, 'ui.message'));
+
+  if (status === 'FAILED' || recognized === '') {
+    await drop();
+    return {
+      ok: false,
+      message: message === '' ? '사진이 잘 안 읽혔어. 다시 찍거나 직접 적어줄래?' : message,
+    };
+  }
+
+  return {
+    ok: true,
+    kind: 'confirm',
+    recognized,
+    message,
+    choices: readChoices(result.output),
   };
 }
