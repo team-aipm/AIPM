@@ -168,9 +168,9 @@ export function MissionChat({ partner, initial }: Props) {
   const inputBlocked = pending || finished || notYet || !freeText;
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {problemText !== null && (
-        <div className="border-b border-black/5 bg-white px-5 py-3">
+        <div className="shrink-0 border-b border-black/5 bg-white px-5 py-3 shadow-sm">
           <p className="text-[11px] font-bold text-meti-sub">오늘의 문제</p>
           <p className="mt-1 text-[14px] font-semibold leading-relaxed text-meti-ink">
             {problemText}
@@ -183,7 +183,7 @@ export function MissionChat({ partner, initial }: Props) {
         </div>
       )}
 
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-5">
         <p className="self-center rounded-full bg-white/70 px-3 py-1 text-[11px] font-semibold text-meti-sub">
           오늘 · 생각 대화 시작
         </p>

@@ -57,7 +57,9 @@ export default async function MissionPage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    // 높이를 화면에 못 박는다. min-h 로 두면 대화가 길어질 때 페이지
+    // 전체가 스크롤되고, 위에 붙여 둔 문제 카드가 위로 밀려 사라진다.
+    <div className="flex h-dvh flex-col">
       <header className="flex items-center gap-3 border-b border-black/5 bg-white px-4 py-3">
         <Link href="/home" aria-label="홈으로" className="text-lg text-meti-sub">
           ‹
