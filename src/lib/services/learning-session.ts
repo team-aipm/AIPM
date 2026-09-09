@@ -81,3 +81,30 @@ export async function hasEarlierSession(
   if (error !== null) return false;
   return data !== null;
 }
+
+/**
+ * 문제 하나를 마쳤다. 오늘 몫이 다 찼으면 세션도 닫는다.
+ *
+ * **집계에서 빠지는 문제는 세지 않는다** — `system_interrupted` 와
+ * `verification_failed` 는 학생이 못 푼 게 아니다(COM-001 §19). 부르는
+ * 쪽이 완료로 판단한 것만 여기로 온다.
+ */
+export async function countCompleted(
+  client: Client,
+  session: LearningSession,
+): Promise<{ done: number; sessionCompleted: boolean }> {
+  const done = session.completed_problem_count + 1;
+  const finished = done >= session.target_problem_count;
+
+  const { error } = await client
+    .from('learning_session')
+    .update({
+      completed_problem_count: done,
+      session_status: finished ? 'completed' : session.session_status,
+      ended_at: finished ? new Date().toISOString() : session.ended_at,
+    })
+    .eq('session_id', session.session_id);
+
+  if (error !== null) throw new Error(`진행을 저장하지 못했습니다: ${error.message}`);
+  return { done, sessionCompleted: finished };
+}

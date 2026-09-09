@@ -12,6 +12,7 @@
 import { callGemini } from '@/lib/gemini/client';
 import { COMMON_RULES } from '@/lib/ai/prompts/common-rules';
 import { AIPM_PRESET, type StagePreset } from '@/lib/ai/prompts/stages';
+import { personaBlock } from '@/lib/ai/prompts/variables';
 import { parseOutput } from '@/lib/ai/pipeline/chat';
 
 /**
@@ -58,13 +59,18 @@ export function stageOf(name: StageName): StagePreset {
 export async function runStage(
   name: StageName,
   inputJson: string,
+  persona: 'friend' | 'villain' = 'friend',
 ): Promise<RunResult> {
   const stage = stageOf(name);
+
+  // **치환을 빠뜨리면 모델이 `{{persona_block}}` 이라는 글자를 그대로 읽는다.**
+  // 말투 지시가 통째로 사라지는데 JSON 은 멀쩡히 나오므로 눈에 안 띈다.
+  const prompt = stage.prompt.replaceAll('{{persona_block}}', personaBlock(persona));
 
   const result = await callGemini({
     model: MODEL,
     // 공통 규칙이 앞에 온다. 단계 프롬프트가 그 위에서 자기 역할만 맡는다.
-    system: `${COMMON_RULES}\n\n${stage.prompt}`,
+    system: `${COMMON_RULES}\n\n${prompt}`,
     input: inputJson,
     forceJsonMimeType: stage.outputMode === 'json',
   });

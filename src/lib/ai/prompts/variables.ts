@@ -59,3 +59,20 @@ Persona는 표현 방식만 바꾼다.
     ],
   },
 ];
+
+/**
+ * 제품이 쓰는 페르소나 블록.
+ *
+ * 프롬프트 안의 `{{persona_block}}` 자리에 그대로 들어간다. **치환하지
+ * 않으면 모델이 그 글자를 그대로 읽는다** — 말투 지시가 통째로 사라지고,
+ * 화면에서는 "페르소나가 적용이 안 된다" 로만 보인다.
+ *
+ * 세트는 도구와 같은 것을 쓴다. 두 벌로 나누면 한쪽만 고치는 사고가 난다.
+ * DB 는 소문자(`persona_type`), 프롬프트는 대문자다.
+ */
+export function personaBlock(persona: 'friend' | 'villain'): string {
+  const set = VAR_SET_PRESET.find((item) => item.name === persona.toUpperCase());
+  const found = set?.vars.find((item) => item.name === 'persona_block');
+  if (found === undefined) throw new Error(`페르소나 블록이 없습니다: ${persona}`);
+  return found.value;
+}
