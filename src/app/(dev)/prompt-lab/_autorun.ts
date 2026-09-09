@@ -195,6 +195,9 @@ export function studentInput(
     for (const [index, label] of choices.entries()) {
       lines.push(`${index + 1}. ${label}`);
     }
+    // 번호로 답하면 대화 기록에 "1번" 만 남는다. 그 대화를 나중에
+    // 읽는 사람도, 다음 턴의 모델도 무슨 뜻인지 알 수 없다.
+    lines.push('보기를 고를 때는 번호가 아니라 그 문장을 그대로 말한다.');
   }
 
   lines.push('나:');

@@ -1687,6 +1687,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       }
 
       const failed = result.checks.filter((check) => check.level === 'fail');
+      const shown = readChoices(result.raw, stage.outputMode, stage.choicesKey);
       const parsed = parseOutput(result.raw) ?? result.raw;
       const pick = pickReply(result.raw, stage.outputMode, stage.replyKey);
       const narrow =
@@ -1698,7 +1699,15 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       add({
         stage: at,
         kind: 'ai',
-        text: pick.show ? pick.text : '(보여줄 말 없음)',
+        // 보기를 로그에 남긴다. 화면에서는 학생이 "1번" 이라고 답하는데
+        // 무엇을 골랐는지 알 방법이 없었다.
+        text:
+          (pick.show ? pick.text : '(보여줄 말 없음)') +
+          (shown.length > 0
+            ? `
+
+보기 · ${shown.map((choice) => choice.label).join(' / ')}`
+            : ''),
         note: failed.length > 0 ? `검증 실패 ${failed.length}건` : undefined,
         raw: result.raw,
         // 점검이 나중에 읽는다. 보낸 뒤가 아니라 **보낸 그 입력**이어야
