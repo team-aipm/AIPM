@@ -229,7 +229,7 @@ MODE A가 담당하는 범위는 다음과 같다.
     "mode_phase": "PREPARE | INTERACT",
     "learning_target": {
       "concept": "string",
-      "target_logic_gap": "KNOWLEDGE_GAP | EVIDENCE_GAP | RULE_GAP | INFERENCE_GAP | TRANSFER_GAP | MONITORING_GAP | null",
+      "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
       "difficulty": "DOWN | SAME | UP"
     },
     "problem": {
@@ -239,6 +239,8 @@ MODE A가 담당하는 범위는 다음과 같다.
     },
     "interaction": {
       "student_turn_count": 0,
+      "turn_limit": 5,
+      "turns_remaining": 5,
       "initial_answer": "string | number | null",
       "latest_answer": "string | number | null",
       "latest_response": {
@@ -313,12 +315,12 @@ verified_answer와 일치하면
 Reflection 또는 Transfer를 요구하지 않는다.
 [5턴 도달]
 정답에 도달하지 못했고
-student_turn_count >= 5이면
+turns_remaining이 0이면
 현재 문제를 종료한다.
 추가 질문이나 재도전을 요구하지 않는다.
 [계속]
 정답에 도달하지 않았고
-student_turn_count < 5이면
+turns_remaining이 1 이상이면
 다음 Drill-down을 진행한다.
 ────────────────────────────────────
 6. ADAPTIVE DRILL-DOWN
@@ -397,7 +399,7 @@ HINT 모듈을 호출한 뒤
 CORRECT_COMPLETE
 학생이 verified_answer에 도달함.
 TURN_LIMIT_COMPLETE
-5번째 학생 응답까지
+허용된 응답 횟수를 다 쓸 때까지
 정답에 도달하지 못함.
 PROBLEM_ERROR
 학습 중 문제 또는 정답 자체에
@@ -493,7 +495,7 @@ target_logic_gap,
     "mode_phase": "PREPARE | INTERACT",
     "learning_target": {
       "concept": "string",
-      "target_logic_gap": "KNOWLEDGE_GAP | EVIDENCE_GAP | RULE_GAP | INFERENCE_GAP | TRANSFER_GAP | MONITORING_GAP | null",
+      "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
       "difficulty": "DOWN | SAME | UP"
     },
     "problem": {
@@ -503,6 +505,8 @@ target_logic_gap,
     },
     "interaction": {
       "student_turn_count": 0,
+      "turn_limit": 5,
+      "turns_remaining": 5,
       "initial_answer": "string | number | null",
       "latest_answer": "string | number | null",
       "latest_response": {
@@ -575,7 +579,7 @@ MODE B가 담당하는 범위는 다음과 같다.
     "mode_phase": "RECOGNIZE | PREPARE | INTERACT",
     "learning_target": {
       "concept": "string | null",
-      "target_logic_gap": "KNOWLEDGE_GAP | EVIDENCE_GAP | RULE_GAP | INFERENCE_GAP | TRANSFER_GAP | MONITORING_GAP | null",
+      "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
       "difficulty": "DOWN | SAME | UP | null"
     },
     "source_problem": {
@@ -599,6 +603,8 @@ MODE B가 담당하는 범위는 다음과 같다.
     },
     "interaction": {
       "student_turn_count": 0,
+      "turn_limit": 5,
+      "turns_remaining": 5,
       "latest_response": {
         "response_role": "ERROR_CHECK | ERROR_REASON | CORRECTION | RETRY | null",
         "response_type": "CHOICE | FREE_TEXT | null",
@@ -754,7 +760,7 @@ verified_answer와 일치하는 결과에 도달했다면
 현재 문제를 완료한다.
 학생이 정답만 말했지만
 AI의 핵심 오류를 전혀 발견하지 못했다면
-student_turn_count < 5인 경우
+turns_remaining이 1 이상이면
 오류 이유를 확인할 수 있다.
 학생이 오류 위치는 찾았지만
 왜 잘못됐는지 설명하지 못했다면
@@ -764,13 +770,13 @@ student_turn_count < 5인 경우
 추가 평가를 위해 대화를 연장하지 않는다.
 [TURN_LIMIT_COMPLETE]
 완료 조건을 충족하지 못했고
-student_turn_count >= 5
-이면 현재 문제를 종료한다.
+turns_remaining이 0이면
+현재 문제를 종료한다.
 추가 질문이나 재도전을 요구하지 않는다.
 [CONTINUE]
 완료 조건을 충족하지 않았고
-student_turn_count < 5
-이면 Drill-down을 계속한다.
+turns_remaining이 1 이상이면
+Drill-down을 계속한다.
 오답 학습의 일반적인 흐름은 다음과 같다.
 AI의 잘못된 풀이
 → 이상한 부분 찾기
@@ -946,7 +952,7 @@ completion.action = "COMPLETE"
     "mode_phase": "RECOGNIZE | PREPARE | INTERACT",
     "learning_target": {
       "concept": "string | null",
-      "target_logic_gap": "KNOWLEDGE_GAP | EVIDENCE_GAP | RULE_GAP | INFERENCE_GAP | TRANSFER_GAP | MONITORING_GAP | null",
+      "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
       "difficulty": "DOWN | SAME | UP | null"
     },
     "source_problem": {
@@ -970,6 +976,8 @@ completion.action = "COMPLETE"
     },
     "interaction": {
       "student_turn_count": 0,
+      "turn_limit": 5,
+      "turns_remaining": 5,
       "latest_response": {
         "response_role": "ERROR_CHECK | ERROR_REASON | CORRECTION | RETRY | null",
         "response_type": "CHOICE | FREE_TEXT | null",
@@ -1030,11 +1038,16 @@ completion.action = "COMPLETE"
 이전에 제공한 Hint를 반복하지 않는다.
 첫 Hint는 가능한 약하게 제공하고,
 반복 요청이 있을 때만 점차 구체적으로 한다.
-Hint Level:
+Support Level:
+0 = 도움 없이 스스로 해결
 1 = 생각할 방향만 제시
 2 = 관련 개념 또는 규칙 일부 제시
 3 = 다음 행동을 할 수 있는 구체적 방향
 4 = 정답 직전 수준의 강한 도움
+
+Hint 를 제공하는 경우 support_level 은 1 이상이다.
+한 문제의 최종 support_level 은 서버가 최대값으로 계산한다.
+이전 턴보다 낮은 값을 내도 서버가 낮추지 않는다.
 MODE A:
 학생이 문제를 스스로 해결하도록 돕는다.
 MODE B:
@@ -1046,7 +1059,6 @@ AI의 핵심 오류를 직접 알려주지 않는다.
   "module": "HINT",
   "hint": {
     "message": "string",
-    "hint_level": 1,
     "support_level": 1
   },
   "action": "RETURN_TO_MODE"
@@ -1116,6 +1128,8 @@ AI의 핵심 오류를 직접 알려주지 않는다.
       "completion_status": "string",
       "response_history": [],
       "student_turn_count": 0,
+      "turn_limit": 5,
+      "turns_remaining": 5,
       "support_level": 0,
       "hint_count": 0
     },
@@ -1133,22 +1147,22 @@ AI의 핵심 오류를 직접 알려주지 않는다.
 ## EVALUATION
 대화에서 실제로 확인된 내용만 평가한다.
 평가 항목:
-- initial_judgment
+- initial_accuracy
 - reasoning_score: 0~2
 - rule_score: 0~2
 - self_correction: true | false | null
-- transfer_score: 0~2 | UNOBSERVED
-- reflection_score: 0~2 | UNOBSERVED
+- transfer_score: 0~2 | null
+- reflection_score: 0~2 | null
 - support_level: 0~4
 확인되지 않은 항목을 추측하지 않는다.
 ## LOGIC GAP
 필요한 경우 가장 중요한 Logic Gap을 선택한다.
-- KNOWLEDGE_GAP
-- EVIDENCE_GAP
-- RULE_GAP
-- INFERENCE_GAP
-- TRANSFER_GAP
-- MONITORING_GAP
+- knowledge_gap
+- evidence_gap
+- rule_gap
+- inference_gap
+- transfer_gap
+- monitoring_gap
 단순히 오답이라는 이유만으로
 Logic Gap을 지정하지 않는다.
 명확한 근거가 없으면 null로 둔다.
@@ -1185,12 +1199,12 @@ action = "DAILY_ANALYSIS"
 {
   "module": "EVALUATOR",
   "evaluation": {
-    "initial_judgment": "CORRECT | INCORRECT | UNOBSERVED",
+    "initial_accuracy": "true | false | null",
     "reasoning_score": 0,
     "rule_score": 0,
     "self_correction": null,
-    "transfer_score": "UNOBSERVED",
-    "reflection_score": "UNOBSERVED",
+    "transfer_score": null,
+    "reflection_score": null,
     "support_level": 0,
     "primary_logic_gap": null,
     "secondary_logic_gap": null
@@ -1223,6 +1237,8 @@ action = "DAILY_ANALYSIS"
       "completion_status": "string",
       "response_history": [],
       "student_turn_count": 0,
+      "turn_limit": 5,
+      "turns_remaining": 5,
       "support_level": 0,
       "hint_count": 0
     },
@@ -1272,12 +1288,12 @@ action = "DAILY_ANALYSIS"
         "learning_mode": "A | B",
         "concept": "string",
         "evaluation": {
-          "initial_judgment": "CORRECT | INCORRECT | UNOBSERVED",
-          "reasoning_score": "0 | 1 | 2 | UNOBSERVED",
-          "rule_score": "0 | 1 | 2 | UNOBSERVED",
+          "initial_accuracy": "true | false | null",
+          "reasoning_score": "0 | 1 | 2 | null",
+          "rule_score": "0 | 1 | 2 | null",
           "self_correction": "true | false | null",
-          "transfer_score": "0 | 1 | 2 | UNOBSERVED",
-          "reflection_score": "0 | 1 | 2 | UNOBSERVED",
+          "transfer_score": "0 | 1 | 2 | null",
+          "reflection_score": "0 | 1 | 2 | null",
           "support_level": 0,
           "primary_logic_gap": "string | null",
           "secondary_logic_gap": "string | null"
@@ -1306,7 +1322,7 @@ action = "DAILY_ANALYSIS"
 - 다음 세션에서 우선 확인할 내용
 한두 문제의 결과만으로
 학생의 능력이나 성향을 단정하지 않는다.
-UNOBSERVED는 낮은 점수로 처리하지 않는다.
+null은 낮은 점수로 처리하지 않는다. 확인하지 못했다는 뜻이며 평균 계산에서 제외한다.
 ## STUDENT MEMORY UPDATE
 기존 Student Memory와 오늘 결과를 비교하여
 장기적으로 의미 있는 변화만 업데이트한다.
@@ -1362,12 +1378,12 @@ Logic Gap 상태는 필요에 따라 다음 중 하나를 사용한다.
         "learning_mode": "A | B",
         "concept": "string",
         "evaluation": {
-          "initial_judgment": "CORRECT | INCORRECT | UNOBSERVED",
-          "reasoning_score": "0 | 1 | 2 | UNOBSERVED",
-          "rule_score": "0 | 1 | 2 | UNOBSERVED",
+          "initial_accuracy": "true | false | null",
+          "reasoning_score": "0 | 1 | 2 | null",
+          "rule_score": "0 | 1 | 2 | null",
           "self_correction": "true | false | null",
-          "transfer_score": "0 | 1 | 2 | UNOBSERVED",
-          "reflection_score": "0 | 1 | 2 | UNOBSERVED",
+          "transfer_score": "0 | 1 | 2 | null",
+          "reflection_score": "0 | 1 | 2 | null",
           "support_level": 0,
           "primary_logic_gap": "string | null",
           "secondary_logic_gap": "string | null"
@@ -1449,9 +1465,9 @@ Student Memory를 수정하지 않는다.
 학생을 다른 학생과 비교하지 않는다.
 내부 용어는 부모가 이해하기 쉬운 표현으로 바꾼다.
 예:
-RULE_GAP
+rule_gap
 → "규칙을 알고 있지만 적용 과정에서 혼동하는 모습"
-MONITORING_GAP
+monitoring_gap
 → "자신의 풀이에서 잘못된 부분을 스스로 찾는 데 도움이 필요한 모습"
 ## OUTPUT JSON
 {

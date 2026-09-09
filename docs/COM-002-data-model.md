@@ -1,6 +1,6 @@
 # COM-002 · 공통 데이터 구조 정의서 --- 개발용
 
-> **Version:** 1.1 · **Updated:** 2026-09-01 · **Owner:** (미지정)\
+> **Version:** 1.2 · **Updated:** 2026-09-09 · **Owner:** (미지정)\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -234,7 +234,7 @@ Rules: - 대화 턴마다 즉시 저장. - 마지막 저장 Message를 기준으
   `evaluation_id`      UUID                 YES uuid        PK
   `problem_id`         UUID                 YES uuid        FK → Problem
   `student_id`         UUID                 YES uuid        FK → Student
-  `initial_accuracy`   BOOLEAN              YES false       최초 정답
+  `initial_accuracy`   BOOLEAN               NO false       최초 정답
   `reasoning_score`    SMALLINT             YES 2           이유 설명
   `rule_score`         SMALLINT             YES 2           규칙 이해
   `self_correction`    BOOLEAN              YES true        스스로 수정
@@ -247,13 +247,13 @@ Rules: - 대화 턴마다 즉시 저장. - 마지막 저장 Message를 기준으
 `reasoning_score` · `rule_score` · `transfer_score` ·
 `reflection_score`: 0\~2. `support_level`: 0\~4.
 
-`transfer_score`와 `reflection_score`만 NULL을 허용한다. Drill-down이
+`initial_accuracy` · `transfer_score` · `reflection_score`가 NULL을 허용한다. Drill-down이
 조기 종료되어(COM-001 §7) 전이·성찰을 묻지 않은 경우가 정상적으로
 발생하며, 이때 `0`은 "적용하지 못함"을 뜻하므로 쓸 수 없다.
 
 Rules: - 시스템 오류 문제에는 정상 Evaluation을 만들지 않는다. - 점수
 범위는 0\~2이며 세부 판정 기준은 `prompts/logic-auditor.md` Prompt 04에서
-정의한다. - 묻지 않은 전이·성찰은 `0`이 아니라 NULL로 둔다. - NULL은
+정의한다. - 묻지 않은 전이·성찰은 `0`이 아니라 NULL로 둔다. - 관찰하지 못한 최초 정답은 `false`가 아니라 NULL로 둔다. `false`는 "틀렸다"를 뜻한다. MODE B는 학생이 AI의 오류를 찾는 구조라 "최초 정답"이 성립하지 않는 경우가 정상적으로 생긴다. - `support_level`은 턴별로는 오르내릴 수 있으며(`Message`), 한 문제의 최종값(`Evaluation`)은 그 문제에서 나온 값의 **최대값**이며 서버가 계산한다. - NULL은
 평균·추이 계산에서 제외한다. 0으로 치환하지 않는다. -
 `support_level`은 벌점이 아니라 도움 의존도 지표다. - 학생 화면에는
 상세 점수를 그대로 노출하지 않는다.
@@ -508,4 +508,5 @@ COM-002의 논리 구조는 확정하되, 실제 구현 전에 다음은 별도 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
 | 1.0 | 2026-08-28 | `docs/` 이관 및 문서 헤더 도입. **본문 변경 없음** | — |
+| 1.2 | 2026-09-09 | §8 `initial_accuracy` Required {YES} → `NO`. 관찰하지 못한 최초 정답을 `false`가 아닌 NULL 로 둔다 — MODE B 는 학생이 AI 오류를 찾는 구조라 "최초 정답"이 성립하지 않는 경우가 정상적으로 생긴다. `support_level` 최종값은 턴별 값의 최대값이며 서버가 계산한다는 규칙 추가. LOGIC AUDITOR 프롬프트 v3.0 과 맞춤 (Issue #28) | — |
 | 1.1 | 2026-09-01 | PM 전원 합의로 미정 값 5건 확정. §6에 `learning_mode`(`mode_a`/`mode_b`) · `answer_lock_status`(`locked`/`recheck`/`invalid_problem`) 값 목록과 `difficulty` 1\~5 추가. §8 점수 범위 0\~2 확정 및 예시값을 범위 안으로 수정(3·4 → 2·2·1·2), **`transfer_score`·`reflection_score`의 Required를 `YES` → `NO`** (Drill-down 조기 종료 시 `0`과 구분). §10 레벨 1\~5 명시, JSONB schema를 `prompts/logic-auditor.md` Prompt 05로 위임. §20에서 확정 3건 이관. **엔티티·필드·관계 변경 없음** | — |
