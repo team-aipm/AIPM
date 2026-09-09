@@ -7,6 +7,27 @@
  */
 
 import { stripFence } from '@/lib/ai/schema-check';
+import { getPath, parsePath, setPath } from './_paths';
+
+/**
+ * 대화 배열과 응답 필드는 **중첩 경로**를 받는다.
+ *
+ * `conversation` 처럼 최상위에 있는 경우가 흔하지만, 프롬프트에 따라
+ * `payload.interaction.response_history` 처럼 깊이 들어가 있기도 하다.
+ * 최상위만 보면 그런 프롬프트에서는 대화창이 영영 비어 있게 된다.
+ */
+function readAt(root: unknown, path: string): unknown {
+  const segments = parsePath(path);
+  if (segments === null) return undefined;
+  const found = getPath(root, segments);
+  return found.exists ? found.value : undefined;
+}
+
+function writeAt(root: unknown, path: string, value: unknown): unknown {
+  const segments = parsePath(path);
+  if (segments === null) return root;
+  return setPath(root, segments, value);
+}
 
 export type Turn = {
   who: 'user' | 'ai' | 'other';
@@ -28,7 +49,7 @@ export function readTurns(inputJson: string, historyKey: string): Turn[] {
   const root = safeParse(inputJson);
   if (!isRecord(root)) return [];
 
-  const history = root[historyKey];
+  const history = readAt(root, historyKey);
   if (!Array.isArray(history)) return [];
 
   return history.map((item) => {
@@ -67,7 +88,8 @@ export function appendUserTurn(
   const root = safeParse(inputJson);
   if (!isRecord(root)) return null;
 
-  const history = Array.isArray(root[historyKey]) ? [...(root[historyKey] as unknown[])] : [];
+  const current = readAt(root, historyKey);
+  const history = Array.isArray(current) ? [...current] : [];
   // 이미지 본문(base64)은 대화 기록에 넣지 않는다. 파일명만 남긴다.
   // 넣으면 입력 JSON 이 수십 KB 로 부풀어 화면에서 읽을 수 없게 된다.
   history.push({
@@ -77,7 +99,8 @@ export function appendUserTurn(
     ...(attachmentNames.length > 0 ? { attachments: attachmentNames } : {}),
   });
 
-  return stringify(syncTurnNumber({ ...root, [historyKey]: history }, history.length));
+  const next = writeAt(root, historyKey, history);
+  return stringify(syncTurnNumber(next as Record<string, unknown>, history.length));
 }
 
 /**
@@ -108,11 +131,13 @@ export function pickReply(
   // JSON 이어야 하는데 깨졌으면 원문을 보여준다. 디버깅에 필요하다.
   if (!isRecord(parsed)) return { show: true, text: raw };
 
-  if (!(key in parsed)) {
+  const segments = parsePath(key);
+  const found = segments === null ? { exists: false, value: undefined } : getPath(parsed, segments);
+  if (!found.exists) {
     return { show: false, reason: `출력에 ${key} 가 없습니다` };
   }
 
-  const value = parsed[key];
+  const value = found.value;
   return {
     show: true,
     text: typeof value === 'string' ? value : JSON.stringify(value, null, 2),
@@ -145,26 +170,28 @@ export function appendAiTurn(
   let next: Record<string, unknown> = { ...root };
 
   if (replyText !== null) {
-    const history = Array.isArray(root[historyKey])
-      ? [...(root[historyKey] as unknown[])]
-      : [];
+    const current = readAt(root, historyKey);
+    const history = Array.isArray(current) ? [...current] : [];
     history.push({
       speaker: 'ai',
       message_text: replyText,
       turn_number: history.length + 1,
     });
-    next = { ...next, [historyKey]: history };
+    next = writeAt(next, historyKey, history) as Record<string, unknown>;
   }
 
   if (isRecord(output)) {
     for (const [key, value] of Object.entries(output)) {
-      if (key !== replyKey && key in root) next[key] = value;
+      // 응답 필드가 중첩이면 그 최상위 조각과만 비교한다.
+      // ui.message 가 응답 필드일 때 ui 를 통째로 이월하면 말풍선이
+      // 두 번 들어간다.
+      const replyTop = replyKey.split('.')[0]?.split('[')[0] ?? replyKey;
+      if (key !== replyTop && key in root) next[key] = value;
     }
   }
 
-  const historyLength = Array.isArray(next[historyKey])
-    ? (next[historyKey] as unknown[]).length
-    : 0;
+  const written = readAt(next, historyKey);
+  const historyLength = Array.isArray(written) ? written.length : 0;
   next = syncTurnNumber(next, historyLength);
   return stringify(next);
 }

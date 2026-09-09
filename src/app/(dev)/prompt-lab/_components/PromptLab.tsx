@@ -37,6 +37,7 @@ import {
   type MapRow,
   type MapSource,
 } from '../_mapping';
+import { parsePath, setPath } from '../_paths';
 import { stageColor } from '../_stage-colors';
 import {
   toCasesJson,
@@ -148,6 +149,13 @@ function newThread(key: string, name: string, input: string): Thread {
 
 type Props = {
   preset: StagePreset[];
+  /**
+   * 변수 세트 프리셋.
+   *
+   * 프롬프트가 `{{persona}}` 를 쓰는데 변수가 비어 있으면 "정의 안 된
+   * 변수" 로 시작한다. 말투 블록을 손으로 붙여 넣게 두지 않는다.
+   */
+  varPreset: VarSet[];
   hasEnvApiKey: boolean;
 };
 
@@ -327,7 +335,7 @@ function fromSaved(item: Partial<SavedStage>, key: string): Stage {
   };
 }
 
-export function PromptLab({ preset, hasEnvApiKey }: Props) {
+export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   const [stages, setStages] = useState<Stage[]>(() =>
     preset.map((base, index) => toStage(base, `s${index}`)),
   );
@@ -359,7 +367,9 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
    * 쌓인다. 나중에 손으로 옮기려면 아무도 안 한다.
    */
   const [cases, setCases] = useState<GoldenCase[]>([]);
-  const [varSets, setVarSets] = useState<VarSet[]>([DEFAULT_VAR_SET]);
+  const [varSets, setVarSets] = useState<VarSet[]>(
+    varPreset.length > 0 ? varPreset : [DEFAULT_VAR_SET],
+  );
   const [activeSet, setActiveSet] = useState(0);
   const [panel, setPanel] = useState<
     'none' | 'prompt' | 'price' | 'settings' | 'vars' | 'export'
@@ -1460,11 +1470,22 @@ export function PromptLab({ preset, hasEnvApiKey }: Props) {
         ))}
         <button
           onClick={() => {
-            if (!window.confirm('단계를 기본 프리셋으로 되돌립니다. 계속할까요?')) return;
+            if (
+              !window.confirm(
+                '단계 · 공통 프롬프트 · 변수 세트를 기본 프리셋으로 되돌립니다.\n' +
+                  '프롬프트가 변수를 참조하므로 셋을 같이 되돌려야 합니다.\n\n' +
+                  '계속할까요?',
+              )
+            ) {
+              return;
+            }
             setStages(preset.map((base, index) => toStage(base, `p${index}`)));
             setKeySeq(preset.length);
             setActiveIndex(0);
             setCommonPrompt(COMMON_RULES);
+            // 프롬프트만 되돌리고 변수를 두면 {{persona}} 가 깨진다.
+            setVarSets(varPreset.length > 0 ? varPreset : [DEFAULT_VAR_SET]);
+            setActiveSet(0);
           }}
           className="rounded border border-dashed border-neutral-300 px-2 py-1 dark:border-neutral-700"
         >
@@ -3308,7 +3329,10 @@ function clearHistory(inputJson: string, historyKey: string): string {
     if (typeof root !== 'object' || root === null || Array.isArray(root)) {
       return inputJson;
     }
-    return JSON.stringify({ ...root, [historyKey]: [] }, null, 2);
+    // 대화 배열 키는 중첩 경로일 수 있다.
+    const segments = parsePath(historyKey);
+    if (segments === null) return inputJson;
+    return JSON.stringify(setPath(root, segments, []), null, 2);
   } catch {
     return inputJson;
   }
