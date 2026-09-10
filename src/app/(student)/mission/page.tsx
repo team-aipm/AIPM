@@ -60,16 +60,20 @@ export default async function MissionPage() {
   return (
     // 높이를 화면에 못 박는다. min-h 로 두면 대화가 길어질 때 페이지
     // 전체가 스크롤되고, 위에 붙여 둔 문제 카드가 위로 밀려 사라진다.
-    <div className="flex h-dvh flex-col">
-      <header className="flex items-center gap-3 border-b border-black/5 bg-white px-4 py-3">
-        <Link href="/home" aria-label="홈으로" className="text-lg text-meti-sub">
+    <div className="flex h-dvh flex-col bg-[#F7FAFB]">
+      <header className="flex items-center gap-3 border-b border-black/5 bg-white px-4 py-3.5 shadow-[0_1px_0_rgba(18,52,59,.04)]">
+        <Link
+          href="/home"
+          aria-label="홈으로"
+          className="-ml-1 flex h-9 w-9 items-center justify-center rounded-full text-lg text-meti-sub transition-colors active:bg-meti-bg/60"
+        >
           ‹
         </Link>
-        <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-meti-bg">
-          <PartnerFace persona={student.persona_type} size={34} />
+        <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-meti-bg ring-2 ring-white shadow-sm">
+          <PartnerFace persona={student.persona_type} size={38} />
         </span>
         <div className="flex flex-col">
-          <p className="text-[14px] font-bold text-meti-ink">{partner}</p>
+          <p className="text-[15px] font-extrabold text-meti-ink">{partner}</p>
           <p className="text-[11px] font-semibold text-meti-sub">
             {session.completed_problem_count} / {session.target_problem_count} 문제
           </p>
