@@ -11,6 +11,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { endSession } from '@/lib/supabase/sign-out';
 import { getStudent } from '@/lib/services/student';
 import { openTodaySession, hasEarlierSession } from '@/lib/services/learning-session';
 import { EVENT, record } from '@/lib/analytics/events';
@@ -39,4 +40,15 @@ export async function startMission(): Promise<void> {
   }
 
   redirect('/mission');
+}
+
+/**
+ * 나가기 (STU-004).
+ *
+ * **아이 계정에는 여기가 유일한 출구다.** 부모 영역의 「계정 관리」에도
+ * 로그아웃이 있지만 아이는 그곳에 못 들어간다.
+ */
+export async function leaveApp(): Promise<void> {
+  await endSession();
+  redirect('/login');
 }
