@@ -8,9 +8,12 @@
  */
 
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { setPersona, softDeleteStudent, restoreStudent } from '@/lib/services/student';
+import { createChildLogin, changeChildPassword } from '@/lib/services/student-login';
+import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 
 export async function changePersona(formData: FormData): Promise<void> {
   const studentId = String(formData.get('student_id') ?? '');
@@ -66,5 +69,61 @@ export async function saveMarketing(formData: FormData): Promise<void> {
 export async function signOutAccount(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
+
+  // 고른 학생도 함께 지운다. 남기면 다음 사람이 남의 학생 id 를 물고 있다.
+  const jar = await cookies();
+  jar.delete(STUDENT_COOKIE);
+
   redirect('/login');
+}
+
+// ============================================================
+// MY-003 아이 로그인
+// ============================================================
+
+/**
+ * 성공하면 `error` 가 null 이고 `done` 이 무엇을 했는지 말한다.
+ * 화면이 그 자리에서 결과를 보여줘야 해서 던지지 않고 돌려준다.
+ */
+export type ChildLoginState = { error: string | null; done: string | null };
+
+export async function makeChildLogin(
+  _prev: ChildLoginState,
+  formData: FormData,
+): Promise<ChildLoginState> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth.user === null) redirect('/login');
+
+  const studentId = String(formData.get('student_id') ?? '');
+  const result = await createChildLogin(supabase, auth.user.id, {
+    studentId,
+    loginId: String(formData.get('login_id') ?? ''),
+    password: String(formData.get('password') ?? ''),
+  });
+
+  if (!result.ok) return { error: result.error, done: null };
+
+  revalidatePath(`/parent/my/students/${studentId}`);
+  return { error: null, done: '아이 로그인을 만들었습니다.' };
+}
+
+export async function resetChildPassword(
+  _prev: ChildLoginState,
+  formData: FormData,
+): Promise<ChildLoginState> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth.user === null) redirect('/login');
+
+  const studentId = String(formData.get('student_id') ?? '');
+  const result = await changeChildPassword(supabase, auth.user.id, {
+    studentId,
+    password: String(formData.get('password') ?? ''),
+  });
+
+  if (!result.ok) return { error: result.error, done: null };
+
+  revalidatePath(`/parent/my/students/${studentId}`);
+  return { error: null, done: '비밀번호를 바꿨습니다.' };
 }

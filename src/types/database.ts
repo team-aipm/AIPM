@@ -596,12 +596,14 @@ export type Database = {
       student: {
         Row: {
           account_id: string
+          auth_user_id: string | null
           birth_date: string
           created_at: string
           current_difficulty: number
           deleted_at: string | null
           grade: number
           learning_data_retain_until: string | null
+          login_id: string | null
           nickname: string
           nickname_source: Database["public"]["Enums"]["nickname_source"]
           persona_type: Database["public"]["Enums"]["persona_type"]
@@ -611,12 +613,14 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          auth_user_id?: string | null
           birth_date: string
           created_at?: string
           current_difficulty: number
           deleted_at?: string | null
           grade: number
           learning_data_retain_until?: string | null
+          login_id?: string | null
           nickname: string
           nickname_source?: Database["public"]["Enums"]["nickname_source"]
           persona_type: Database["public"]["Enums"]["persona_type"]
@@ -626,12 +630,14 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          auth_user_id?: string | null
           birth_date?: string
           created_at?: string
           current_difficulty?: number
           deleted_at?: string | null
           grade?: number
           learning_data_retain_until?: string | null
+          login_id?: string | null
           nickname?: string
           nickname_source?: Database["public"]["Enums"]["nickname_source"]
           persona_type?: Database["public"]["Enums"]["persona_type"]

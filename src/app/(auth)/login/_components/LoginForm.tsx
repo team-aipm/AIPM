@@ -19,11 +19,17 @@ export function LoginForm() {
   return (
     <form action={action} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold text-meti-sub">이메일</span>
+        <span className="text-xs font-semibold text-meti-sub">아이디 또는 이메일</span>
+        {/*
+          type 은 text 다. email 로 두면 브라우저가 아이의 아이디를
+          "@ 가 없다" 며 막는다.
+        */}
         <input
-          name="email"
-          type="email"
-          autoComplete="email"
+          name="login"
+          type="text"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
           required
           className="rounded-xl border border-black/10 bg-white px-3.5 py-3 text-[15px] outline-none focus:border-meti"
         />
