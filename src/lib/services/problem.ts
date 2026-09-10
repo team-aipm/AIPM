@@ -88,3 +88,26 @@ export async function finishProblem(
 
   if (error !== null) throw new Error(`문제를 마치지 못했습니다: ${error.message}`);
 }
+
+/**
+ * 이번 세션에서 이미 낸 문제들 (COM-001 §9)
+ *
+ * 02 MODE A 에 넘겨 **같은 문제를 다시 내지 않게** 한다. 넘기지 않으면
+ * 모델은 매 문제를 백지에서 만들고, 같은 개념이 두 번 걸리면 같은 문제가
+ * 그대로 나온다 — 2026-09-10 에 343÷7 문제가 연달아 두 번 나왔다.
+ *
+ * 상태를 가리지 않는다. 마쳤든 중간에 끊겼든 **아이가 이미 본 문제**다.
+ */
+export async function listSessionProblemTexts(
+  client: Client,
+  sessionId: string,
+): Promise<string[]> {
+  const { data, error } = await client
+    .from('problem')
+    .select('problem_text')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true });
+
+  if (error !== null) throw new Error(`문제 목록을 불러오지 못했습니다: ${error.message}`);
+  return (data ?? []).map((row) => row.problem_text);
+}
