@@ -62,8 +62,14 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
   const startedAt = Date.now();
   const elapsed = () => Date.now() - startedAt;
 
-  // 배포본에서는 서버 키를 대신 써 주지 않는다. 잠금을 통과한 사람이라도
-  // 세팅 담당 개인의 키로 무제한 호출하게 두지 않는다.
+  // 배포본에서는 서버 키를 **대신** 써 주지 않는다. 잠금을 통과한 사람이라도
+  // 세팅 담당 개인의 키로 무제한 호출하게 두지 않는다 — 개발 도구
+  // (`/prompt-lab`)를 위한 방어다. 도구는 화면에서 키를 받는다.
+  //
+  // **제품은 다르다.** 학생에게 API 키를 입력하라고 할 수 없다. 그래서
+  // 제품 경로(`lib/ai/pipeline/run.ts`)는 서버 키를 `apiKey` 로 직접
+  // 넘긴다. 여기서 자동으로 집어 주지 않는 규칙은 그대로 둔다 — 부르는
+  // 쪽이 무엇을 쓰는지 코드에 드러나야 한다.
   const serverKey =
     process.env.NODE_ENV === 'production' ? '' : process.env.GEMINI_API_KEY?.trim();
   const apiKey = req.apiKey?.trim() || serverKey;

@@ -72,6 +72,10 @@ export async function runStage(
 
   const result = await callGemini({
     model: MODEL,
+    // **서버 키를 명시적으로 넘긴다.** `callGemini` 는 배포본에서 서버
+    // 키를 자동으로 집어 주지 않는다(개발 도구용 방어). 학생에게 키를
+    // 입력하라고 할 수는 없으므로 제품은 여기서 직접 준다.
+    apiKey: process.env.GEMINI_API_KEY,
     // 공통 규칙이 앞에 온다. 단계 프롬프트가 그 위에서 자기 역할만 맡는다.
     system: `${COMMON_RULES}\n\n${prompt}`,
     input: inputJson,
