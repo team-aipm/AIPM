@@ -116,7 +116,7 @@ Project Settings → API 에서 3개를 확인한다.
 
 ### 4-4. Auth 설정
 
-- Email 확인(Confirm email) **켜기**
+- Email 확인(Confirm email) — **개발 중에는 끈다** (2026-09-10 변경)
 - Redirect URLs에 아래를 **모두** 추가한다. 빠뜨리면 로그인 리다이렉트가 깨진다.
 
 ```text
@@ -124,6 +124,36 @@ http://localhost:3000/**
 https://*.vercel.app/**        ← Preview 배포용
 https://<프로덕션 도메인>/**     ← 도메인 확정 후 추가
 ```
+
+#### Confirm email 을 왜 껐나 · **2026-09-10**
+
+가입해도 **메일이 오지 않았다.** Supabase 가 기본으로 붙여 주는 메일 발송은
+개발용이라 시간당 몇 통으로 막혀 있고, 프로젝트 멤버가 아닌 주소로는 아예
+안 가기도 한다. 확인 링크를 못 받으면 로그인 자체가 안 되므로 가입 흐름을
+시험할 수 없다.
+
+**끄는 위치**
+
+```text
+Supabase Dashboard
+  → Authentication
+  → Sign In / Providers  →  Email
+  → Confirm email  끄기  →  Save
+```
+
+코드는 이미 양쪽을 다 견딘다. 꺼져 있으면 가입 직후 세션이 생기고, 그때는
+확인 화면을 건너뛰고 바로 `/students` 로 간다
+(`app/(auth)/signup/_actions.ts`).
+
+**되돌려야 하는 시점.** 확인이 꺼져 있으면 **남의 이메일로 가입할 수 있다.**
+아동 데이터를 다루는 서비스에서 부모 계정의 이메일은 본인 확인 수단이자
+COM-007 의 법정대리인 연결 고리다. 실제 사용자를 받기 전에
+
+1. 직접 쓰는 SMTP(예: Resend · SendGrid)를 Auth 의 Custom SMTP 에 붙이고
+2. Confirm email 을 다시 켠다
+
+아이 계정은 이 설정과 무관하다. 부모가 Admin API 로 만들어 주며 그때
+`email_confirm: true` 를 함께 넣는다(COM-005 §9).
 
 ### 4-5. RLS
 
