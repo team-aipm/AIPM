@@ -47,10 +47,10 @@ export default async function StudentsPage() {
                 <input type="hidden" name="student_id" value={student.student_id} />
                 <button
                   type="submit"
-                  className="flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-[0_2px_8px_rgba(18,52,59,.06)] transition-colors active:bg-meti-bg/30"
+                  className="flex w-full items-center gap-4 rounded-3xl bg-white p-4 text-left shadow-[0_2px_10px_rgba(18,52,59,.07)] transition-colors active:bg-meti-bg/30"
                 >
-                  <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-meti-bg ring-2 ring-white shadow-sm">
-                    <PartnerFace persona={student.persona_type} size={40} />
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-meti-bg">
+                    <PartnerFace persona={student.persona_type} pose="wave" size={44} />
                   </span>
                   <span className="flex flex-col">
                     <span className="text-[15px] font-bold text-meti-ink">

@@ -58,44 +58,60 @@ export default async function HomePage() {
         </div>
       </header>
 
-      <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
-        <p className="text-[17px] font-extrabold leading-snug text-meti-ink">
-          오늘도 같이
-          <br />
-          생각해볼까?
-        </p>
+      <section className="relative overflow-hidden rounded-3xl bg-meti-bg p-5">
+        <div className="relative z-10 max-w-[70%]">
+          <p className="mb-1.5 text-[13px] font-extrabold text-meti">오늘의 목표</p>
+          <p className="text-xl font-extrabold leading-snug text-meti-ink">
+            오늘도 같이
+            <br />
+            생각해볼까?
+          </p>
 
-        <div className="mt-4 flex items-center gap-3">
-          <div
-            className="h-2.5 flex-1 overflow-hidden rounded-full bg-meti-bg"
-            role="progressbar"
-            aria-valuenow={done}
-            aria-valuemin={0}
-            aria-valuemax={target}
-          >
+          <div className="mt-3.5 flex items-center gap-2.5">
             <div
-              className="h-full rounded-full bg-meti transition-[width]"
-              style={{ width: `${target === 0 ? 0 : (done / target) * 100}%` }}
-            />
+              className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10"
+              role="progressbar"
+              aria-valuenow={done}
+              aria-valuemin={0}
+              aria-valuemax={target}
+            >
+              <div
+                className="h-full rounded-full bg-meti transition-[width]"
+                style={{ width: `${target === 0 ? 0 : (done / target) * 100}%` }}
+              />
+            </div>
+            <span className="text-[12px] font-extrabold text-meti-ink">
+              {done}/{target}
+            </span>
           </div>
-          <span className="text-[12px] font-extrabold text-meti-sub">
-            {done}/{target}
-          </span>
         </div>
+        <PartnerFace
+          persona={student.persona_type}
+          pose="wave"
+          size={104}
+          className="absolute -right-2 top-4 animate-meti-float"
+        />
       </section>
 
-      <section className="rounded-2xl border-[1.5px] border-meti-bg bg-white p-5 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
-        <h2 className="text-[15px] font-bold text-meti-ink">
-          {session === null ? '새로운 미션을 시작할래?' : '남아 있는 미션을 이어할래?'}
-        </h2>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-meti-sub">
-          {partner}와 함께 오늘의 미션을 시작해보자!
-        </p>
+      <section className="rounded-3xl bg-white p-4 shadow-[0_2px_10px_rgba(18,52,59,.07)]">
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-meti-bg">
+            <PartnerFace persona={student.persona_type} pose="think" size={34} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[15px] font-extrabold text-meti-ink">
+              {session === null ? '새로운 미션을 시작할래?' : '남아 있는 미션을 이어할래?'}
+            </h2>
+            <p className="mt-0.5 text-[12.5px] leading-snug text-meti-sub">
+              {partner}와 함께 오늘의 미션을 시작해보자!
+            </p>
+          </div>
+        </div>
 
         <form action={startMission}>
           <button
             type="submit"
-            className="mt-4 w-full rounded-xl bg-meti py-3 text-[14px] font-bold text-white shadow-sm"
+            className="mt-3.5 w-full rounded-xl bg-meti py-3 text-[14px] font-bold text-white shadow-sm"
           >
             {session === null ? TERMS.startLearning.student : TERMS.resumeLearning.student}
           </button>
@@ -104,7 +120,7 @@ export default async function HomePage() {
 
       <Link
         href="/home/today"
-        className="rounded-2xl bg-white p-4 text-center text-[14px] font-bold text-meti-ink shadow-[0_2px_8px_rgba(18,52,59,.06)] transition-colors active:bg-meti-bg/40"
+        className="rounded-2xl bg-white p-4 text-center text-[14px] font-bold text-meti-ink shadow-[0_2px_10px_rgba(18,52,59,.07)] transition-colors active:bg-meti-bg/40"
       >
         {TERMS.learningResult.student} 보기
       </Link>

@@ -51,29 +51,50 @@ export default async function TodayPage() {
   // 진행 중인 문제는 아직 결과가 아니다. 세지 않는다.
   const done = problems.filter((item) => item.status !== 'active');
 
+  const allDone = session !== null && session.session_status === 'completed';
+
   return (
     <main className="flex flex-1 flex-col gap-5 bg-[#F7FAFB] px-6 py-8">
-      <header className="flex flex-col gap-1">
-        <Link href="/home" className="text-[13px] font-semibold text-meti-sub">
-          ‹ 홈
-        </Link>
+      <Link href="/home" className="text-[13px] font-semibold text-meti-sub">
+        ‹ 홈
+      </Link>
+
+      {allDone ? (
+        <header className="flex flex-col items-center gap-2 pb-1 text-center">
+          <span className="rounded-full bg-meti px-3.5 py-1.5 text-[12px] font-extrabold tracking-wide text-white">
+            오늘 미션 완료
+          </span>
+          <h1 className="mt-1 text-2xl font-extrabold leading-snug text-meti-ink">
+            {done.length}개 다 끝냈어!
+            <br />
+            오늘 진짜 잘했다
+          </h1>
+          <PartnerFace
+            persona={student.persona_type}
+            pose="celebrate"
+            size={104}
+            className="animate-meti-float"
+          />
+        </header>
+      ) : (
         <h1 className="text-xl font-extrabold text-meti-ink">오늘의 기록</h1>
-      </header>
+      )}
 
       {endSummary !== null && (
-        <section className="flex items-start gap-3 rounded-2xl border-[1.5px] border-meti-bg bg-white p-4 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-meti-bg ring-2 ring-white shadow-sm">
-            <PartnerFace persona={student.persona_type} size={32} />
-          </span>
-          <p className="text-[14px] leading-relaxed text-meti-ink">{endSummary}</p>
+        <section className="flex items-start gap-3 rounded-3xl bg-white p-4 shadow-[0_2px_10px_rgba(18,52,59,.07)]">
+          <PartnerFace persona={student.persona_type} pose="think" size={52} />
+          <div className="min-w-0 flex-1 pt-1">
+            <p className="mb-1 text-[12px] font-extrabold text-meti">{partner}의 한마디</p>
+            <p className="text-[14px] leading-relaxed text-meti-ink">{endSummary}</p>
+          </div>
         </section>
       )}
 
-      <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
-        <p className="text-[13px] font-semibold text-meti-sub">오늘 해낸 미션</p>
-        <p className="mt-1 text-[28px] font-extrabold leading-none text-meti">
+      <section className="rounded-2xl bg-[#FFF3D6] p-4">
+        <p className="text-[13px] font-extrabold text-meti-ink/70">오늘 해낸 미션</p>
+        <p className="mt-1 text-[28px] font-extrabold leading-none text-meti-ink">
           {done.length}
-          <span className="ml-1 text-[15px] font-bold text-meti-sub">
+          <span className="ml-1 text-[15px] font-bold text-meti-ink/60">
             / {session?.target_problem_count ?? 10}
           </span>
         </p>
@@ -86,23 +107,36 @@ export default async function TodayPage() {
           {partner}가 기다리고 있어!
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {done.map((item, index) => (
-            <li
-              key={item.problemId}
-              className="rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(18,52,59,.06)]"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] font-bold text-meti-sub">
-                  {index + 1}번째 ·{' '}
-                  {learningModeLabel(
-                    item.learningMode === 'mode_b' ? 'mode_b' : 'mode_a',
-                    'student',
-                    partner,
-                  )}
+        <div className="rounded-3xl bg-white p-4 shadow-[0_2px_10px_rgba(18,52,59,.07)]">
+          <div className="mb-2.5 flex items-center gap-2">
+            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-meti text-[13px] font-extrabold text-white">
+              ✓
+            </span>
+            <span className="text-sm font-extrabold text-meti-ink">오늘 한 일</span>
+          </div>
+          <ul className="flex flex-col">
+            {done.map((item, index) => (
+              <li
+                key={item.problemId}
+                className={`flex items-start gap-2.5 py-2.5 ${index < done.length - 1 ? 'border-b border-meti-bg' : ''}`}
+              >
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-meti-bg text-[11px] font-extrabold text-meti">
+                  {index + 1}
                 </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold leading-relaxed text-meti-ink">
+                    {item.problemText}
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-bold text-meti-sub">
+                    {learningModeLabel(
+                      item.learningMode === 'mode_b' ? 'mode_b' : 'mode_a',
+                      'student',
+                      partner,
+                    )}
+                  </p>
+                </div>
                 <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
                     item.status === 'completed'
                       ? 'bg-meti-bg text-meti'
                       : 'bg-amber-50 text-amber-700'
@@ -110,13 +144,10 @@ export default async function TodayPage() {
                 >
                   {problemStatusLabel(item.status, 'student')}
                 </span>
-              </div>
-              <p className="mt-2 text-[13px] leading-relaxed text-meti-ink">
-                {item.problemText}
-              </p>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {session !== null && session.session_status !== 'completed' && (
