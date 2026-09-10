@@ -83,6 +83,13 @@ export function MissionChat({ partner, persona, initial }: Props) {
   /** 사진으로 가져왔는지. problem_source 에 그대로 들어간다 */
   const [fromPhoto, setFromPhoto] = useState(false);
   const [draft, setDraft] = useState('');
+  /**
+   * 사진을 올릴 수 있는 때.
+   *
+   * 푸는 중인 문제가 없으면 언제든 된다 — 파트너가 모드를 묻고 있어도,
+   * 문제를 적으라고 했어도, 잘못 읽은 것을 다시 찍을 때도.
+   */
+  const canSendPhoto = problemText === null && !finished;
   const opened = useRef(false);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -364,24 +371,6 @@ ${reply.recognized}
           </button>
         )}
 
-        {sourceStage === 'ask' && !pending && (
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full border border-meti/40 bg-white py-2.5 text-[13px] font-semibold text-meti">
-            📷 사진으로 올릴게
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/heic"
-              // 휴대폰에서는 카메라가 바로 열린다
-              capture="environment"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = '';
-                if (file !== undefined) void sendPhoto(file);
-              }}
-            />
-          </label>
-        )}
-
         {finished ? (
           <div className="flex flex-col gap-2">
             {sessionDone ? (
@@ -415,6 +404,37 @@ ${reply.recognized}
             }}
             className="flex items-center gap-2"
           >
+            {/*
+              **문제를 푸는 중에는 숨긴다.** 그때 올린 사진은 새 문제인데
+              지금 문제가 아직 안 끝나서, 어느 쪽을 말하는지 아이도 AI 도
+              알 수 없다. 문제가 없을 때는 언제든 올릴 수 있다 — 파트너가
+              무엇을 물었든 사진부터 내밀어도 된다.
+            */}
+            {canSendPhoto && (
+              <label
+                aria-label="사진으로 문제 올리기"
+                className={`flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-meti/40 bg-white text-[17px] ${
+                  pending ? 'pointer-events-none opacity-40' : ''
+                }`}
+              >
+                📷
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic"
+                  // 휴대폰에서는 카메라가 바로 열린다
+                  capture="environment"
+                  disabled={pending}
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    // 같은 사진을 다시 골라도 onChange 가 오게 비운다
+                    event.target.value = '';
+                    if (file !== undefined) void sendPhoto(file);
+                  }}
+                />
+              </label>
+            )}
+
             <input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
