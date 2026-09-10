@@ -18,6 +18,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { endSession } from '@/lib/supabase/sign-out';
 import { EVENT, recordOnce } from '@/lib/analytics/events';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 import { emailForLoginId, isValidLoginId, looksLikeEmail } from '@/lib/constants/student-login';
@@ -83,14 +84,6 @@ export async function signIn(
 }
 
 export async function signOut(): Promise<void> {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-
-  // **고른 학생도 함께 지운다.** 남겨 두면 다음에 다른 계정으로 들어온
-  // 사람이 남의 학생 id 를 쿠키에 물고 있게 된다. RLS 가 막아 주므로 새는
-  // 것은 없지만, 화면이 빈 채로 떠서 왜 그런지 알 수 없다.
-  const jar = await cookies();
-  jar.delete(STUDENT_COOKIE);
-
+  await endSession();
   redirect('/login');
 }

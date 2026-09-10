@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/server';
 import { listStudents } from '@/lib/services/student';
 import { PARTNER_NAME } from '@/lib/constants/copy';
 import { PartnerFace } from '@/components/ui/PartnerFace';
-import { selectStudent } from './_actions';
+import { selectStudent, leaveApp } from './_actions';
 
 export const metadata = { title: '누구로 시작할까 · 메티' };
 
@@ -87,6 +87,19 @@ export default async function StudentsPage() {
       >
         보호자 화면
       </Link>
+
+      {/*
+        로그아웃은 「마이 → 계정 관리」 안에도 있지만 거기까지 세 번을 들어가야
+        한다. 계정을 바꾸려는 사람은 대개 이 화면에 서 있다.
+      */}
+      <form action={leaveApp}>
+        <button
+          type="submit"
+          className="w-full text-center text-[13px] font-semibold text-meti-sub underline"
+        >
+          로그아웃
+        </button>
+      </form>
     </main>
   );
 }
