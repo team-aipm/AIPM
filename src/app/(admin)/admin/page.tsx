@@ -9,6 +9,21 @@ import { currentAdmin } from '@/lib/services/admin';
 
 export const metadata = { title: 'AIPM 운영 · 대시보드' };
 
+/**
+ * 서버가 보고 있어야 하는 이름들.
+ *
+ * **값을 화면에 내보내지 않는다.** 있는지 없는지만 본다 — 없으면 AI 호출과
+ * 배치가 조용히 실패하는데, 그걸 알아내려면 지금까지 런타임 로그를 뒤져야
+ * 했다(2026-09-10).
+ */
+const ENV_KEYS = [
+  'GEMINI_API_KEY',
+  'CRON_SECRET',
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY',
+] as const;
+
 function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-black/10 bg-white p-4">
@@ -69,6 +84,30 @@ export default async function AdminDashboard() {
           value={String(interrupted ?? 0)}
           sub="system_interrupted · verification_failed"
         />
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-lg border border-black/10 bg-white p-4">
+        <h2 className="text-[12px] font-bold text-neutral-500">서버 환경변수</h2>
+        <p className="text-[11px] text-neutral-400">
+값은 보여주지 않습니다. 서버가 그 이름을 보고 있는지만 확인합니다 —
+          없으면 AI 호출과 배치가 조용히 실패합니다.
+        </p>
+        <ul className="flex flex-col gap-1 text-[13px]">
+          {ENV_KEYS.map((key) => (
+            <li key={key} className="flex items-center gap-2">
+              <span
+                className={
+                  process.env[key] === undefined || process.env[key] === ''
+                    ? 'font-bold text-red-600'
+                    : 'font-bold text-green-700'
+                }
+              >
+                {process.env[key] === undefined || process.env[key] === '' ? '없음' : '있음'}
+              </span>
+              <code className="text-[12px]">{key}</code>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <p className="text-[12px] leading-relaxed text-neutral-500">
