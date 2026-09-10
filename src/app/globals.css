@@ -7,10 +7,14 @@
  * `bg-meti-bg` · `text-meti-sub` 처럼 이름으로 쓴다.
  */
 @theme {
-  --color-meti: #1f6f78;
+  /* 값은 프로토타입 원본(`METTY App.dc.html`)과 그대로 맞춘다. 손으로
+     다시 뽑지 않는다 — 프로토타입이 바뀌면 여기도 그 값을 그대로 옮긴다. */
+  --color-meti: #206b7c;
   --color-meti-bg: #ddf4f6;
-  --color-meti-ink: #12343b;
+  --color-meti-ink: #24333a;
   --color-meti-sub: #718087;
+  --color-meti-mint: #57c7b6;
+  --color-meti-warm: #ffc857;
 }
 
 :root {
@@ -38,17 +42,17 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* 미션 완료 카드의 파트너 그림에 쓴다 (mission/_components/MissionChat.tsx) */
+/* 파트너 그림이 둥실거리는 애니메이션. 값은 프로토타입의 `bob` 키프레임과 같다 */
 @keyframes meti-float {
   0%,
   100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-6px);
+    transform: translateY(-5px);
   }
 }
 
 .animate-meti-float {
-  animation: meti-float 2.4s ease-in-out infinite;
+  animation: meti-float 4s ease-in-out infinite;
 }
