@@ -43,9 +43,9 @@ export default async function HomePage() {
   const partner = PARTNER_NAME[student.persona_type];
 
   return (
-    <main className="flex flex-1 flex-col gap-5 px-6 py-8">
+    <main className="flex flex-1 flex-col gap-5 bg-[#F7FAFB] px-6 py-8">
       <header className="flex items-center gap-3">
-        <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
+        <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white ring-2 ring-white shadow-sm">
           <PartnerFace persona={student.persona_type} size={40} />
         </span>
         <div className="flex flex-col">
@@ -58,7 +58,7 @@ export default async function HomePage() {
         </div>
       </header>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
         <p className="text-[17px] font-extrabold leading-snug text-meti-ink">
           오늘도 같이
           <br />
@@ -67,24 +67,24 @@ export default async function HomePage() {
 
         <div className="mt-4 flex items-center gap-3">
           <div
-            className="h-2 flex-1 overflow-hidden rounded-full bg-meti-bg"
+            className="h-2.5 flex-1 overflow-hidden rounded-full bg-meti-bg"
             role="progressbar"
             aria-valuenow={done}
             aria-valuemin={0}
             aria-valuemax={target}
           >
             <div
-              className="h-full rounded-full bg-meti"
+              className="h-full rounded-full bg-meti transition-[width]"
               style={{ width: `${target === 0 ? 0 : (done / target) * 100}%` }}
             />
           </div>
-          <span className="text-[12px] font-bold text-meti-sub">
+          <span className="text-[12px] font-extrabold text-meti-sub">
             {done}/{target}
           </span>
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="rounded-2xl border-[1.5px] border-meti-bg bg-white p-5 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
         <h2 className="text-[15px] font-bold text-meti-ink">
           {session === null ? '새로운 미션을 시작할래?' : '남아 있는 미션을 이어할래?'}
         </h2>
@@ -95,7 +95,7 @@ export default async function HomePage() {
         <form action={startMission}>
           <button
             type="submit"
-            className="mt-4 w-full rounded-xl bg-meti py-3 text-[14px] font-bold text-white"
+            className="mt-4 w-full rounded-xl bg-meti py-3 text-[14px] font-bold text-white shadow-sm"
           >
             {session === null ? TERMS.startLearning.student : TERMS.resumeLearning.student}
           </button>
@@ -104,7 +104,7 @@ export default async function HomePage() {
 
       <Link
         href="/home/today"
-        className="rounded-2xl bg-white p-4 text-center text-[14px] font-bold text-meti-ink shadow-sm"
+        className="rounded-2xl bg-white p-4 text-center text-[14px] font-bold text-meti-ink shadow-[0_2px_8px_rgba(18,52,59,.06)] transition-colors active:bg-meti-bg/40"
       >
         {TERMS.learningResult.student} 보기
       </Link>

@@ -25,11 +25,13 @@ const PARTNERS = [
     value: 'friend' as const,
     tag: '생각 코치 · 되묻기 중심',
     line: '"왜 그렇게 생각했어? 네 말로 설명해줘!"',
+    accent: '#2BB8B0',
   },
   {
     value: 'villain' as const,
     tag: '흔들기 라이벌 · 반박 중심',
     line: '"정말? 나는 다르게 봤는데. 확실해?"',
+    accent: '#F0793D',
   },
 ];
 
@@ -44,7 +46,7 @@ export default async function PersonaPage() {
   if (student === null) redirect('/students');
 
   return (
-    <main className="flex flex-1 flex-col gap-6 px-6 py-10">
+    <main className="flex flex-1 flex-col gap-6 bg-[#F7FAFB] px-6 py-10">
       <header className="flex flex-col gap-1.5">
         <h1 className="text-2xl font-extrabold leading-snug text-meti-ink">
           누구랑 함께
@@ -62,16 +64,25 @@ export default async function PersonaPage() {
             <input type="hidden" name="persona" value={partner.value} />
             <button
               type="submit"
-              className="flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-sm"
+              style={{ borderColor: `${partner.accent}33` }}
+              className="flex w-full items-center gap-4 rounded-2xl border-[1.5px] bg-white p-4 text-left shadow-[0_2px_8px_rgba(18,52,59,.06)] transition-colors active:bg-meti-bg/30"
             >
-              <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-meti-bg">
+              <span
+                style={{ backgroundColor: `${partner.accent}1F` }}
+                className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-white shadow-sm"
+              >
                 <PartnerFace persona={partner.value} size={54} />
               </span>
               <span className="flex flex-col gap-1">
-                <span className="text-[15px] font-bold text-meti-ink">
+                <span className="text-[15px] font-extrabold text-meti-ink">
                   {PARTNER_NAME[partner.value]}
                 </span>
-                <span className="text-[12px] font-semibold text-meti-sub">{partner.tag}</span>
+                <span
+                  style={{ color: partner.accent }}
+                  className="text-[12px] font-bold"
+                >
+                  {partner.tag}
+                </span>
                 <span className="text-[12px] leading-relaxed text-meti-ink">{partner.line}</span>
               </span>
             </button>
