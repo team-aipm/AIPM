@@ -334,7 +334,7 @@ function ChatBubble({ m, mode }: { m: Msg; mode: CharacterId }) {
   if (m.kind === 'reward') {
     return (
       <div className="self-stretch rounded-3xl bg-white p-4.5 text-center shadow-[0_4px_16px_rgba(32,107,124,.1)]">
-        <Image src={CHARACTER_IMG.poki.wave} alt="포키" width={84} height={84} className="mx-auto h-21 w-auto animate-metty-float" />
+        <Image src={CHARACTER_IMG.poki.wave} alt="포키" width={84} height={84} className="mx-auto h-21 w-auto animate-meti-float" />
         <div className="mt-1 text-base font-extrabold text-[#24333A]">오늘의 생각, 저장 완료!</div>
         <div className="mt-1.5 flex justify-center gap-2">
           <span className="rounded-full bg-[#FFC857] px-3.5 py-2 text-[13px] font-extrabold text-[#24333A]">+25 P</span>

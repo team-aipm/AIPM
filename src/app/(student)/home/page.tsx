@@ -21,7 +21,7 @@ export default function StudentHomePage() {
   if (!hydrated) return null;
 
   const partner = CHARACTERS[state.partner];
-  const owned = (['metty', 'hetty', 'quri', 'poki'] as const).filter((id) => state.owned.includes(id));
+  const owned = (['meti', 'heti', 'quri', 'poki'] as const).filter((id) => state.owned.includes(id));
 
   return (
     <div className="flex h-full flex-col">
@@ -29,7 +29,7 @@ export default function StudentHomePage() {
       <div className="mb-5 flex h-[30px] items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="flex h-11 w-11 flex-none items-end justify-center overflow-hidden rounded-full bg-white p-px">
-            <Image src={CHARACTER_IMG.metty.celebrate} alt="메티" width={43} height={43} className="h-[43px] w-auto" />
+            <Image src={CHARACTER_IMG.meti.celebrate} alt="메티" width={43} height={43} className="h-[43px] w-auto" />
           </div>
           <div>
             <div className="text-xl font-bold leading-tight tracking-tight text-[#206B7C]">반가워! 민준</div>
@@ -66,11 +66,11 @@ export default function StudentHomePage() {
           <div className="mt-2 text-xs font-extrabold text-[#206B7C]">일일 미션 완료까지 얼마 안남았어!</div>
         </div>
         <Image
-          src={CHARACTER_IMG.metty.wave}
+          src={CHARACTER_IMG.meti.wave}
           alt="메티"
           width={111}
           height={110}
-          className="absolute right-4 top-6 h-[110px] w-auto animate-metty-float"
+          className="absolute right-4 top-6 h-[110px] w-auto animate-meti-float"
         />
       </div>
 

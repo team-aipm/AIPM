@@ -37,7 +37,7 @@ export default function TodayRecordPage() {
           alt="메티 프렌즈"
           width={300}
           height={200}
-          className="mx-auto -mb-1 mt-1.5 w-full max-w-[300px] animate-metty-float [--metty-float-duration:4.5s]"
+          className="mx-auto -mb-1 mt-1.5 w-full max-w-[300px] animate-meti-float [--meti-float-duration:4.5s]"
         />
       </div>
 
@@ -77,7 +77,7 @@ export default function TodayRecordPage() {
       </div>
 
       <div className="mt-3 flex gap-3 rounded-3xl bg-white p-4 shadow-[0_2px_10px_rgba(32,107,124,.07)]">
-        <Image src={CHARACTER_IMG.hetty.think} alt="헤티" width={64} height={64} className="h-16 w-auto flex-none" />
+        <Image src={CHARACTER_IMG.heti.think} alt="헤티" width={64} height={64} className="h-16 w-auto flex-none" />
         <div className="min-w-0 flex-1">
           <div className="mb-1 text-[13px] font-extrabold text-[#206B7C]">헤티의 한마디</div>
           <div className="text-sm font-bold leading-snug text-[#24333A] text-pretty">

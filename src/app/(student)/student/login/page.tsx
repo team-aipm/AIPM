@@ -34,11 +34,11 @@ export default function StudentLoginPage() {
         <div className="mb-2.5 text-sm font-bold text-[#3E5057]">내 생각을 발견하는 시간</div>
         <Image src={LOGO_IMG} alt="Meti" width={200} height={90} className="mx-auto mt-4 block w-[200px]" />
         <Image
-          src={CHARACTER_IMG.metty.wave}
+          src={CHARACTER_IMG.meti.wave}
           alt="메티"
           width={168}
           height={168}
-          className="mx-auto mt-2.5 block h-[168px] w-auto animate-metty-float"
+          className="mx-auto mt-2.5 block h-[168px] w-auto animate-meti-float"
         />
       </div>
 

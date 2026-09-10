@@ -17,7 +17,7 @@ import { BottomTabs } from '../_components/BottomTabs';
 import { CHARACTER_IMG, CHARACTERS, type CharacterId } from '../_lib/mock-data';
 import { useStudentState } from '../_lib/use-student-state';
 
-const ORDER: CharacterId[] = ['metty', 'hetty', 'quri', 'poki', 'mono', 'tori'];
+const ORDER: CharacterId[] = ['meti', 'heti', 'quri', 'poki', 'mono', 'tori'];
 
 export default function DexPage() {
   const { state, hydrated } = useStudentState();

@@ -33,7 +33,7 @@ export default function MyPage() {
       <div className="mb-3 rounded-3xl bg-white p-4 shadow-[0_2px_10px_rgba(32,107,124,.07)]">
         <div className="flex items-center gap-3.5">
           <div className="flex h-16 w-16 flex-none items-end justify-center overflow-hidden rounded-3xl bg-[#DDF4F6]">
-            <Image src={CHARACTER_IMG.metty.celebrate} alt="파트너" width={62} height={62} className="h-[62px] w-auto" />
+            <Image src={CHARACTER_IMG.meti.celebrate} alt="파트너" width={62} height={62} className="h-[62px] w-auto" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-lg font-extrabold text-[#24333A]">초등 4학년</div>

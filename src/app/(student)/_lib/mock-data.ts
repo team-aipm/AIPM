@@ -1,5 +1,5 @@
 /**
- * METTY 프로토타입 이식용 임시 목업 데이터.
+ * METI 프로토타입 이식용 임시 목업 데이터.
  *
  * ⚠️ 스키마 노트 (COM-002 §persona_type)
  * 현재 `persona_type`은 `friend` / `villain` 2종 ENUM이다. 이 프로토타입은
@@ -18,7 +18,7 @@
 
 export type PersonaType = 'friend' | 'villain';
 
-export type CharacterId = 'metty' | 'hetty' | 'quri' | 'poki' | 'mono' | 'tori';
+export type CharacterId = 'meti' | 'heti' | 'quri' | 'poki' | 'mono' | 'tori';
 
 export type Character = {
   id: CharacterId;
@@ -37,8 +37,8 @@ export type Character = {
 };
 
 export const CHARACTERS: Record<CharacterId, Character> = {
-  metty: {
-    id: 'metty',
+  meti: {
+    id: 'meti',
     personaType: 'friend',
     ko: '메티',
     en: 'METI',
@@ -48,8 +48,8 @@ export const CHARACTERS: Record<CharacterId, Character> = {
     unlocked: true,
     accent: '#2BB8B0',
   },
-  hetty: {
-    id: 'hetty',
+  heti: {
+    id: 'heti',
     personaType: 'villain',
     ko: '헤티',
     en: 'HETI',
@@ -108,17 +108,17 @@ export const CHARACTERS: Record<CharacterId, Character> = {
 };
 
 export const CHARACTER_IMG: Record<CharacterId, { front: string; wave: string; think: string; celebrate: string }> = {
-  metty: {
-    front: '/characters/metty_01_front-mttn80yx-s9em.png',
-    wave: '/characters/metty_02_wave-mttgmra0-yqak.png',
-    think: '/characters/metty_01_front-mttn80yx-s9em.png',
-    celebrate: '/characters/metty_04_celebrate-mtth0j8r-ywx6.png',
+  meti: {
+    front: '/characters/meti_01_front-mttn80yx-s9em.png',
+    wave: '/characters/meti_02_wave-mttgmra0-yqak.png',
+    think: '/characters/meti_01_front-mttn80yx-s9em.png',
+    celebrate: '/characters/meti_04_celebrate-mtth0j8r-ywx6.png',
   },
-  hetty: {
-    front: '/characters/hetty_02_wave-mtth3vtg-tszh.png',
-    wave: '/characters/hetty_02_wave-mtth3vtg-tszh.png',
-    think: '/characters/hetty_03_think-mttnfx1s-nt1t.png',
-    celebrate: '/characters/hetty_02_wave-mttnklya-ajkj.png',
+  heti: {
+    front: '/characters/heti_02_wave-mtth3vtg-tszh.png',
+    wave: '/characters/heti_02_wave-mtth3vtg-tszh.png',
+    think: '/characters/heti_03_think-mttnfx1s-nt1t.png',
+    celebrate: '/characters/heti_02_wave-mttnklya-ajkj.png',
   },
   quri: {
     front: '/characters/quri_03_think-mttnjlg0-hx93.png',
@@ -158,7 +158,7 @@ export type ChatStep = {
 
 /** 캐릭터별 대화 트리 — 실제 AI 세션(lib/ai/drilldown.ts)으로 교체될 자리. */
 export const SCRIPTS: Record<CharacterId, ChatStep[]> = {
-  metty: [
+  meti: [
     { bot: ['좋아! 오늘 막힌 문제 하나 가져와 볼래? 사진으로 올려도 되고 직접 써도 돼.'], chips: ['📷 사진으로 올릴게', '직접 쓸래'] },
     { me: 'attach', bot: ['오~ 분수 나눗셈이구나. 바로 풀지 말고 하나만 물어볼게.', '이 문제에서 제일 헷갈리는 게 뭐야?'], chips: ['÷를 왜 ×로 바꾸는지', '분수를 왜 뒤집는지', '어디서 막혔는지 모르겠어'] },
     { bot: ['그 부분만 좁혀서 파보자. 2/5로 나눈다는 건, 2/5를 몇 번 담는 걸까?'], chips: ['몇 개 들어가는지 세는 것', '나누기라서 작아지는 것'] },
@@ -167,7 +167,7 @@ export const SCRIPTS: Record<CharacterId, ChatStep[]> = {
     { bot: ['정확해. 방금 네가 나를 가르친 거야 😳', '마지막! 오늘 알아낸 걸 한 문장으로 써서 보내줘.'], input: true },
     { bot: ['좋아, 이 문장 기억창고에 넣어둘게. 다음에 헷갈리면 꺼내 보자!', 'reward'], chips: ['오늘 미션 마무리하기', '한 문제 더 하기', '도감 보러 가기'] },
   ],
-  hetty: [
+  heti: [
     { bot: ['왔구나! 오늘은 내가 먼저 풀어볼게.', '내 풀이에서 실수를 찾아내면 네가 이기는 거야. 할 수 있겠어?'], chips: ['좋아, 붙어보자', '자신 없는데…'] },
     { me: 'attach', bot: ['자 봐라. 이 정도면 완벽하지?', 'solution'], chips: ['어? 뭔가 이상한데', '맞는 것 같아'] },
     { bot: ['어디가 이상한데? 줄을 눌러서 짚어봐.'], chips: ['2번째 줄', '3번째 줄', '잘 모르겠어'] },

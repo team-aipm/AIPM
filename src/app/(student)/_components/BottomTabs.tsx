@@ -12,7 +12,7 @@ import { useStudentState } from '../_lib/use-student-state';
  * Screen(STU-004)이다. 도감·상점·마이는 아직 Screen ID가 없는 프로토타입
  * 화면이라 팀 문서화 전까지는 임시 경로로만 존재한다 (`/dex`, `/shop`, `/my`).
  *
- * 가운데 원형 버튼(FAB)은 METTY 프로토타입 원본에 있던 "빠른 미션 시작"
+ * 가운데 원형 버튼(FAB)은 METI 프로토타입 원본에 있던 "빠른 미션 시작"
  * 버튼이다. 항상 파트너로 지정된 캐릭터로 새 세션을 시작한다 — 실제로는
  * "이어할 세션이 있는가"에 따라 `/mission`으로 바로 보낼지 `/calendar`로
  * 보낼지 분기해야 한다 (COM-003 §4.2 상태별 Primary Action).
@@ -39,7 +39,7 @@ export function BottomTabs() {
   // hydrated 이전에는 로컬 저장값을 아직 못 읽었으니 기본 파트너(메티)로
   // 잠깐 보여준다 — 서버 렌더와 클라이언트 첫 렌더가 어긋나지 않게 하기
   // 위함. hydrate 되자마자 실제 선택된 캐릭터로 바뀐다.
-  const partnerId = hydrated ? state.partner : 'metty';
+  const partnerId = hydrated ? state.partner : 'meti';
   const partner = CHARACTERS[partnerId];
 
   return (

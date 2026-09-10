@@ -81,7 +81,7 @@ function Step1() {
       </div>
       <div className="mt-5 rounded-3xl bg-white p-4 shadow-[0_3px_14px_rgba(32,107,124,.08)]">
         <div className="mb-2.5 flex items-end gap-2">
-          <Image src={CHARACTER_IMG.metty.front} alt="메티" width={30} height={30} className="h-[30px] w-auto" />
+          <Image src={CHARACTER_IMG.meti.front} alt="메티" width={30} height={30} className="h-[30px] w-auto" />
           <div className="rounded-2xl rounded-bl-sm bg-[#F1F5F6] px-3 py-2.5 text-[13px] font-semibold text-[#24333A]">
             내가 먼저 풀어볼게 👀
           </div>
@@ -94,11 +94,11 @@ function Step1() {
         <div className="mt-2.5 text-[13px] font-bold text-[#206B7C]">틀린 줄을 누르면 대화가 시작돼</div>
       </div>
       <Image
-        src={CHARACTER_IMG.metty.front}
+        src={CHARACTER_IMG.meti.front}
         alt="메티"
         width={150}
         height={150}
-        className="mx-auto mt-11.5 block h-[150px] w-auto animate-metty-float"
+        className="mx-auto mt-11.5 block h-[150px] w-auto animate-meti-float"
       />
     </div>
   );
@@ -124,7 +124,7 @@ function Step2() {
       </div>
       <div className="mt-5 flex items-center gap-3.5 rounded-3xl bg-white p-4 shadow-[0_3px_14px_rgba(32,107,124,.08)]">
         <div className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-2xl bg-[#DDF4F6]">
-          <Image src={CHARACTER_IMG.metty.wave} alt="메티" width={40} height={40} className="h-10 w-auto object-contain" />
+          <Image src={CHARACTER_IMG.meti.wave} alt="메티" width={40} height={40} className="h-10 w-auto object-contain" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-base font-extrabold">메티의 미션을 해결하기</div>
@@ -135,7 +135,7 @@ function Step2() {
       </div>
       <div className="mt-2.5 flex items-center gap-3.5 rounded-3xl bg-white p-4 shadow-[0_3px_14px_rgba(32,107,124,.08)]">
         <div className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-2xl bg-[#FDEDE9]">
-          <Image src={CHARACTER_IMG.hetty.wave} alt="헤티" width={40} height={40} className="h-10 w-auto object-contain" />
+          <Image src={CHARACTER_IMG.heti.wave} alt="헤티" width={40} height={40} className="h-10 w-auto object-contain" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-base font-extrabold">헤티의 실수를 찾아내기</div>
@@ -149,7 +149,7 @@ function Step2() {
         alt="큐리"
         width={130}
         height={130}
-        className="mx-auto mt-11.5 block h-[130px] w-auto animate-metty-float [--metty-float-duration:4.4s]"
+        className="mx-auto mt-11.5 block h-[130px] w-auto animate-meti-float [--meti-float-duration:4.4s]"
       />
     </div>
   );

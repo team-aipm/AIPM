@@ -24,7 +24,7 @@
  */
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="metty-app min-h-dvh bg-[#D7E0E3] md:flex md:justify-center md:px-6 md:py-10">
+    <div className="meti-app min-h-dvh bg-[#D7E0E3] md:flex md:justify-center md:px-6 md:py-10">
       <div className="mx-auto h-dvh w-full max-w-md overflow-hidden bg-[#EEF2F3] text-[#24333A] md:h-[calc(100dvh-80px)] md:rounded-[36px] md:shadow-[0_20px_60px_rgba(20,40,50,.18)] md:ring-1 md:ring-black/5">
         {children}
       </div>

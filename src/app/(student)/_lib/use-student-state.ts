@@ -21,12 +21,12 @@ export type StudentMockState = {
   streakDays: number;
 };
 
-const KEY = 'metty_student_mock_v1';
+const KEY = 'meti_student_mock_v1';
 
 const DEFAULT_STATE: StudentMockState = {
   points: 240,
-  owned: ['metty', 'hetty', 'quri', 'poki'],
-  partner: 'metty',
+  owned: ['meti', 'heti', 'quri', 'poki'],
+  partner: 'meti',
   missionsDoneToday: 2,
   missionsGoalToday: 3,
   streakDays: 5,

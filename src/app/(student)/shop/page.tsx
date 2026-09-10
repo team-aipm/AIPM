@@ -40,7 +40,7 @@ export default function ShopPage() {
           alt="포키"
           width={92}
           height={92}
-          className="h-[92px] w-auto animate-metty-float [--metty-float-duration:3.4s]"
+          className="h-[92px] w-auto animate-meti-float [--meti-float-duration:3.4s]"
         />
       </div>
 

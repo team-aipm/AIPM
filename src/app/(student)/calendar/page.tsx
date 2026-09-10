@@ -197,7 +197,7 @@ export default function CalendarPage() {
       ))}
 
       <div className="mt-1.5 flex items-center gap-2.5 rounded-2xl bg-[#DDF4F6] p-3.5">
-        <Image src={CHARACTER_IMG.metty.front} alt="메티" width={56} height={56} className="h-14 w-auto flex-none" />
+        <Image src={CHARACTER_IMG.meti.front} alt="메티" width={56} height={56} className="h-14 w-auto flex-none" />
         <span className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#206B7C] text-pretty">
           {isThisMonth
             ? doneN === 3

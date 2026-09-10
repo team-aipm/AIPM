@@ -18,7 +18,7 @@ import { useRouter } from 'next/navigation';
 import { CHARACTERS, CHARACTER_IMG, type CharacterId } from '../../_lib/mock-data';
 import { useStudentState } from '../../_lib/use-student-state';
 
-const PICKABLE: CharacterId[] = ['metty', 'hetty', 'quri', 'poki'];
+const PICKABLE: CharacterId[] = ['meti', 'heti', 'quri', 'poki'];
 const LOCKED: CharacterId[] = ['mono', 'tori'];
 
 export default function PersonaSelectPage() {
@@ -57,7 +57,7 @@ export default function PersonaSelectPage() {
           alt={picked.ko}
           width={86}
           height={86}
-          className="h-[86px] w-auto flex-none animate-metty-float object-contain"
+          className="h-[86px] w-auto flex-none animate-meti-float object-contain"
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-1.5">
