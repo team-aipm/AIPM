@@ -398,15 +398,12 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     .map((m) => m.message_text);
   const supportLevel = before.reduce((max, m) => Math.max(max, m.support_level), 0);
 
-  await appendMessage(supabase, {
-    problemId: problem.problem_id,
-    sessionId: session.session_id,
-    studentId: student.student_id,
-    speaker: 'student',
-    text: said,
-    turnNumber: before.length + 1,
-    supportLevel,
-  });
+  // **학생의 말을 아직 저장하지 않는다.** 모델이 실패하면 그 턴이 그냥
+  // 사라져야 한다. 먼저 저장하면 실패할 때마다 턴이 깎이고, 같은 말이
+  // 두 번 세 번 쌓인다 — 2026-09-10 에 실제로 그렇게 됐다.
+  //
+  // 모델에게 보낼 입력에는 방금 한 말을 직접 넣으므로(studentTexts) DB
+  // 행이 없어도 대화는 온전하다.
 
   // 같은 화면에서 두 모드가 이어진다. 어느 단계를 부를지는 문제가 안다.
   const isModeB = problem.learning_mode === 'mode_b';
@@ -462,6 +459,17 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
   const message = str(read(output, 'ui.message'));
   const status = str(read(output, 'completion.status'));
   const nextSupport = num(read(output, 'interaction_update.support_level'), supportLevel);
+
+  // 성공했으니 이제 둘을 함께 남긴다. 학생의 말이 먼저다.
+  await appendMessage(supabase, {
+    problemId: problem.problem_id,
+    sessionId: session.session_id,
+    studentId: student.student_id,
+    speaker: 'student',
+    text: said,
+    turnNumber: before.length + 1,
+    supportLevel,
+  });
 
   await appendMessage(supabase, {
     problemId: problem.problem_id,
