@@ -38,6 +38,8 @@ export async function appendMessage(
     turnNumber: number;
     supportLevel: number;
     drilldownStage?: Enums['drilldown_stage'] | null;
+    /** 04 HINT 가 준 말인가. 다음 힌트에 이력으로 넘긴다(COM-002 §7) */
+    isHint?: boolean;
   },
 ): Promise<void> {
   const { error } = await client.from('message').insert({
@@ -49,6 +51,7 @@ export async function appendMessage(
     turn_number: input.turnNumber,
     support_level: input.supportLevel,
     drilldown_stage: input.drilldownStage ?? null,
+    is_hint: input.isHint ?? false,
   });
 
   // **대화 저장은 실패하면 던진다.** 이벤트와 다르다 — 이건 학습 기록
