@@ -139,36 +139,65 @@ export default async function HomePage() {
           미션 시작
         </h2>
 
+        {/*
+          프로토타입은 이 카드 2개를 항상 같이 보여준다. 둘 다 실제로는
+          같은 `startMission`을 부른다 — 그 액션 자체가 "오늘 세션이 있으면
+          이어서 열고, 없으면 새로 연다"를 이미 판단해서(idempotent) 어느
+          카드를 눌러도 결과가 같다. 그래서 굳이 하나를 숨길 이유가
+          없었다 — 상황에 따라 카드를 숨기는 건 내 판단이었지, 실제로
+          막아야 하는 이유가 있었던 게 아니다.
+        */}
         <section className='rounded-[22px] bg-white p-4 shadow-[0_2px_10px_rgba(32,107,124,.07)]'>
           <div className='flex items-center gap-[13px]'>
             <span className='flex h-[46px] w-[46px] shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-meti-bg'>
-              <PartnerFace
-                persona={student.persona_type}
-                pose='think'
-                size={30}
-              />
+              <PartnerFace persona={student.persona_type} pose='think' size={30} />
             </span>
             <div className='min-w-0 flex-1'>
               <h3 className='mb-1 text-[16px] font-extrabold text-meti-ink'>
-                {session === null
-                  ? '새로운 미션을 시작할래?'
-                  : '남아 있는 미션을 이어할래?'}
+                새로운 미션을 시작할래
               </h3>
               <p className='text-[13px] font-medium leading-[1.45] text-meti-sub'>
-                {partner}와 함께 오늘의 미션을 시작해보자!
+                {partner}와 함께 새로운 미션을 시작하고
+                <br />
+                오늘의 생각을 남겨보자!
               </p>
             </div>
           </div>
-
           <div className='mt-3.5 flex items-center justify-end'>
             <form action={startMission}>
               <button
                 type='submit'
                 className='rounded-full bg-meti px-3.5 py-2.5 text-[13px] font-bold text-white'
               >
-                {session === null
-                  ? TERMS.startLearning.student
-                  : TERMS.resumeLearning.student}
+                {TERMS.startLearning.student}
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <section className='mt-2.5 rounded-[22px] bg-white p-4 shadow-[0_2px_10px_rgba(32,107,124,.07)]'>
+          <div className='flex items-center gap-[13px]'>
+            <span className='flex h-[46px] w-[46px] shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#F1F5F6]'>
+              <PartnerFace persona={student.persona_type} pose='wave' size={30} />
+            </span>
+            <div className='min-w-0 flex-1'>
+              <h3 className='mb-1 text-[16px] font-extrabold text-meti-ink'>
+                남아 있는 미션을 이어할래
+              </h3>
+              <p className='text-[13px] font-medium leading-[1.45] text-meti-sub'>
+                이전에 남아있던 미션을 찾아
+                <br />
+                함께 해결해보자!
+              </p>
+            </div>
+          </div>
+          <div className='mt-3.5 flex items-center justify-end'>
+            <form action={startMission}>
+              <button
+                type='submit'
+                className='rounded-full border-[1.5px] border-meti bg-white px-3.5 py-2.5 text-[13px] font-bold text-meti'
+              >
+                {TERMS.resumeLearning.student}
               </button>
             </form>
           </div>
