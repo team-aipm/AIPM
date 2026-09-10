@@ -299,13 +299,13 @@ ${reply.recognized}
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {problemText !== null && (
-        <div className="shrink-0 border-b border-black/5 bg-white px-5 py-3 shadow-sm">
-          <p className="text-[11px] font-bold text-meti-sub">오늘의 문제</p>
+        <div className="shrink-0 border-b border-meti-bg bg-white px-5 py-3.5 shadow-[0_2px_8px_rgba(18,52,59,.05)]">
+          <p className="text-[11px] font-extrabold tracking-wide text-meti">오늘의 문제</p>
           <p className="mt-1 text-[14px] font-semibold leading-relaxed text-meti-ink">
             {problemText}
           </p>
           {!finished && (
-            <p className="mt-1.5 text-[11px] text-meti-sub">
+            <p className="mt-1.5 text-[11px] font-semibold text-meti-sub">
               {turnsLeft}번 더 말할 수 있어
             </p>
           )}
@@ -319,18 +319,18 @@ ${reply.recognized}
 
         {turns.map((turn, index) =>
           turn.who === 'ai' ? (
-            <div key={index} className="flex items-start gap-2">
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
+            <div key={index} className="flex items-end gap-2">
+              <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
                 <PartnerFace persona={persona} size={26} />
               </span>
-              <p className="max-w-[78%] whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-white px-3.5 py-2.5 text-[14px] leading-relaxed text-meti-ink shadow-sm">
+              <p className="max-w-[78%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-3.5 py-2.5 text-[14px] leading-relaxed text-meti-ink shadow-[0_2px_8px_rgba(18,52,59,.06)]">
                 {turn.text}
               </p>
             </div>
           ) : (
             <p
               key={index}
-              className="max-w-[78%] self-end whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-meti px-3.5 py-2.5 text-[14px] leading-relaxed text-white"
+              className="max-w-[78%] self-end whitespace-pre-wrap rounded-2xl rounded-br-sm bg-meti px-3.5 py-2.5 text-[14px] leading-relaxed text-white shadow-sm"
             >
               {turn.text}
             </p>
@@ -338,22 +338,31 @@ ${reply.recognized}
         )}
 
         {pending && (
-          <p className="ml-9 text-[13px] text-meti-sub">{partner}가 생각하는 중…</p>
+          <div className="flex items-end gap-2">
+            <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
+              <PartnerFace persona={persona} size={26} />
+            </span>
+            <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-white px-3.5 py-3 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-meti-sub" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-meti-sub [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-meti-sub [animation-delay:300ms]" />
+            </div>
+          </div>
         )}
 
         <div ref={bottom} />
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-black/5 bg-white/60 px-5 py-4">
+      <div className="flex flex-col gap-2.5 border-t border-black/5 bg-white px-4 py-3.5">
         {choices.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {choices.map((choice) => (
               <button
                 key={choice.value + choice.label}
                 type="button"
                 onClick={() => say(labelOf(choice, partner), choice.label)}
                 disabled={pending}
-                className="rounded-full border border-meti/40 bg-white px-3.5 py-2 text-[13px] font-semibold text-meti disabled:opacity-50"
+                className="min-h-11 rounded-full border-[1.5px] border-meti/40 bg-white px-4 py-2.5 text-[13px] font-bold text-meti transition-colors active:bg-meti-bg/50 disabled:opacity-50"
               >
                 {labelOf(choice, partner)}
               </button>
@@ -365,7 +374,7 @@ ${reply.recognized}
           <button
             type="button"
             onClick={() => void hint()}
-            className="self-start rounded-full border border-meti/40 bg-white px-3.5 py-2 text-[13px] font-semibold text-meti"
+            className="min-h-11 self-start rounded-full border-[1.5px] border-[#F0C36A] bg-[#FFF7E0] px-4 py-2.5 text-[13px] font-bold text-[#8A6100] transition-colors active:bg-[#FCEBB8]"
           >
             💡 힌트 주세요
           </button>
@@ -374,23 +383,24 @@ ${reply.recognized}
         {finished ? (
           <div className="flex flex-col gap-2">
             {sessionDone ? (
-              <>
-                <p className="text-center text-[13px] font-bold text-meti-ink">
+              <div className="flex flex-col items-center gap-2.5 rounded-3xl bg-white px-5 py-5 text-center shadow-[0_4px_16px_rgba(18,52,59,.1)]">
+                <PartnerFace persona={persona} size={72} />
+                <p className="text-[14px] font-extrabold text-meti-ink">
                   오늘 미션 끝! 정말 잘했어
                 </p>
                 <a
                   href="/home/today"
-                  className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
+                  className="mt-1 w-full rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
                 >
                   오늘의 기록 보기
                 </a>
-              </>
+              </div>
             ) : (
               <button
                 type="button"
                 onClick={() => void openProblem()}
                 disabled={pending}
-                className="rounded-xl bg-meti py-3 text-[14px] font-bold text-white disabled:opacity-40"
+                className="rounded-xl bg-meti py-3 text-[14px] font-bold text-white shadow-sm disabled:opacity-40"
               >
                 한 문제 더 하기
               </button>
@@ -413,8 +423,8 @@ ${reply.recognized}
             {canSendPhoto && (
               <label
                 aria-label="사진으로 문제 올리기"
-                className={`flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-meti/40 bg-white text-[17px] ${
-                  pending ? 'pointer-events-none opacity-40' : ''
+                className={`flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-meti/40 bg-white text-[18px] transition-colors ${
+                  pending ? 'pointer-events-none opacity-40' : 'active:bg-meti-bg/50'
                 }`}
               >
                 📷
@@ -446,12 +456,12 @@ ${reply.recognized}
                   ? '맞으면 "응", 아니면 고쳐서 적어줘'
                   : '내 생각을 써볼까?'
             }
-              className="flex-1 rounded-full border border-black/10 bg-white px-4 py-2.5 text-[14px] outline-none focus:border-meti disabled:opacity-60"
+              className="h-11 min-w-0 flex-1 rounded-full border-[1.5px] border-black/10 bg-[#F7FAFB] px-4 text-[14px] outline-none focus:border-meti disabled:opacity-60"
             />
             <button
               type="submit"
               disabled={inputBlocked || draft.trim() === ''}
-              className="rounded-full bg-meti px-4 py-2.5 text-[14px] font-bold text-white disabled:opacity-40"
+              className="h-11 shrink-0 rounded-full bg-meti px-4 text-[14px] font-bold text-white shadow-sm disabled:opacity-40"
             >
               보내기
             </button>
