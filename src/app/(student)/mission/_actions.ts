@@ -16,7 +16,12 @@ import { createClient } from '@/lib/supabase/server';
 import { getStudent } from '@/lib/services/student';
 import { findTodaySession, countCompleted, today } from '@/lib/services/learning-session';
 import { findDailyReport, saveDailyReport } from '@/lib/services/learning-report';
-import { createProblem, findActiveProblem, finishProblem } from '@/lib/services/problem';
+import {
+  createProblem,
+  findActiveProblem,
+  finishProblem,
+  listSessionProblemTexts,
+} from '@/lib/services/problem';
 import { appendMessage, listMessages } from '@/lib/services/message';
 import { pickConcept } from '@/lib/services/concept';
 import { EVENT, record } from '@/lib/analytics/events';
@@ -217,6 +222,8 @@ function buildModeAInput(args: {
   latest: string | null;
   /** COM-001 §9 로 고른 개념. 없으면 02 가 학년에 맞춰 알아서 낸다 */
   concept?: string | null;
+  /** 이번 세션에서 이미 낸 문제. 같은 것을 다시 내지 않게 한다 */
+  previousProblems?: string[];
 }): string {
   const stage = stageOf('02 MODE A');
   let input: unknown = JSON.parse(stage.sampleInput);
@@ -228,15 +235,20 @@ function buildModeAInput(args: {
   input = write(input, 'session.session_id', args.sessionId);
   input = write(input, 'session.problem_number', args.problemNumber);
   input = write(input, 'session.total_problems', args.totalProblems);
+  // **이미 낸 문제.** 없으면 모델은 매 문제를 백지에서 만든다. 같은 개념이
+  // 두 번 걸리면 같은 문제가 그대로 다시 나온다.
+  input = write(input, 'session.previous_problems', args.previousProblems ?? []);
 
   input = write(input, 'payload.learning_mode', 'A');
   input = write(input, 'payload.mode_phase', args.phase);
 
-  // **개념 선정은 아직 없다.** COM-001 §9 는 취약 개념 4 · 현재 수준 4 ·
-  // 복습 2 로 섞으라고 하는데, 그러려면 개념 목록과 학생 기록이 필요하다.
-  // null 로 두면 모델이 학년에 맞는 문제를 고른다. 지어낸 개념명을 넣는
-  // 것보다 낫다.
-  input = write(input, 'payload.learning_target.concept', null);
+  // **골라 놓고 버리고 있었다.** `startProblem` 이 `pickConcept()` 로
+  // 개념을 고르고 로그까지 남기는데(COM-001 §9), 여기서 null 로 덮었다.
+  // 주석은 개념 선정을 만들기 전에 쓴 것이 그대로 남아 있었다.
+  //
+  // 없으면 null 이다. 그때는 모델이 학년에 맞춰 고른다 — 지어낸 개념명을
+  // 넣는 것보다 낫다.
+  input = write(input, 'payload.learning_target.concept', args.concept ?? null);
   input = write(input, 'payload.learning_target.target_logic_gap', null);
   input = write(input, 'payload.learning_target.difficulty', 'SAME');
 
@@ -332,7 +344,10 @@ export async function startProblem(): Promise<ProblemReply> {
   }
 
   const problemNumber = session.completed_problem_count + 1;
-  const picked = await pickConcept(supabase, student.student_id, problemNumber);
+  const [picked, previousProblems] = await Promise.all([
+    pickConcept(supabase, student.student_id, problemNumber),
+    listSessionProblemTexts(supabase, session.session_id),
+  ]);
   if (picked.concept !== null) {
     console.log(`[mission] 개념 선정: ${picked.concept} (${picked.reason})`);
   }
@@ -345,6 +360,7 @@ export async function startProblem(): Promise<ProblemReply> {
     problemNumber,
     totalProblems: session.target_problem_count,
     concept: picked.concept,
+    previousProblems,
     phase: 'PREPARE',
     problem: null,
     studentTexts: [],

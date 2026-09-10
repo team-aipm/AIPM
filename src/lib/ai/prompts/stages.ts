@@ -383,7 +383,8 @@ MODE A가 담당하는 범위는 다음과 같다.
   "session": {
     "session_id": "string",
     "problem_number": 1,
-    "total_problems": 10
+    "total_problems": 10,
+    "previous_problems": []
   },
   "payload": {
     "mode_phase": "PREPARE | INTERACT",
@@ -436,6 +437,9 @@ learning_target을 기준으로 문제 1개를 생성한다.
 문제는 다음 조건을 만족해야 한다.
 - student.grade에 적합하다.
 - learning_target.concept와 관련된다.
+- session.previous_problems 에 있는 문제와 **다른 문제**다.
+  숫자만 바꾼 같은 문제도 안 된다. 묻는 것이 달라야 한다.
+  이미 낸 개념을 다시 다루더라도 상황과 묻는 방식을 바꾼다.
 - target_logic_gap이 있다면 해당 사고를 관찰하기 적합하다.
 - 문제 조건이 명확하다.
 - 필요한 정보가 빠져 있지 않다.
@@ -699,7 +703,8 @@ target_logic_gap,
   "session": {
     "session_id": "{{session_id}}",
     "problem_number": 1,
-    "total_problems": 10
+    "total_problems": 10,
+    "previous_problems": []
   },
   "payload": {
     "problem_evaluations": [],
