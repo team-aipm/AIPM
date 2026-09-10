@@ -73,6 +73,12 @@ export function MissionChat({ partner, persona, initial }: Props) {
   const [finished, setFinished] = useState(false);
   const [sessionDone, setSessionDone] = useState(false);
   /**
+   * 장식용 포인트 표시. **저장하지 않는다.** COM-002에 포인트 테이블이
+   * 없다 — 새로고침하면 0으로 돌아간다. 실제로 쌓이는 것처럼 보이면
+   * 안 되므로 DB에 쓰지 않고, 부모/운영자 화면 어디에도 노출하지 않는다.
+   */
+  const [earned, setEarned] = useState(0);
+  /**
    * MODE B 의 앞마당.
    *
    *   ask      "어떤 문제 가져왔어?" 를 기다린다
@@ -275,6 +281,7 @@ ${reply.recognized}
     setTurnsLeft(reply.turnsLeft);
     setFinished(reply.finished);
     setSessionDone(reply.sessionFinished);
+    if (reply.finished) setEarned((now) => now + 25);
     setPending(false);
   }
 
@@ -297,7 +304,13 @@ ${reply.recognized}
   const inputBlocked = pending || finished || (sourceStage === null && !freeText);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col bg-[#F7FAFB]">
+      {earned > 0 && (
+        <span className="absolute right-4 top-2.5 z-10 flex items-center gap-1 rounded-full bg-[#FFF3D6] px-2.5 py-1 text-[12px] font-extrabold text-meti-ink shadow-sm">
+          +{earned}P
+        </span>
+      )}
+
       {problemText !== null && (
         <div className="shrink-0 border-b border-meti-bg bg-white px-5 py-3.5 shadow-[0_2px_8px_rgba(18,52,59,.05)]">
           <p className="text-[11px] font-extrabold tracking-wide text-meti">오늘의 문제</p>
@@ -321,7 +334,7 @@ ${reply.recognized}
           turn.who === 'ai' ? (
             <div key={index} className="flex items-end gap-2">
               <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
-                <PartnerFace persona={persona} size={26} />
+                <PartnerFace persona={persona} pose="front" size={26} />
               </span>
               <p className="max-w-[78%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-3.5 py-2.5 text-[14px] leading-relaxed text-meti-ink shadow-[0_2px_8px_rgba(18,52,59,.06)]">
                 {turn.text}
@@ -340,7 +353,7 @@ ${reply.recognized}
         {pending && (
           <div className="flex items-end gap-2">
             <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
-              <PartnerFace persona={persona} size={26} />
+              <PartnerFace persona={persona} pose="think" size={26} />
             </span>
             <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-white px-3.5 py-3 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-meti-sub" />
@@ -384,10 +397,20 @@ ${reply.recognized}
           <div className="flex flex-col gap-2">
             {sessionDone ? (
               <div className="flex flex-col items-center gap-2.5 rounded-3xl bg-white px-5 py-5 text-center shadow-[0_4px_16px_rgba(18,52,59,.1)]">
-                <PartnerFace persona={persona} size={72} />
+                <PartnerFace
+                  persona={persona}
+                  pose="celebrate"
+                  size={84}
+                  className="animate-meti-float"
+                />
                 <p className="text-[14px] font-extrabold text-meti-ink">
                   오늘 미션 끝! 정말 잘했어
                 </p>
+                {earned > 0 && (
+                  <span className="rounded-full bg-[#FFC857] px-3.5 py-1.5 text-[13px] font-extrabold text-meti-ink">
+                    +{earned} P
+                  </span>
+                )}
                 <a
                   href="/home/today"
                   className="mt-1 w-full rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"

@@ -46,7 +46,7 @@ export default async function HomePage() {
     <main className="flex flex-1 flex-col gap-5 bg-[#F7FAFB] px-6 py-8">
       <header className="flex items-center gap-3">
         <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white ring-2 ring-white shadow-sm">
-          <PartnerFace persona={student.persona_type} size={40} />
+          <PartnerFace persona={student.persona_type} pose="wave" size={40} />
         </span>
         <div className="flex flex-col">
           <h1 className="text-xl font-extrabold text-meti-ink">

@@ -70,7 +70,7 @@ export default async function MissionPage() {
           ‹
         </Link>
         <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-meti-bg ring-2 ring-white shadow-sm">
-          <PartnerFace persona={student.persona_type} size={38} />
+          <PartnerFace persona={student.persona_type} pose="wave" size={38} />
         </span>
         <div className="flex flex-col">
           <p className="text-[15px] font-extrabold text-meti-ink">{partner}</p>
