@@ -249,6 +249,7 @@ Rules: - `verified_answer`는 학습 시작 전에 검증되어야 한다. - 검
   `drilldown_stage`   ENUM/TEXT             NO reasoning     현재 사고 단계
   `turn_number`       INTEGER              YES 4             문제 내 순서
   `support_level`     SMALLINT             YES 1             해당 턴 도움 수준
+  `is_hint`           BOOLEAN              YES false         04 HINT 가 준 말
   `created_at`        TIMESTAMPTZ          YES timestamp     저장 시점
 
 `drilldown_stage`: - `judgment` - `reasoning` - `rule` - `transfer` -
@@ -256,6 +257,14 @@ Rules: - `verified_answer`는 학습 시작 전에 검증되어야 한다. - 검
 
 Rules: - 대화 턴마다 즉시 저장. - 마지막 저장 Message를 기준으로 학습
 복구 가능해야 함.
+
+`is_hint` (2026-09-10 추가): 04 HINT 가 준 말에만 `true`. 다음 Hint 요청에
+`hint_history`로 넘겨 **같은 말을 되풀이하지 않게** 한다. 05 EVALUATOR 의
+`hint_count`도 여기서 센다.
+
+`support_level`로는 Hint를 가려낼 수 없다 — MODE A·B의 보통 턴도 도움
+수준을 함께 남긴다. `drilldown_stage`도 아니다. 그 값은 사고 단계이지
+「이 말이 Hint였다」가 아니다.
 
 ## 8. Evaluation
 

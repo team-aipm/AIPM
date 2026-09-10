@@ -60,6 +60,19 @@ function read(json: unknown, path: string): unknown {
  * 만들면 프롬프트가 읽는 칸을 하나 빠뜨렸을 때 조용히 다르게 굴고, 그게
  * 화면에서는 "AI 가 이상해졌다" 로만 보인다.
  */
+/**
+ * 지금까지 준 힌트.
+ *
+ * `message.is_hint` 로 가려낸다. **`support_level` 로는 못 가린다** —
+ * 보통 턴도 도움 수준을 함께 남긴다.
+ */
+export type Hint = { message: string; support_level: number };
+
+const hintsOf = (messages: { is_hint: boolean; message_text: string; support_level: number }[]): Hint[] =>
+  messages
+    .filter((m) => m.is_hint)
+    .map((m) => ({ message: m.message_text, support_level: m.support_level }));
+
 function buildHostInput(args: {
   studentId: string;
   grade: number;
@@ -199,6 +212,8 @@ function buildModeAInput(args: {
   problem: { text: string; verifiedAnswer: unknown; locked: boolean } | null;
   studentTexts: string[];
   supportLevel: number;
+  /** 지금까지 준 힌트. 04 · 02 · 03 · 05 가 모두 이것을 본다(COM-002 §7) */
+  hints?: Hint[];
   latest: string | null;
   /** COM-001 §9 로 고른 개념. 없으면 02 가 학년에 맞춰 알아서 낸다 */
   concept?: string | null;
@@ -256,8 +271,8 @@ function buildModeAInput(args: {
     })),
   );
   input = write(input, 'payload.interaction.support_level', args.supportLevel);
-  input = write(input, 'payload.interaction.hint_count', 0);
-  input = write(input, 'payload.interaction.hint_history', []);
+  input = write(input, 'payload.interaction.hint_count', args.hints?.length ?? 0);
+  input = write(input, 'payload.interaction.hint_history', args.hints ?? []);
 
   return JSON.stringify(input, null, 2);
 }
@@ -416,6 +431,9 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     totalProblems: session.target_problem_count,
     studentTexts: [...studentTexts, said],
     supportLevel,
+    // 힌트를 받고 나서 한 말이면, 모드도 그것을 알아야 같은 것을 또 묻지
+    // 않는다.
+    hints: hintsOf(before),
     latest: said,
   };
 
@@ -543,6 +561,9 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
       concept: problem.concept,
       learning_mode: problem.learning_mode,
     },
+    // 힌트를 몇 번 받았는지가 도움 수준 판단의 근거다. 0 으로 고정돼 있어서
+    // 05 는 지금까지 "혼자 풀었다" 고 보고 평가했다.
+    hints: hintsOf(before),
     studentTexts: [...studentTexts, said],
     supportLevel: nextSupport,
     completionStatus: status,
@@ -627,6 +648,8 @@ async function evaluateProblem(
     };
     studentTexts: string[];
     supportLevel: number;
+    /** 지금까지 준 힌트. 05 가 도움 수준을 판단할 때 쓴다 */
+    hints?: Hint[];
     completionStatus: string;
     correct: boolean;
   },
@@ -667,7 +690,7 @@ async function evaluateProblem(
     Math.max(0, TURN_LIMIT - args.studentTexts.length),
   );
   input = write(input, 'payload.problem_result.support_level', args.supportLevel);
-  input = write(input, 'payload.problem_result.hint_count', 0);
+  input = write(input, 'payload.problem_result.hint_count', args.hints?.length ?? 0);
 
   const result = await runStage('05 EVALUATOR', JSON.stringify(input, null, 2), args.student.persona_type);
   if (!result.ok) {
@@ -858,6 +881,8 @@ function buildModeBInput(args: {
   } | null;
   studentTexts: string[];
   supportLevel: number;
+  /** 지금까지 준 힌트. 04 · 02 · 03 · 05 가 모두 이것을 본다(COM-002 §7) */
+  hints?: Hint[];
   latest: string | null;
   /** 사진으로 가져왔는지. 기본은 글이다 */
   inputType?: 'TEXT' | 'IMAGE';
@@ -933,8 +958,8 @@ function buildModeBInput(args: {
     })),
   );
   input = write(input, 'payload.interaction.support_level', args.supportLevel);
-  input = write(input, 'payload.interaction.hint_count', 0);
-  input = write(input, 'payload.interaction.hint_history', []);
+  input = write(input, 'payload.interaction.hint_count', args.hints?.length ?? 0);
+  input = write(input, 'payload.interaction.hint_history', args.hints ?? []);
 
   return JSON.stringify(input, null, 2);
 }
@@ -1273,8 +1298,15 @@ export async function askHint(): Promise<HintReply> {
     })),
   );
   input = write(input, 'payload.interaction.support_level', supportLevel);
-  input = write(input, 'payload.interaction.hint_count', 0);
-  input = write(input, 'payload.interaction.hint_history', []);
+
+  // **앞서 준 힌트를 그대로 넘긴다.** 여기가 0 과 빈 배열로 고정돼 있었다.
+  // 04 는 "이전에 제공한 Hint 를 반복하지 않는다" 는 규칙을 갖고 있는데,
+  // 무엇을 줬는지 들은 적이 없으니 매번 첫 힌트를 만들었다. 그래서 버튼을
+  // 몇 번 눌러도 같은 말이 돌아왔다.
+  const hints = hintsOf(before);
+
+  input = write(input, 'payload.interaction.hint_count', hints.length);
+  input = write(input, 'payload.interaction.hint_history', hints);
 
   const result = await runStage('04 HINT', JSON.stringify(input, null, 2), student.persona_type);
   if (!result.ok) {
@@ -1296,6 +1328,9 @@ export async function askHint(): Promise<HintReply> {
     text: message,
     turnNumber: before.length + 1,
     supportLevel: next,
+    // 다음 힌트가 이 말을 이력으로 받는다. 표시를 안 하면 보통 턴에 섞여
+    // 다시 가려낼 수 없다.
+    isHint: true,
   });
 
   return { ok: true, message, supportLevel: next };
