@@ -313,6 +313,24 @@ export async function startProblem(): Promise<ProblemReply> {
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
   const { supabase, student, session } = ctx;
 
+  // **이미 풀던 문제가 있으면 그것을 돌려준다.** 확인하지 않으면 누를 때마다
+  // 새 문제가 생긴다 — 2026-09-10 에 한 학생에게 진행 중인 문제가 넷이
+  // 됐다. 먼저 만든 것들은 아무도 다시 열지 않아 평가도 못 받고 남는다.
+  const already = await findActiveProblem(supabase, session.session_id);
+  if (already !== null) {
+    const before = await listMessages(supabase, already.problem_id);
+    return {
+      ok: true,
+      problemText: already.problem_text,
+      message: '',
+      choices: [],
+      allowFreeText: true,
+      turnsLeft: Math.max(0, TURN_LIMIT - before.filter((m) => m.speaker === 'student').length),
+      finished: false,
+      sessionFinished: false,
+    };
+  }
+
   const problemNumber = session.completed_problem_count + 1;
   const picked = await pickConcept(supabase, student.student_id, problemNumber);
   if (picked.concept !== null) {
