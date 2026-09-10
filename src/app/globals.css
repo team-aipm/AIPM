@@ -24,3 +24,76 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/**
+ * 학생 화면(`app/(student)/**`, `.metty-app`로 감싼 영역)에만 적용되는
+ * 스타일. 다른 트랙의 화면(부모/인증 등)에 새지 않도록 반드시 이 스코프
+ * 안에서만 작성한다.
+ *
+ * - `animate-metty-float`: 캐릭터 이미지가 위아래로 움직이는 모션.
+ *   Tailwind 기본 `animate-bounce`(공이 튀는 큰 진폭 + 통통 튀는 이징)를
+ *   그대로 캐릭터에 쓰면 과하게 움직여서, 훨씬 작은 진폭(-5px)의 부드러운
+ *   ease-in-out으로 대체했다. 인스턴스별 속도는
+ *   `[--metty-float-duration:4.5s]`처럼 CSS 변수로 덮어쓴다.
+ * - 버튼/링크 호버·클릭 피드백: 개별 컴포넌트마다 스타일을 손대는 대신
+ *   `.metty-app` 아래 모든 button/a에 공통으로 적용한다.
+ */
+@layer utilities {
+  @keyframes metty-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-5px);
+    }
+  }
+
+  .metty-app .animate-metty-float {
+    animation-name: metty-float;
+    animation-duration: var(--metty-float-duration, 4s);
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+  }
+}
+
+.metty-app button:not(:disabled),
+.metty-app a {
+  transition:
+    filter 150ms ease,
+    transform 100ms ease,
+    opacity 150ms ease;
+}
+
+.metty-app button:not(:disabled):hover,
+.metty-app a:hover {
+  filter: brightness(0.96);
+}
+
+.metty-app button:not(:disabled):active,
+.metty-app a:active {
+  transform: scale(0.97);
+  filter: brightness(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metty-app .animate-metty-float {
+    animation: none;
+  }
+  .metty-app button,
+  .metty-app a {
+    transition: none;
+  }
+}
+
+/* 스크롤은 되지만 스크롤바는 안 보이게 — 모바일 앱처럼 보이게 하려는 의도.
+   기능(스크롤)은 그대로 살아있고 막대만 숨긴다. */
+.metty-app * {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* 구형 Edge/IE */
+}
+.metty-app *::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+  width: 0;
+  height: 0;
+}

@@ -10,11 +10,20 @@
  */
 
 export const GEMINI_MODEL_CANDIDATES = [
+  'gemini-flash-latest',
+  'gemini-pro-latest',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
   'gemini-2.5-pro',
   'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
 ] as const;
 
-/** 단계별로 정해지기 전까지 쓰는 기본값. 확정되면 COM-005 §13에 기록한다. */
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+/**
+ * 단계별로 정해지기 전까지 쓰는 기본값. 확정되면 COM-005 §13에 기록한다.
+ *
+ * `gemini-2.5-flash`는 (이 프로젝트 키 기준, 2026-09) `generateContent`
+ * 호출 시 "새 사용자에게는 더 이상 제공되지 않는다"며 404를 낸다 —
+ * ListModels 목록엔 여전히 보이지만 실제 호출은 막혀 있다. `-latest`
+ * 별칭을 쓰면 이런 모델 세대교체를 프롬프트/코드 수정 없이 흡수한다.
+ */
+export const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest';
