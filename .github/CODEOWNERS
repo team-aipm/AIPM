@@ -1,0 +1,45 @@
+# 소유 경로 (DEV-001 §6)
+#
+# 담당은 브랜치가 아니라 **경로**가 정한다. 여기 적힌 경로를 건드리는 PR 은
+# 올라오는 순간 소유자가 리뷰어로 지정되고 알림이 간다.
+#
+# 막아 주지는 않는다. **보이게 할 뿐이다.** 리뷰 없이 머지하는 것을 막으려면
+# GitHub 저장소 설정에서 브랜치 보호를 따로 켜야 한다.
+#
+# ── 왜 만들었나 (2026-09-10)
+#
+# 디자인 브랜치(`feature/claude-design-ui`)가 화면만이 아니라 `lib/services`
+# 와 `lib/ai` 까지 새로 썼다. MODE A 가 두 벌이 됐다 — 하나는 서버 동작
+# (`_actions.ts`), 하나는 `/api/ai/chat`. 같은 테이블을 다른 함수 이름으로
+# 읽고 쓴다.
+#
+# 브랜치를 나눠도 이런 일은 막히지 않는다. 합칠 때 그대로 부딪힌다.
+
+# 기본값 없음. 아래에 적히지 않은 곳은 누구든 고친다.
+
+# ── 학습 로직 · 데이터 (기능 담당)
+/src/lib/                @neoseya7
+/src/app/api/            @neoseya7
+/supabase/migrations/    @neoseya7
+/src/types/              @neoseya7
+
+# Server Action 은 화면과 같은 폴더에 있지만 **로직이다.**
+# 화면이 무엇을 그릴지는 디자인이 정하고, 무엇을 저장할지는 여기가 정한다.
+**/_actions.ts           @neoseya7
+
+# ── 문서 · 규칙
+/docs/                   @neoseya7
+/CLAUDE.md               @neoseya7
+/AGENTS.md               @neoseya7
+/.github/                @neoseya7
+
+# ── 여기 없는 것은 디자인이 자유롭게 고친다
+#
+#   src/app/**/page.tsx · layout.tsx      화면
+#   src/app/**/_components/**             그 화면 전용 컴포넌트
+#   src/components/**                     공통 UI
+#   src/app/globals.css                   스타일
+#   public/**                             에셋
+#
+# 화면은 이미 있는 `_actions.ts` 를 그대로 부르면 된다.
+# AI 연동을 새로 만들 필요가 없다.
