@@ -161,3 +161,76 @@ export async function studentIdOfViewer(
 
   return data?.student_id ?? null;
 }
+
+// ============================================================
+// 학생 등록과 같은 화면에서 만들 때 (STU-001)
+// ============================================================
+//
+// 학생을 먼저 만들고 로그인을 나중에 붙이면, 아이디가 겹쳤을 때 **학생만
+// 남는다.** 부모는 등록이 됐는지 안 됐는지 알 수 없고, 다시 누르면 같은
+// 아이가 둘이 된다.
+//
+// 그래서 순서를 뒤집는다. 겹치는지는 Auth 만 알고 있으므로 **계정을 먼저
+// 잡아 본다.** 학생 만들기가 실패하면 잡아 둔 것을 놓아 준다.
+
+export type Reserved = { ok: true; userId: string } | { ok: false; error: string };
+
+/** 아이디를 선점한다. 겹치면 여기서 끝난다 — 아직 아무것도 안 만들었다 */
+export async function reserveChildAuthUser(input: {
+  loginId: string;
+  password: string;
+}): Promise<Reserved> {
+  const loginId = input.loginId.trim().toLowerCase();
+
+  if (!isValidLoginId(loginId)) {
+    return { ok: false, error: '아이디는 영문 소문자·숫자·밑줄 4~20자로 지어주세요.' };
+  }
+  if (input.password.length < 6) {
+    return { ok: false, error: '아이 비밀번호는 6자 이상으로 정해주세요.' };
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.createUser({
+    email: emailForLoginId(loginId),
+    password: input.password,
+    email_confirm: true,
+    user_metadata: { role: 'student' },
+  });
+
+  if (error !== null || data.user === null) {
+    console.error(`[student-login] 선점 실패: ${error?.message ?? '알 수 없음'}`);
+    return { ok: false, error: '이미 쓰고 있는 아이디이거나, 만들 수 없는 아이디입니다.' };
+  }
+
+  return { ok: true, userId: data.user.id };
+}
+
+/** 뒤가 실패했을 때 되돌린다. 놓아 주지 못하면 그 아이디는 아무도 못 쓴다 */
+export async function releaseChildAuthUser(userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error !== null) {
+    console.error(`[student-login] 선점 해제 실패 ${userId}: ${error.message}`);
+  }
+}
+
+/**
+ * 선점해 둔 계정을 학생에게 붙인다.
+ *
+ * 부모 세션으로 쓴다 — RLS 와 트리거가 그대로 걸린다.
+ */
+export async function attachChildLogin(
+  client: Client,
+  input: { studentId: string; loginId: string; userId: string },
+): Promise<boolean> {
+  const { error } = await client
+    .from('student')
+    .update({ login_id: input.loginId.trim().toLowerCase(), auth_user_id: input.userId })
+    .eq('student_id', input.studentId);
+
+  if (error !== null) {
+    console.error(`[student-login] 붙이기 실패: ${error.message}`);
+    return false;
+  }
+  return true;
+}
