@@ -3,7 +3,7 @@
  *
  * 부모가 바꿀 수 있는 것과 없는 것을 화면에서 나눈다.
  *
- *   바꿀 수 있다   파트너(Persona) · 삭제 요청
+ *   바꿀 수 있다   파트너(Persona) · 아이 로그인 · 삭제 요청
  *   못 바꾼다      난이도 · Logic Gap · Student Memory (COM-003 §9)
  *
  * 학습 판단을 사람이 손대면 다음 문제 선정이 어긋난다.
@@ -16,6 +16,7 @@ import { getStudent } from '@/lib/services/student';
 import { PARTNER_NAME } from '@/lib/constants/copy';
 import { PartnerFace } from '@/components/ui/PartnerFace';
 import { changePersona, requestDeleteStudent, undoDeleteStudent } from '../../_actions';
+import { ChildLoginSection } from './_components/ChildLoginSection';
 
 export const metadata = { title: '학생 정보 · 메티' };
 
@@ -103,6 +104,14 @@ export default async function StudentProfilePage({
           ))}
         </div>
       </section>
+
+      {/*
+        삭제 요청한 학생에게는 로그인을 만들어 주지 않는다. 되돌린 뒤에
+        만들면 된다.
+      */}
+      {!pending && (
+        <ChildLoginSection studentId={student.student_id} loginId={student.login_id} />
+      )}
 
       <section className="flex flex-col gap-2 rounded-2xl bg-white p-5 shadow-sm">
         <h2 className="text-[12px] font-bold text-meti-sub">바꿀 수 없는 것</h2>

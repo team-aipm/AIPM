@@ -129,12 +129,43 @@ Account rules: - 부모 휴대폰 번호는 회원가입 필수. - 결제수단 
 
   `learning_data_retain_until`   TIMESTAMPTZ                  NO timestamp      삭제 후 학습기록
                                                                                 보관 종료
+
+  `login_id`                     TEXT                         NO jaeun2016      아이가 로그인할 때
+                                                                                입력하는 아이디.
+                                                                                전체에서 유일
+
+  `auth_user_id`                 UUID                         NO uuid           아이 계정의
+                                                                                `auth.users.id`.
+                                                                                FK → auth.users
   -------------------------------------------------------------------------------------------------
 
 Student rules: - Account당 Student 수 제한 없음. - `nickname`은 필수이며
 기본값은 `student_name`. - 각 Student의 학습데이터는 서로 독립. - 학생
 삭제 후 학습기록은 1년 유지. - 직접 식별정보의 세부 보관/삭제 정책은
 COM-007에서 최종 확정.
+
+### 4-1. 학생 로그인 (2026-09-10 추가)
+
+`login_id`와 `auth_user_id`는 **둘 다 선택이다.** 없으면 지금까지처럼 부모가
+로그인한 기기에서 프로필을 골라 들어간다. 있으면 아이가 자기 기기에서
+자기 아이디로 들어간다.
+
+-   **부모가 만든다.** 아이는 스스로 가입하지 않는다. 만 14세 미만의 가입에는
+    법정대리인 동의가 필요하다(COM-007 §2).
+-   **아이에게 이메일 주소를 받지 않는다.** `login_id`를 서버가 가짜 이메일
+    (`<login_id>@student.aipm.invalid`)로 바꿔 Supabase Auth에 넘긴다.
+    `.invalid`는 RFC 2606이 예약한 TLD라 실제로 등록될 수 없다.
+-   그래서 **아이 계정에는 메일로 비밀번호를 찾는 길이 없다.** 부모가
+    MY-003에서 새로 정해 준다.
+-   `login_id`는 만든 뒤 바꾸지 않는다. 아이가 외운 것을 바꾸면 다시 들어오지
+    못한다.
+-   두 값은 함께 생기고 함께 없어진다. 하나만 있는 상태를 두지 않는다.
+
+RLS는 `owns_student()` 한 곳에서 갈린다. 부모(`account_id = auth.uid()`)
+**또는** 본인(`auth_user_id = auth.uid()`)이면 자기 학습데이터를 읽고 쓴다.
+학생 행 자체는 아이가 `persona_type`만 바꿀 수 있다 — 난이도·학년·상태를
+사람이 고치면 다음 문제 선정이 어긋난다(COM-003 §9). DB 트리거
+`student_self_update_guard`가 막는다.
 
 ## 5. LearningSession
 
