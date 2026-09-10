@@ -22,11 +22,11 @@ export default async function StudentsPage() {
   const students = await listStudents(supabase);
 
   return (
-    <main className="flex flex-1 flex-col gap-5 px-6 py-10">
+    <main className="flex flex-1 flex-col gap-5 bg-[#F7FAFB] px-6 py-10">
       <h1 className="text-xl font-extrabold text-meti-ink">누구로 시작할까?</h1>
 
       {students.length === 0 ? (
-        <div className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
           <p className="text-[14px] leading-relaxed text-meti-sub">
             아직 등록된 학생이 없어요.
             <br />
@@ -34,7 +34,7 @@ export default async function StudentsPage() {
           </p>
           <Link
             href="/onboarding/student"
-            className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
+            className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white shadow-sm"
           >
             학생 등록하기
           </Link>
@@ -47,9 +47,9 @@ export default async function StudentsPage() {
                 <input type="hidden" name="student_id" value={student.student_id} />
                 <button
                   type="submit"
-                  className="flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-sm"
+                  className="flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-[0_2px_8px_rgba(18,52,59,.06)] transition-colors active:bg-meti-bg/30"
                 >
-                  <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-meti-bg">
+                  <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-meti-bg ring-2 ring-white shadow-sm">
                     <PartnerFace persona={student.persona_type} size={40} />
                   </span>
                   <span className="flex flex-col">

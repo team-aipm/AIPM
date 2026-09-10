@@ -15,7 +15,7 @@ type Persona = Database['public']['Enums']['persona_type'];
 
 const FACE: Record<Persona, string> = {
   friend: '/characters/meti.png',
-  villain: '/characters/hetty.png',
+  villain: '/characters/heti.png',
 };
 
 export function PartnerFace({
