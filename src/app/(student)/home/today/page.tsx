@@ -52,7 +52,7 @@ export default async function TodayPage() {
   const done = problems.filter((item) => item.status !== 'active');
 
   return (
-    <main className="flex flex-1 flex-col gap-5 px-6 py-8">
+    <main className="flex flex-1 flex-col gap-5 bg-[#F7FAFB] px-6 py-8">
       <header className="flex flex-col gap-1">
         <Link href="/home" className="text-[13px] font-semibold text-meti-sub">
           ‹ 홈
@@ -61,15 +61,15 @@ export default async function TodayPage() {
       </header>
 
       {endSummary !== null && (
-        <section className="flex items-start gap-3 rounded-2xl bg-white p-4 shadow-sm">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-meti-bg">
+        <section className="flex items-start gap-3 rounded-2xl border-[1.5px] border-meti-bg bg-white p-4 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-meti-bg ring-2 ring-white shadow-sm">
             <PartnerFace persona={student.persona_type} size={32} />
           </span>
           <p className="text-[14px] leading-relaxed text-meti-ink">{endSummary}</p>
         </section>
       )}
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
         <p className="text-[13px] font-semibold text-meti-sub">오늘 해낸 미션</p>
         <p className="mt-1 text-[28px] font-extrabold leading-none text-meti">
           {done.length}
@@ -80,7 +80,7 @@ export default async function TodayPage() {
       </section>
 
       {done.length === 0 ? (
-        <p className="rounded-2xl bg-white p-5 text-[14px] leading-relaxed text-meti-sub shadow-sm">
+        <p className="rounded-2xl bg-white p-5 text-[14px] leading-relaxed text-meti-sub shadow-[0_2px_8px_rgba(18,52,59,.06)]">
           오늘은 아직 시작하지 않았어.
           <br />
           {partner}가 기다리고 있어!
@@ -88,7 +88,10 @@ export default async function TodayPage() {
       ) : (
         <ul className="flex flex-col gap-3">
           {done.map((item, index) => (
-            <li key={item.problemId} className="rounded-2xl bg-white p-4 shadow-sm">
+            <li
+              key={item.problemId}
+              className="rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(18,52,59,.06)]"
+            >
               <div className="flex items-center justify-between gap-3">
                 <span className="text-[11px] font-bold text-meti-sub">
                   {index + 1}번째 ·{' '}
@@ -119,7 +122,7 @@ export default async function TodayPage() {
       {session !== null && session.session_status !== 'completed' && (
         <Link
           href="/mission"
-          className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
+          className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white shadow-sm"
         >
           이어서 하기
         </Link>
