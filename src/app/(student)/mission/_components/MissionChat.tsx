@@ -312,7 +312,7 @@ ${reply.recognized}
       )}
 
       {problemText !== null && (
-        <div className="shrink-0 border-b border-meti-bg bg-white px-5 py-3.5 shadow-[0_2px_8px_rgba(18,52,59,.05)]">
+        <div className="shrink-0 border-b border-meti-bg bg-white px-5 py-3.5 shadow-[0_2px_8px_rgba(32,107,124,.06)]">
           <p className="text-[11px] font-extrabold tracking-wide text-meti">오늘의 문제</p>
           <p className="mt-1 text-[14px] font-semibold leading-relaxed text-meti-ink">
             {problemText}
@@ -333,17 +333,15 @@ ${reply.recognized}
         {turns.map((turn, index) =>
           turn.who === 'ai' ? (
             <div key={index} className="flex items-end gap-2">
-              <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
-                <PartnerFace persona={persona} pose="front" size={26} />
-              </span>
-              <p className="max-w-[78%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-3.5 py-2.5 text-[14px] leading-relaxed text-meti-ink shadow-[0_2px_8px_rgba(18,52,59,.06)]">
+              <PartnerFace persona={persona} pose="front" size={30} className="mb-0.5 shrink-0" />
+              <p className="max-w-[78%] whitespace-pre-wrap rounded-[18px] rounded-bl-[5px] bg-white px-3.5 py-2.5 text-[14px] font-medium leading-[1.55] text-meti-ink shadow-[0_2px_8px_rgba(32,107,124,.07)]">
                 {turn.text}
               </p>
             </div>
           ) : (
             <p
               key={index}
-              className="max-w-[78%] self-end whitespace-pre-wrap rounded-2xl rounded-br-sm bg-meti px-3.5 py-2.5 text-[14px] leading-relaxed text-white shadow-sm"
+              className="max-w-[82%] self-end whitespace-pre-wrap rounded-[18px] rounded-br-[5px] bg-meti px-3.5 py-2.5 text-[14px] font-medium leading-[1.55] text-white"
             >
               {turn.text}
             </p>
@@ -352,10 +350,8 @@ ${reply.recognized}
 
         {pending && (
           <div className="flex items-end gap-2">
-            <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
-              <PartnerFace persona={persona} pose="think" size={26} />
-            </span>
-            <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-white px-3.5 py-3 shadow-[0_2px_8px_rgba(18,52,59,.06)]">
+            <PartnerFace persona={persona} pose="think" size={30} className="mb-0.5 shrink-0" />
+            <div className="flex items-center gap-1.5 rounded-[18px] rounded-bl-[5px] bg-white px-3.5 py-3.5 shadow-[0_2px_8px_rgba(32,107,124,.07)]">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-meti-sub" />
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-meti-sub [animation-delay:150ms]" />
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-meti-sub [animation-delay:300ms]" />
@@ -396,7 +392,7 @@ ${reply.recognized}
         {finished ? (
           <div className="flex flex-col gap-2">
             {sessionDone ? (
-              <div className="flex flex-col items-center gap-2.5 rounded-3xl bg-white px-5 py-5 text-center shadow-[0_4px_16px_rgba(18,52,59,.1)]">
+              <div className="flex flex-col items-center gap-2.5 rounded-[22px] bg-white px-[18px] py-[18px] text-center shadow-[0_4px_16px_rgba(32,107,124,.1)]">
                 <PartnerFace
                   persona={persona}
                   pose="celebrate"
@@ -446,7 +442,7 @@ ${reply.recognized}
             {canSendPhoto && (
               <label
                 aria-label="사진으로 문제 올리기"
-                className={`flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-meti/40 bg-white text-[18px] transition-colors ${
+                className={`flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-[14px] bg-[#F1F5F6] text-[20px] transition-colors ${
                   pending ? 'pointer-events-none opacity-40' : 'active:bg-meti-bg/50'
                 }`}
               >
@@ -479,14 +475,15 @@ ${reply.recognized}
                   ? '맞으면 "응", 아니면 고쳐서 적어줘'
                   : '내 생각을 써볼까?'
             }
-              className="h-11 min-w-0 flex-1 rounded-full border-[1.5px] border-black/10 bg-[#F7FAFB] px-4 text-[14px] outline-none focus:border-meti disabled:opacity-60"
+              className="h-11 min-w-0 flex-1 rounded-[14px] border-[1.5px] border-meti-bg bg-[#F7FAFB] px-3.5 text-[14px] outline-none focus:border-meti disabled:opacity-60"
             />
             <button
               type="submit"
               disabled={inputBlocked || draft.trim() === ''}
-              className="h-11 shrink-0 rounded-full bg-meti px-4 text-[14px] font-bold text-white shadow-sm disabled:opacity-40"
+              aria-label="보내기"
+              className="h-11 w-11 shrink-0 rounded-[14px] bg-meti text-[18px] font-extrabold text-white disabled:opacity-40"
             >
-              보내기
+              ↑
             </button>
           </form>
         )}
