@@ -51,6 +51,21 @@ async function ownStudent(
   return data;
 }
 
+/**
+ * 실패한 이유를 부모가 읽을 수 있는 말로.
+ *
+ * **아이디 탓으로만 돌리지 않는다.** 트리거가 아이 계정을 부모로 오해해
+ * 가입을 되돌렸을 때, 화면에는 "이미 쓰고 있는 아이디" 라고 나왔다. 아이디는
+ * 멀쩡했고, 부모는 이름만 계속 바꿔 보게 된다.
+ */
+function loginError(message: string | undefined): string {
+  const text = (message ?? '').toLowerCase();
+  if (text.includes('already been registered') || text.includes('already exists')) {
+    return '이미 쓰고 있는 아이디예요. 다른 아이디로 지어주세요.';
+  }
+  return '아이 로그인을 만들지 못했습니다. 잠시 후 다시 시도해주세요.';
+}
+
 export type LoginResult = { ok: true } | { ok: false; error: string };
 
 /**
@@ -88,10 +103,8 @@ export async function createChildLogin(
   });
 
   if (authError !== null || created.user === null) {
-    // 겹친 아이디인지 다른 문제인지 화면에서는 구분하지 않되, 원문은 남긴다.
-    // 가짜 이메일 도메인을 Auth 가 거절하는 경우가 여기로 온다.
     console.error(`[student-login] 계정 생성 실패: ${authError?.message ?? '알 수 없음'}`);
-    return { ok: false, error: '이미 쓰고 있는 아이디이거나, 만들 수 없는 아이디입니다.' };
+    return { ok: false, error: loginError(authError?.message) };
   }
 
   const { error: linkError } = await client
@@ -199,7 +212,7 @@ export async function reserveChildAuthUser(input: {
 
   if (error !== null || data.user === null) {
     console.error(`[student-login] 선점 실패: ${error?.message ?? '알 수 없음'}`);
-    return { ok: false, error: '이미 쓰고 있는 아이디이거나, 만들 수 없는 아이디입니다.' };
+    return { ok: false, error: loginError(error?.message) };
   }
 
   return { ok: true, userId: data.user.id };
