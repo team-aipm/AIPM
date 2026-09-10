@@ -88,8 +88,12 @@ export function MissionChat({ partner, persona, initial }: Props) {
    *
    * 푸는 중인 문제가 없으면 언제든 된다 — 파트너가 모드를 묻고 있어도,
    * 문제를 적으라고 했어도, 잘못 읽은 것을 다시 찍을 때도.
+   *
+   * **문제를 마친 뒤에도 된다.** 처음엔 `!finished` 로 막아 뒀는데, 거기가
+   * 바로 다음 문제를 가져오고 싶은 자리다. 「한 문제 더 하기」는 AI 가 내는
+   * 쪽으로만 가서, 내 문제를 가져올 길이 없었다.
    */
-  const canSendPhoto = problemText === null && !finished;
+  const canSendPhoto = !sessionDone && (problemText === null || finished);
   const opened = useRef(false);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -191,6 +195,9 @@ ${reply.recognized}
   async function sendPhoto(file: File) {
     setPending(true);
     setChoices([]);
+    // 마친 뒤에 올렸다면 새 문제를 가져오는 것이다. 마침 상태를 푼다.
+    setFinished(false);
+    setProblemText(null);
     setTurns((now) => [...now, { who: 'student', text: '(사진을 보냈어)' }]);
 
     const form = new FormData();
@@ -296,6 +303,42 @@ ${reply.recognized}
   // MODE B 의 앞마당에서는 학생이 자유롭게 적어야 한다. 보기가 없다.
   const inputBlocked = pending || finished || (sourceStage === null && !freeText);
 
+  /**
+   * 사진 올리기.
+   *
+   * 두 자리에서 쓴다 — 입력줄 안(`icon`)과, 문제를 마친 뒤의 버튼 줄
+   * (`wide`). **폼 안에만 두면 마친 순간 폼째로 사라진다.**
+   */
+  function photoButton(shape: 'icon' | 'wide') {
+    const icon = shape === 'icon';
+    return (
+      <label
+        aria-label="사진으로 문제 올리기"
+        className={`flex cursor-pointer items-center justify-center border border-meti/40 bg-white ${
+          icon
+            ? 'h-10 w-10 shrink-0 rounded-full text-[17px]'
+            : 'gap-2 rounded-xl py-3 text-[14px] font-bold text-meti'
+        } ${pending ? 'pointer-events-none opacity-40' : ''}`}
+      >
+        {icon ? '📷' : '📷 사진으로 문제 가져오기'}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic"
+          // 휴대폰에서는 카메라가 바로 열린다
+          capture="environment"
+          disabled={pending}
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            // 같은 사진을 다시 골라도 onChange 가 오게 비운다
+            event.target.value = '';
+            if (file !== undefined) void sendPhoto(file);
+          }}
+        />
+      </label>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {problemText !== null && (
@@ -386,14 +429,22 @@ ${reply.recognized}
                 </a>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={() => void openProblem()}
-                disabled={pending}
-                className="rounded-xl bg-meti py-3 text-[14px] font-bold text-white disabled:opacity-40"
-              >
-                한 문제 더 하기
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => void openProblem()}
+                  disabled={pending}
+                  className="rounded-xl bg-meti py-3 text-[14px] font-bold text-white disabled:opacity-40"
+                >
+                  한 문제 더 하기
+                </button>
+                {/*
+                  「한 문제 더 하기」는 파트너가 내는 쪽이다. 내 문제를
+                  가져오는 길이 여기 없으면, 아이는 다음 문제를 고를 수
+                  없다.
+                */}
+                {canSendPhoto && photoButton('wide')}
+              </>
             )}
           </div>
         ) : (
@@ -410,30 +461,7 @@ ${reply.recognized}
               알 수 없다. 문제가 없을 때는 언제든 올릴 수 있다 — 파트너가
               무엇을 물었든 사진부터 내밀어도 된다.
             */}
-            {canSendPhoto && (
-              <label
-                aria-label="사진으로 문제 올리기"
-                className={`flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-meti/40 bg-white text-[17px] ${
-                  pending ? 'pointer-events-none opacity-40' : ''
-                }`}
-              >
-                📷
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/heic"
-                  // 휴대폰에서는 카메라가 바로 열린다
-                  capture="environment"
-                  disabled={pending}
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    // 같은 사진을 다시 골라도 onChange 가 오게 비운다
-                    event.target.value = '';
-                    if (file !== undefined) void sendPhoto(file);
-                  }}
-                />
-              </label>
-            )}
+            {canSendPhoto && photoButton('icon')}
 
             <input
               value={draft}
