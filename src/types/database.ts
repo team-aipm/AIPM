@@ -399,6 +399,7 @@ export type Database = {
         Row: {
           created_at: string
           drilldown_stage: Database["public"]["Enums"]["drilldown_stage"] | null
+          is_hint: boolean
           message_id: string
           message_text: string
           problem_id: string
@@ -413,6 +414,7 @@ export type Database = {
           drilldown_stage?:
             | Database["public"]["Enums"]["drilldown_stage"]
             | null
+          is_hint?: boolean
           message_id?: string
           message_text: string
           problem_id: string
@@ -427,6 +429,7 @@ export type Database = {
           drilldown_stage?:
             | Database["public"]["Enums"]["drilldown_stage"]
             | null
+          is_hint?: boolean
           message_id?: string
           message_text?: string
           problem_id?: string

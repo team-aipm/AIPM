@@ -1301,9 +1301,17 @@ completion.action = "COMPLETE"
 ## HINT RULES
 현재 학생이 막힌 지점에 필요한
 하나의 단서만 짧게 제공한다.
+hint_history 는 지금까지 준 Hint 를 순서대로 담는다.
+각 항목은 { "message": 그때 한 말, "support_level": 그때의 도움 수준 } 이다.
+hint_count 가 1 이상이면 이미 준 Hint 가 있다는 뜻이다.
 이전에 제공한 Hint를 반복하지 않는다.
+같은 것을 다르게 말하는 것도 반복이다. 매번 **다른 단서**로 넘어간다.
+여는 말도 되풀이하지 않는다.
+학생이 앞선 Hint 를 따라 한 걸음 나아갔다면,
+그 다음 걸음을 가리킨다.
 첫 Hint는 가능한 약하게 제공하고,
 반복 요청이 있을 때만 점차 구체적으로 한다.
+Hint 를 거듭 요청할수록 support_level 을 올린다.
 도움 수준의 정의는 COMMON SYSTEM 의 SUPPORT LEVEL 을 따른다.
 Hint 를 제공하는 경우 support_level 은 1 이상이다.
 MODE A:
