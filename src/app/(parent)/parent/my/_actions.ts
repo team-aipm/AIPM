@@ -8,12 +8,11 @@
  */
 
 import { revalidatePath } from 'next/cache';
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { endSession } from '@/lib/supabase/sign-out';
 import { setPersona, softDeleteStudent, restoreStudent } from '@/lib/services/student';
 import { createChildLogin, changeChildPassword } from '@/lib/services/student-login';
-import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 
 export async function changePersona(formData: FormData): Promise<void> {
   const studentId = String(formData.get('student_id') ?? '');
@@ -67,13 +66,7 @@ export async function saveMarketing(formData: FormData): Promise<void> {
 }
 
 export async function signOutAccount(): Promise<void> {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-
-  // 고른 학생도 함께 지운다. 남기면 다음 사람이 남의 학생 id 를 물고 있다.
-  const jar = await cookies();
-  jar.delete(STUDENT_COOKIE);
-
+  await endSession();
   redirect('/login');
 }
 

@@ -15,7 +15,8 @@ import { findTodaySession } from '@/lib/services/learning-session';
 import { PARTNER_NAME, TERMS } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 import { PartnerFace } from '@/components/ui/PartnerFace';
-import { startMission } from './_actions';
+import { studentIdOfViewer } from '@/lib/services/student-login';
+import { startMission, leaveApp } from './_actions';
 
 export const metadata = { title: '오늘의 미션 · 메티' };
 
@@ -32,6 +33,9 @@ export default async function HomePage() {
   // 돌려보내는 것으로 충분하다 — 무엇이 잘못됐는지 알려 줄 필요가 없다.
   const student = await getStudent(supabase, studentId);
   if (student === null) redirect('/students');
+
+  // 아이 본인인가, 부모가 아이 화면을 보고 있는가. 나가는 문이 다르다.
+  const isChild = (await studentIdOfViewer(supabase, data.user.id)) !== null;
 
   const session = await findTodaySession(supabase, student.student_id);
   const done = session?.completed_problem_count ?? 0;
@@ -105,12 +109,28 @@ export default async function HomePage() {
         {TERMS.learningResult.student} 보기
       </Link>
 
-      <Link
-        href="/students"
-        className="text-center text-[13px] font-semibold text-meti-sub underline"
-      >
-        다른 친구로 바꾸기
-      </Link>
+      {/*
+        아이 계정에는 고를 다른 친구가 없다. 자기 자신뿐이다. 그 자리에
+        **나가는 문**을 둔다 — 아이는 부모 영역의 「계정 관리」에 못 들어가서
+        여기가 없으면 로그아웃할 길이 아예 없다.
+      */}
+      {isChild ? (
+        <form action={leaveApp}>
+          <button
+            type="submit"
+            className="w-full text-center text-[13px] font-semibold text-meti-sub underline"
+          >
+            나가기
+          </button>
+        </form>
+      ) : (
+        <Link
+          href="/students"
+          className="text-center text-[13px] font-semibold text-meti-sub underline"
+        >
+          다른 친구로 바꾸기
+        </Link>
+      )}
     </main>
   );
 }

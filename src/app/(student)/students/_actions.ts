@@ -13,6 +13,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import { endSession } from '@/lib/supabase/sign-out';
 
 export async function selectStudent(formData: FormData): Promise<void> {
   const studentId = String(formData.get('student_id') ?? '');
@@ -27,4 +28,10 @@ export async function selectStudent(formData: FormData): Promise<void> {
   });
 
   redirect('/home');
+}
+
+/** 로그아웃 (STU-002). 부모가 계정을 바꿀 때 여기가 가장 가까운 출구다 */
+export async function leaveApp(): Promise<void> {
+  await endSession();
+  redirect('/login');
 }
