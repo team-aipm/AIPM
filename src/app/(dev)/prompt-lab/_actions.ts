@@ -2,9 +2,8 @@
 
 import { notFound } from 'next/navigation';
 
-import { isConfigured, isUnlocked, unlockWith } from './_access';
+import { isConfigured, isUnlocked, labApiKey, unlockWith } from './_access';
 
-import { hasGeminiApiKey } from '@/lib/gemini/client';
 import {
   callProvider,
   listModels,
@@ -45,7 +44,7 @@ export type RunInput = {
   forceJsonMimeType: boolean;
   params: SamplingParams;
   images: Attachment[];
-  /** 비우면 서버의 GEMINI_API_KEY를 쓴다 */
+  /** 비우면 서버가 가진 도구용 키를 쓴다(`PROMPT_LAB_GEMINI_API_KEY`) */
   apiKey: string;
 };
 
@@ -85,7 +84,7 @@ export async function unlock(input: string): Promise<boolean> {
 
 export async function checkApiKey(): Promise<boolean> {
   await assertAccess();
-  return hasGeminiApiKey();
+  return labApiKey() !== '';
 }
 
 export async function runStage(request: RunInput): Promise<RunResult> {
@@ -122,7 +121,9 @@ export async function runStage(request: RunInput): Promise<RunResult> {
     system: request.system,
     input: request.input,
     forceJson: request.forceJsonMimeType,
-    apiKey: request.apiKey,
+    // 화면에 넣은 키가 먼저다. 비어 있으면 도구용 키로 물러난다 —
+    // 암호를 통과한 요청이므로(`assertAccess`) 여기까지 온다.
+    apiKey: request.apiKey.trim() || labApiKey(),
     params: request.params,
     images: request.images,
   });
