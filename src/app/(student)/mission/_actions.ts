@@ -13,6 +13,7 @@
 
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { Constants, type Database } from '@/types/database';
 import { getStudent } from '@/lib/services/student';
 import { findTodaySession, countCompleted, today } from '@/lib/services/learning-session';
 import { findDailyReport, saveDailyReport } from '@/lib/services/learning-report';
@@ -35,7 +36,6 @@ import { appendMessage, listMessages } from '@/lib/services/message';
 import { pickConcept } from '@/lib/services/concept';
 import { EVENT, record } from '@/lib/analytics/events';
 import { saveEvaluation, saveLogicGaps } from '@/lib/services/evaluation';
-import { Constants, type Database } from '@/types/database';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 import { runStage, stageOf } from '@/lib/ai/pipeline/run';
 import { getPath, parsePath, setPath } from '@/lib/ai/pipeline/paths';
@@ -99,6 +99,36 @@ const hintsOf = (messages: { is_hint: boolean; message_text: string; support_lev
  */
 const askedOf = (messages: { speaker: string; is_hint: boolean; message_text: string }[]): string[] =>
   messages.filter((m) => m.speaker === 'ai' && !m.is_hint).map((m) => m.message_text);
+
+/**
+ * **직전에 내가 물은 사고 단계** (COM-002 §7 `drilldown_stage`).
+ *
+ * 이게 없어서 아이가 곤란해졌다. 전이 질문("만약 13이었다면?")에 아이가
+ * 제대로 답했는데, 그 말이 원래 문제의 답과 같은 자리에 들어가 정답과
+ * 견주어졌다.
+ *
+ *   나    만약 13이었다면 결과가 어떻게 달라졌을까?
+ *   학생  104야.
+ *   나    갑자기 104라고? 아까는 12라고 했잖아.
+ *
+ * 아이는 내가 물은 것에 답했을 뿐인데 틀렸다는 말을 듣고, 해명하다가
+ * 턴을 다 썼다.
+ */
+/** 모델이 낸 사고 단계. 열거형에 없는 값은 버린다(COM-002 §7) */
+const stageOfOutput = (output: unknown): Database['public']['Enums']['drilldown_stage'] | null => {
+  const value = str(read(output, 'interaction_update.drilldown_stage'));
+  const allowed = Constants.public.Enums.drilldown_stage;
+  return (allowed as readonly string[]).includes(value)
+    ? (value as Database['public']['Enums']['drilldown_stage'])
+    : null;
+};
+
+const pendingStageOf = (
+  messages: { speaker: string; is_hint: boolean; drilldown_stage: string | null }[],
+): string | null => {
+  const lastAi = [...messages].reverse().find((m) => m.speaker === 'ai' && !m.is_hint);
+  return lastAi?.drilldown_stage ?? null;
+};
 
 function buildHostInput(args: {
   studentId: string;
@@ -259,6 +289,8 @@ function buildModeAInput(args: {
   difficulty?: 'DOWN' | 'SAME' | 'UP';
   /** 이 문제에서 내가 이미 한 말. 같은 것을 다시 묻지 않게 한다 */
   asked?: string[];
+  /** 직전 턴에 내가 물은 사고 단계. 학생의 이번 말이 무엇에 대한 답인지 */
+  pendingStage?: string | null;
 }): string {
   const stage = stageOf('02 MODE A');
   let input: unknown = JSON.parse(stage.sampleInput);
@@ -321,6 +353,7 @@ function buildModeAInput(args: {
   input = write(input, 'payload.interaction.hint_count', args.hints?.length ?? 0);
   input = write(input, 'payload.interaction.hint_history', args.hints ?? []);
   input = write(input, 'payload.interaction.asked_questions', args.asked ?? []);
+  input = write(input, 'payload.interaction.pending_stage', args.pendingStage ?? null);
 
   return JSON.stringify(input, null, 2);
 }
@@ -446,6 +479,8 @@ export async function startProblem(): Promise<ProblemReply> {
     text: message === '' ? problemText : message,
     turnNumber: 1,
     supportLevel: num(read(output, 'interaction_update.support_level'), 0),
+    // 다음 턴이 이 값을 보고 학생의 말이 무엇에 대한 답인지 안다.
+    drilldownStage: stageOfOutput(output),
   });
 
   await record(supabase, EVENT.problemStarted, {
@@ -509,7 +544,9 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     // 않는다.
     hints: hintsOf(before),
     asked: askedOf(before),
-    // 내가 앞서 무엇을 물었는지. 없으면 같은 것을 또 묻는다.
+    // 학생의 이번 말이 **무엇에 대한 답인지**. 전이 질문에 답한 것을
+    // 원래 문제의 답으로 보면 맞는 말을 틀렸다고 하게 된다.
+    pendingStage: pendingStageOf(before),
     latest: said,
   };
 
@@ -573,6 +610,7 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     text: message,
     turnNumber: before.length + 2,
     supportLevel: nextSupport,
+    drilldownStage: stageOfOutput(output),
   });
 
   // CONTINUE 가 아니면 이 문제는 끝이다. 5턴에 닿았는데 CONTINUE 를 내도
@@ -1014,6 +1052,8 @@ function buildModeBInput(args: {
   difficulty?: 'DOWN' | 'SAME' | 'UP';
   /** 이 문제에서 내가 이미 한 말. 같은 것을 다시 묻지 않게 한다 */
   asked?: string[];
+  /** 직전 턴에 내가 물은 사고 단계. 학생의 이번 말이 무엇에 대한 답인지 */
+  pendingStage?: string | null;
   latest: string | null;
   /** 사진으로 가져왔는지. 기본은 글이다 */
   inputType?: 'TEXT' | 'IMAGE';
@@ -1092,6 +1132,7 @@ function buildModeBInput(args: {
   input = write(input, 'payload.interaction.hint_count', args.hints?.length ?? 0);
   input = write(input, 'payload.interaction.hint_history', args.hints ?? []);
   input = write(input, 'payload.interaction.asked_questions', args.asked ?? []);
+  input = write(input, 'payload.interaction.pending_stage', args.pendingStage ?? null);
 
   return JSON.stringify(input, null, 2);
 }
@@ -1239,6 +1280,8 @@ export async function confirmSourceProblem(
     text: shown === '' ? problemText : shown,
     turnNumber: 1,
     supportLevel: num(read(output, 'interaction_update.support_level'), 0),
+    // 다음 턴이 이 값을 보고 학생의 말이 무엇에 대한 답인지 안다.
+    drilldownStage: stageOfOutput(output),
   });
 
   await record(supabase, EVENT.problemStarted, {
