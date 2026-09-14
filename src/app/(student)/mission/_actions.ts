@@ -24,6 +24,13 @@ import {
   listSessionProblemTexts,
 } from '@/lib/services/problem';
 import { moveFrom, updateDifficulty } from '@/lib/services/difficulty';
+import {
+  applyDailySummary,
+  forPrompt,
+  getMemory,
+  refreshMemory,
+  type StudentMemory,
+} from '@/lib/services/student-memory';
 import { appendMessage, listMessages } from '@/lib/services/message';
 import { pickConcept } from '@/lib/services/concept';
 import { EVENT, record } from '@/lib/analytics/events';
@@ -88,6 +95,8 @@ function buildHostInput(args: {
   problemNumber: number;
   totalProblems: number;
   isFirstUse: boolean;
+  /** 어제까지의 학습 상태 (COM-002 §10). 없으면 null */
+  memory: StudentMemory | null;
   turns: Turn[];
   latest: string | null;
 }): string {
@@ -98,6 +107,10 @@ function buildHostInput(args: {
   input = write(input, 'student.grade', args.grade);
   // 프롬프트는 대문자 enum 을 읽는다. DB 는 소문자다(persona_type).
   input = write(input, 'student.selected_persona', args.persona.toUpperCase());
+  // **여기가 비어 있어서 메티가 매일 처음 만난 아이처럼 인사했다.**
+  // 01 프롬프트는 "기존 학생이면 student_memory 에서 오늘과 연결하기 좋은
+  // 내용 하나만 짧게 활용한다" 고 적혀 있는데, 늘 null 이 갔다.
+  input = write(input, 'payload.student_memory', forPrompt(args.memory));
 
   input = write(input, 'session.session_id', args.sessionId);
   input = write(input, 'session.problem_number', args.problemNumber);
@@ -138,6 +151,8 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
   const session = await findTodaySession(supabase, student.student_id);
   if (session === null) return { ok: false, message: '오늘 미션을 먼저 시작해줘.' };
 
+  const memory = await getMemory(supabase, student.student_id);
+
   const input = buildHostInput({
     studentId: student.student_id,
     grade: student.grade,
@@ -146,6 +161,7 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
     problemNumber: session.completed_problem_count + 1,
     totalProblems: session.target_problem_count,
     isFirstUse: session.completed_problem_count === 0 && turns.length === 0,
+    memory,
     turns,
     latest: text,
   });
@@ -705,6 +721,9 @@ async function evaluateProblem(
 ): Promise<void> {
   const stage = stageOf('05 EVALUATOR');
   let input: unknown = JSON.parse(stage.sampleInput);
+  // 05 는 다음 학습을 정한다. 어제까지의 상태를 봐야 오늘 한 문제가
+  // 흐름 안에서 어디쯤인지 안다(COM-002 §10).
+  input = write(input, 'payload.student_memory', forPrompt(await getMemory(supabase, args.student.student_id)));
 
   input = write(input, 'student.student_id', args.student.student_id);
   input = write(input, 'student.grade', args.student.grade);
@@ -797,6 +816,10 @@ async function evaluateProblem(
 
     // **05 의 next_learning.difficulty 를 그대로 쓰지 않는다.** 그것은 한
     // 문제짜리 신호다. 서버가 최근 세 문제를 모아서 정한다(COM-001 §9).
+    // 기억을 먼저 다시 센다. 난이도는 평가를 보고 정하므로 순서는
+    // 상관없지만, 실패해도 서로 막지 않게 따로 둔다.
+    await refreshMemory(supabase, args.student.student_id);
+
     const moved = await updateDifficulty(
       supabase,
       args.student.student_id,
@@ -873,6 +896,12 @@ async function summarizeDay(
     'payload.mode_status.mode_b_count',
     problems.filter((row) => row.learning_mode === 'mode_b').length,
   );
+  // 어제까지의 상태. 06 은 오늘과 견줘 무엇이 나아졌는지 말해야 한다.
+  input = write(
+    input,
+    'payload.student_memory',
+    forPrompt(await getMemory(supabase, args.student.student_id)),
+  );
 
   const result = await runStage(
     '06 DAILY ANALYZER',
@@ -889,6 +918,20 @@ async function summarizeDay(
       studentId: args.student.student_id,
       date,
       summary: result.output,
+    });
+
+    // **06 의 memory_update 를 실제로 반영한다.** 지금까지는 리포트 JSON
+    // 안에 들어가기만 하고 아무도 꺼내 읽지 않았다(COM-002 §10).
+    //
+    // `current_level` 은 하루에 한 번 여기서만 움직인다. 문제마다 흔들리는
+    // 값은 `student.current_difficulty` 쪽이다.
+    await applyDailySummary(supabase, args.student.student_id, {
+      level: (() => {
+        const value = read(result.output, 'memory_update.current_level');
+        return typeof value === 'number' ? value : null;
+      })(),
+      priorityConcepts: read(result.output, 'memory_update.priority_concepts'),
+      nextFocus: read(result.output, 'memory_update.next_session_focus'),
     });
     // 이벤트는 남기지 않는다. COM-002 §14 의 16개에 하루 리포트에
     // 해당하는 이름이 없다 — `weekly_report_generated` 를 갖다 쓰면
