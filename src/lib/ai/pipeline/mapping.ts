@@ -351,6 +351,7 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     // 물은 것과 힌트도 문제 단위다. 안 비우면 새 문제에서 "이미 물었다"
     // 며 아무것도 안 묻는다.
     { source: 'literal', from: '[]', to: 'payload.interaction.asked_questions' },
+    { source: 'literal', from: 'null', to: 'payload.interaction.pending_stage' },
     { source: 'literal', from: '[]', to: 'payload.interaction.hint_history' },
     { source: 'literal', from: '0', to: 'payload.interaction.hint_count' },
     // 세션에 쌓인 문제 목록은 하루가 끝날 때까지 이어진다.
@@ -471,6 +472,13 @@ export const AIPM_CARRY: Record<string, MapRow[]> = {
     // 모르는 채 "같은 내용을 반복해서 묻지 않는다" 를 지켜야 한다.
     // 제품은 `message` 에서 읽어 넘긴다(`_actions.ts` 의 askedOf).
     { source: 'append', from: 'ui.message', to: 'payload.interaction.asked_questions' },
+    // **직전에 무엇을 물었는지.** 전이 질문에 학생이 답했는데 그것을
+    // 원래 문제의 답으로 보면 맞는 말을 틀렸다고 하게 된다.
+    {
+      source: 'output',
+      from: 'interaction_update.drilldown_stage',
+      to: 'payload.interaction.pending_stage',
+    },
   ],
   '03 MODE B': [
     { source: 'output', from: 'mode_phase', to: 'payload.mode_phase' },
@@ -493,6 +501,13 @@ export const AIPM_CARRY: Record<string, MapRow[]> = {
       to: 'payload.interaction.support_level',
     },
     { source: 'append', from: 'ui.message', to: 'payload.interaction.asked_questions' },
+    // **직전에 무엇을 물었는지.** 전이 질문에 학생이 답했는데 그것을
+    // 원래 문제의 답으로 보면 맞는 말을 틀렸다고 하게 된다.
+    {
+      source: 'output',
+      from: 'interaction_update.drilldown_stage',
+      to: 'payload.interaction.pending_stage',
+    },
   ],
   '04 HINT': [
     {
