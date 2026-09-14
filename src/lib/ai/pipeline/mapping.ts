@@ -307,6 +307,16 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     // 두면 방금 채운 preferred_mode · last_mode 를 도로 덮는다.
     { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
     { source: 'output', from: 'next_learning.recommended_mode', to: 'payload.mode_status.preferred_mode' },
+    // **난이도와 개념도 넘긴다.** 05 가 내놓고 아무도 받지 않던 값들이다.
+    // 이것이 없으면 아무리 잘 풀어도 다음 문제가 늘 같은 수준으로 나온다.
+    //
+    // 제품에서는 서버가 최근 세 문제를 모아 정하고(COM-001 §9 ·
+    // `lib/services/difficulty.ts`), 도구에서는 DB 가 없으므로 05 가 낸
+    // 한 문제짜리 신호를 그대로 넘긴다. **같지 않다** — 도구는 고리가
+    // 도는지를 보는 곳이고, 얼마나 신중히 도는지는 제품이 정한다.
+    { source: 'output', from: 'next_learning.difficulty', to: 'payload.learning_target.difficulty' },
+    { source: 'output', from: 'next_learning.target_concept', to: 'payload.learning_target.concept' },
+    { source: 'output', from: 'next_learning.target_logic_gap', to: 'payload.learning_target.target_logic_gap' },
     // 06 DAILY ANALYZER 가 읽을 자리에 문제마다 하나씩 쌓는다.
     { source: 'append', from: 'evaluation', to: 'payload.problem_evaluations' },
     { source: 'input', from: 'payload.learning_mode', to: 'payload.mode_status.last_mode' },
