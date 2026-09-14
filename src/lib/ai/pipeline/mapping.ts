@@ -244,6 +244,15 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
   // 바퀴 돌아 01 로 돌아와야 "이번엔 B 어때?" 를 말할 수 있다.
   '01 SESSION HOST': [
     { source: 'output', from: 'selected_mode', to: 'payload.learning_mode' },
+    // **학생이 말한 문제를 03 에 넘긴다.**
+    //
+    // 없으면 03 은 빈 raw_text 를 받고 "문제를 잘 읽지 못했어. 다시 선명한
+    // 사진이나 텍스트로 보여줄 수 있어?" 라고 한다. 사진을 준 적도 없는데.
+    // 자동 실행에서 MODE B 가 매번 RECOGNITION_ERROR 로 끝났다.
+    //
+    // 제품은 `offerSourceProblem(text)` 가 직접 넘기므로 이 구멍이 없다.
+    // 도구만 01 의 출력에서 이어 붙여야 한다.
+    { source: 'input', from: 'latest_response', to: 'payload.source_problem.raw_text' },
     { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
     { source: 'input', from: 'student', to: 'student' },
     { source: 'input', from: 'session', to: 'session' },
