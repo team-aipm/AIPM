@@ -20,8 +20,17 @@ import {
   createProblem,
   findActiveProblem,
   finishProblem,
+  lastProblemLevel,
   listSessionProblemTexts,
 } from '@/lib/services/problem';
+import { moveFrom, updateDifficulty } from '@/lib/services/difficulty';
+import {
+  applyDailySummary,
+  forPrompt,
+  getMemory,
+  refreshMemory,
+  type StudentMemory,
+} from '@/lib/services/student-memory';
 import { appendMessage, listMessages } from '@/lib/services/message';
 import { pickConcept } from '@/lib/services/concept';
 import { EVENT, record } from '@/lib/analytics/events';
@@ -78,6 +87,19 @@ const hintsOf = (messages: { is_hint: boolean; message_text: string; support_lev
     .filter((m) => m.is_hint)
     .map((m) => ({ message: m.message_text, support_level: m.support_level }));
 
+/**
+ * 이 문제에서 **내가 이미 한 말**.
+ *
+ * `response_history` 에는 학생의 말만 들어간다. 그래서 모델은 자기가 앞서
+ * 무엇을 물었는지 모르는 채 "같은 내용을 반복해서 묻지 않는다" 는 규칙을
+ * 지켜야 했다 — 알 방법을 주지 않고 요구하고 있었다.
+ *
+ * 힌트는 뺀다. 그쪽은 `hint_history` 로 따로 간다(COM-002 §7). 두 곳에
+ * 같은 말을 실으면 모델이 두 번 말한 것으로 센다.
+ */
+const askedOf = (messages: { speaker: string; is_hint: boolean; message_text: string }[]): string[] =>
+  messages.filter((m) => m.speaker === 'ai' && !m.is_hint).map((m) => m.message_text);
+
 function buildHostInput(args: {
   studentId: string;
   grade: number;
@@ -86,6 +108,8 @@ function buildHostInput(args: {
   problemNumber: number;
   totalProblems: number;
   isFirstUse: boolean;
+  /** 어제까지의 학습 상태 (COM-002 §10). 없으면 null */
+  memory: StudentMemory | null;
   turns: Turn[];
   latest: string | null;
 }): string {
@@ -96,6 +120,10 @@ function buildHostInput(args: {
   input = write(input, 'student.grade', args.grade);
   // 프롬프트는 대문자 enum 을 읽는다. DB 는 소문자다(persona_type).
   input = write(input, 'student.selected_persona', args.persona.toUpperCase());
+  // **여기가 비어 있어서 메티가 매일 처음 만난 아이처럼 인사했다.**
+  // 01 프롬프트는 "기존 학생이면 student_memory 에서 오늘과 연결하기 좋은
+  // 내용 하나만 짧게 활용한다" 고 적혀 있는데, 늘 null 이 갔다.
+  input = write(input, 'payload.student_memory', forPrompt(args.memory));
 
   input = write(input, 'session.session_id', args.sessionId);
   input = write(input, 'session.problem_number', args.problemNumber);
@@ -136,6 +164,8 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
   const session = await findTodaySession(supabase, student.student_id);
   if (session === null) return { ok: false, message: '오늘 미션을 먼저 시작해줘.' };
 
+  const memory = await getMemory(supabase, student.student_id);
+
   const input = buildHostInput({
     studentId: student.student_id,
     grade: student.grade,
@@ -144,6 +174,7 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
     problemNumber: session.completed_problem_count + 1,
     totalProblems: session.target_problem_count,
     isFirstUse: session.completed_problem_count === 0 && turns.length === 0,
+    memory,
     turns,
     latest: text,
   });
@@ -224,6 +255,10 @@ function buildModeAInput(args: {
   concept?: string | null;
   /** 이번 세션에서 이미 낸 문제. 같은 것을 다시 내지 않게 한다 */
   previousProblems?: string[];
+  /** 지난 문제보다 어느 쪽인지 (COM-001 §9). 없으면 SAME */
+  difficulty?: 'DOWN' | 'SAME' | 'UP';
+  /** 이 문제에서 내가 이미 한 말. 같은 것을 다시 묻지 않게 한다 */
+  asked?: string[];
 }): string {
   const stage = stageOf('02 MODE A');
   let input: unknown = JSON.parse(stage.sampleInput);
@@ -250,7 +285,7 @@ function buildModeAInput(args: {
   // 넣는 것보다 낫다.
   input = write(input, 'payload.learning_target.concept', args.concept ?? null);
   input = write(input, 'payload.learning_target.target_logic_gap', null);
-  input = write(input, 'payload.learning_target.difficulty', 'SAME');
+  input = write(input, 'payload.learning_target.difficulty', args.difficulty ?? 'SAME');
 
   input = write(input, 'payload.problem.problem_text', args.problem?.text ?? null);
   input = write(input, 'payload.problem.verified_answer', args.problem?.verifiedAnswer ?? null);
@@ -285,6 +320,7 @@ function buildModeAInput(args: {
   input = write(input, 'payload.interaction.support_level', args.supportLevel);
   input = write(input, 'payload.interaction.hint_count', args.hints?.length ?? 0);
   input = write(input, 'payload.interaction.hint_history', args.hints ?? []);
+  input = write(input, 'payload.interaction.asked_questions', args.asked ?? []);
 
   return JSON.stringify(input, null, 2);
 }
@@ -344,10 +380,13 @@ export async function startProblem(): Promise<ProblemReply> {
   }
 
   const problemNumber = session.completed_problem_count + 1;
-  const [picked, previousProblems] = await Promise.all([
+  const [picked, previousProblems, lastLevel] = await Promise.all([
     pickConcept(supabase, student.student_id, problemNumber),
     listSessionProblemTexts(supabase, session.session_id),
+    lastProblemLevel(supabase, student.student_id),
   ]);
+  // 지난 문제와 견준다. 05 가 올리거나 내린 결과가 여기서 처음 쓰인다.
+  const difficulty = moveFrom(lastLevel, student.current_difficulty);
   if (picked.concept !== null) {
     console.log(`[mission] 개념 선정: ${picked.concept} (${picked.reason})`);
   }
@@ -361,6 +400,7 @@ export async function startProblem(): Promise<ProblemReply> {
     totalProblems: session.target_problem_count,
     concept: picked.concept,
     previousProblems,
+    difficulty,
     phase: 'PREPARE',
     problem: null,
     studentTexts: [],
@@ -468,6 +508,8 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     // 힌트를 받고 나서 한 말이면, 모드도 그것을 알아야 같은 것을 또 묻지
     // 않는다.
     hints: hintsOf(before),
+    asked: askedOf(before),
+    // 내가 앞서 무엇을 물었는지. 없으면 같은 것을 또 묻는다.
     latest: said,
   };
 
@@ -582,6 +624,7 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
       student_id: student.student_id,
       grade: student.grade,
       persona_type: student.persona_type,
+      current_difficulty: student.current_difficulty,
     },
     session: {
       session_id: session.session_id,
@@ -598,6 +641,7 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     // 힌트를 몇 번 받았는지가 도움 수준 판단의 근거다. 0 으로 고정돼 있어서
     // 05 는 지금까지 "혼자 풀었다" 고 보고 평가했다.
     hints: hintsOf(before),
+    asked: askedOf(before),
     studentTexts: [...studentTexts, said],
     supportLevel: nextSupport,
     completionStatus: status,
@@ -671,7 +715,13 @@ const boolOrNull = (value: unknown): boolean | null =>
 async function evaluateProblem(
   supabase: Awaited<ReturnType<typeof createClient>>,
   args: {
-    student: { student_id: string; grade: number; persona_type: 'friend' | 'villain' };
+    student: {
+      student_id: string;
+      grade: number;
+      persona_type: 'friend' | 'villain';
+      /** 난이도를 옮길 기준점 (COM-001 §9) */
+      current_difficulty: number;
+    };
     session: { session_id: string; completed_problem_count: number; target_problem_count: number };
     problem: {
       problem_id: string;
@@ -684,12 +734,17 @@ async function evaluateProblem(
     supportLevel: number;
     /** 지금까지 준 힌트. 05 가 도움 수준을 판단할 때 쓴다 */
     hints?: Hint[];
+    /** 이 문제에서 AI 가 물은 것. 안 물은 항목은 null 이어야 한다 */
+    asked?: string[];
     completionStatus: string;
     correct: boolean;
   },
 ): Promise<void> {
   const stage = stageOf('05 EVALUATOR');
   let input: unknown = JSON.parse(stage.sampleInput);
+  // 05 는 다음 학습을 정한다. 어제까지의 상태를 봐야 오늘 한 문제가
+  // 흐름 안에서 어디쯤인지 안다(COM-002 §10).
+  input = write(input, 'payload.student_memory', forPrompt(await getMemory(supabase, args.student.student_id)));
 
   input = write(input, 'student.student_id', args.student.student_id);
   input = write(input, 'student.grade', args.student.grade);
@@ -725,6 +780,9 @@ async function evaluateProblem(
   );
   input = write(input, 'payload.problem_result.support_level', args.supportLevel);
   input = write(input, 'payload.problem_result.hint_count', args.hints?.length ?? 0);
+  // **무엇을 물었는지 알아야 null 과 0 을 가릴 수 있다.** 전이를 묻지
+  // 않았으면 transfer_score 는 null 이고, 물었는데 못 했으면 0 이다.
+  input = write(input, 'payload.problem_result.asked_questions', args.asked ?? []);
 
   const result = await runStage('05 EVALUATOR', JSON.stringify(input, null, 2), args.student.persona_type);
   if (!result.ok) {
@@ -779,6 +837,21 @@ async function evaluateProblem(
         gapOf(read(evaluation, 'secondary_logic_gap')),
       ],
     });
+
+    // **05 의 next_learning.difficulty 를 그대로 쓰지 않는다.** 그것은 한
+    // 문제짜리 신호다. 서버가 최근 세 문제를 모아서 정한다(COM-001 §9).
+    // 기억을 먼저 다시 센다. 난이도는 평가를 보고 정하므로 순서는
+    // 상관없지만, 실패해도 서로 막지 않게 따로 둔다.
+    await refreshMemory(supabase, args.student.student_id);
+
+    const moved = await updateDifficulty(
+      supabase,
+      args.student.student_id,
+      args.student.current_difficulty,
+    );
+    if (moved.move !== 'SAME') {
+      console.log(`[mission] 난이도 ${moved.move} → ${moved.level} (${moved.reason})`);
+    }
   } catch (error) {
     console.error(`[mission] 평가 저장 실패: ${String(error)}`);
   }
@@ -847,6 +920,12 @@ async function summarizeDay(
     'payload.mode_status.mode_b_count',
     problems.filter((row) => row.learning_mode === 'mode_b').length,
   );
+  // 어제까지의 상태. 06 은 오늘과 견줘 무엇이 나아졌는지 말해야 한다.
+  input = write(
+    input,
+    'payload.student_memory',
+    forPrompt(await getMemory(supabase, args.student.student_id)),
+  );
 
   const result = await runStage(
     '06 DAILY ANALYZER',
@@ -863,6 +942,20 @@ async function summarizeDay(
       studentId: args.student.student_id,
       date,
       summary: result.output,
+    });
+
+    // **06 의 memory_update 를 실제로 반영한다.** 지금까지는 리포트 JSON
+    // 안에 들어가기만 하고 아무도 꺼내 읽지 않았다(COM-002 §10).
+    //
+    // `current_level` 은 하루에 한 번 여기서만 움직인다. 문제마다 흔들리는
+    // 값은 `student.current_difficulty` 쪽이다.
+    await applyDailySummary(supabase, args.student.student_id, {
+      level: (() => {
+        const value = read(result.output, 'memory_update.current_level');
+        return typeof value === 'number' ? value : null;
+      })(),
+      priorityConcepts: read(result.output, 'memory_update.priority_concepts'),
+      nextFocus: read(result.output, 'memory_update.next_session_focus'),
     });
     // 이벤트는 남기지 않는다. COM-002 §14 의 16개에 하루 리포트에
     // 해당하는 이름이 없다 — `weekly_report_generated` 를 갖다 쓰면
@@ -917,6 +1010,10 @@ function buildModeBInput(args: {
   supportLevel: number;
   /** 지금까지 준 힌트. 04 · 02 · 03 · 05 가 모두 이것을 본다(COM-002 §7) */
   hints?: Hint[];
+  /** 지난 문제보다 어느 쪽인지 (COM-001 §9). 없으면 SAME */
+  difficulty?: 'DOWN' | 'SAME' | 'UP';
+  /** 이 문제에서 내가 이미 한 말. 같은 것을 다시 묻지 않게 한다 */
+  asked?: string[];
   latest: string | null;
   /** 사진으로 가져왔는지. 기본은 글이다 */
   inputType?: 'TEXT' | 'IMAGE';
@@ -938,7 +1035,7 @@ function buildModeBInput(args: {
   input = write(input, 'payload.mode_phase', args.phase);
   input = write(input, 'payload.learning_target.concept', null);
   input = write(input, 'payload.learning_target.target_logic_gap', null);
-  input = write(input, 'payload.learning_target.difficulty', 'SAME');
+  input = write(input, 'payload.learning_target.difficulty', args.difficulty ?? 'SAME');
 
   input = write(input, 'payload.source_problem.input_type', args.inputType ?? 'TEXT');
   input = write(input, 'payload.source_problem.raw_text', args.rawText);
@@ -994,6 +1091,7 @@ function buildModeBInput(args: {
   input = write(input, 'payload.interaction.support_level', args.supportLevel);
   input = write(input, 'payload.interaction.hint_count', args.hints?.length ?? 0);
   input = write(input, 'payload.interaction.hint_history', args.hints ?? []);
+  input = write(input, 'payload.interaction.asked_questions', args.asked ?? []);
 
   return JSON.stringify(input, null, 2);
 }

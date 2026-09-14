@@ -2589,6 +2589,56 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         </div>
       </header>
 
+      {/*
+        **맨 아래에 있었다.** 대화창 다음이라 화면 끝까지 내려야 보인다.
+        프리셋이 바뀐 줄 모르고 옛 프롬프트로 계속 돌리는 일이 그래서
+        생겼다. 경고는 눈에 닿는 자리에 있어야 경고다.
+      */}
+      {(allDrift.length > 0 || allMissingVars.length > 0) && (
+        <div className="mb-4 flex flex-col gap-2 rounded border border-amber-400 p-3 dark:border-amber-600">
+          {allDrift.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <b className="text-amber-700 dark:text-amber-500">
+                {allDrift.length}개 단계가 프리셋과 다릅니다
+              </b>
+              <span className="text-[11px] text-neutral-500">
+                {allDrift.map((item) => item.stage.name).join(' · ')}
+              </span>
+              <button
+                onClick={pullEverything}
+                className="rounded border border-amber-400 px-2 py-1 dark:border-amber-600"
+              >
+                모두 프리셋으로 받아오기
+              </button>
+              <span className="text-[11px] text-neutral-500">
+                직접 고치신 곳이 있으면 단계마다 묶음별로 고르세요
+              </span>
+            </div>
+          )}
+
+          {allMissingVars.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <b className="text-amber-700 dark:text-amber-500">
+                정의 안 된 변수 {allMissingVars.length}개
+              </b>
+              <span className="text-[11px]">
+                {allMissingVars.map((name) => `{{${name}}}`).join(' ')}
+              </span>
+              <button
+                onClick={() => setPanel('vars')}
+                className="rounded border border-amber-400 px-2 py-1 dark:border-amber-600"
+              >
+                변수 열기
+              </button>
+              <span className="text-[11px] text-neutral-500">
+                프롬프트에 그대로 남아 모델에게 갑니다. 페르소나가 안 먹는 것이
+                대개 이것입니다
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <nav className="flex flex-wrap items-center gap-3 text-neutral-500">
         {(
           [
@@ -3851,51 +3901,6 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           + 단계 추가
         </button>
       </nav>
-
-      {(allDrift.length > 0 || allMissingVars.length > 0) && (
-        <div className="mb-4 flex flex-col gap-2 rounded border border-amber-400 p-3 dark:border-amber-600">
-          {allDrift.length > 0 && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <b className="text-amber-700 dark:text-amber-500">
-                {allDrift.length}개 단계가 프리셋과 다릅니다
-              </b>
-              <span className="text-[11px] text-neutral-500">
-                {allDrift.map((item) => item.stage.name).join(' · ')}
-              </span>
-              <button
-                onClick={pullEverything}
-                className="rounded border border-amber-400 px-2 py-1 dark:border-amber-600"
-              >
-                모두 프리셋으로 받아오기
-              </button>
-              <span className="text-[11px] text-neutral-500">
-                직접 고치신 곳이 있으면 단계마다 묶음별로 고르세요
-              </span>
-            </div>
-          )}
-
-          {allMissingVars.length > 0 && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <b className="text-amber-700 dark:text-amber-500">
-                정의 안 된 변수 {allMissingVars.length}개
-              </b>
-              <span className="text-[11px]">
-                {allMissingVars.map((name) => `{{${name}}}`).join(' ')}
-              </span>
-              <button
-                onClick={() => setPanel('vars')}
-                className="rounded border border-amber-400 px-2 py-1 dark:border-amber-600"
-              >
-                변수 열기
-              </button>
-              <span className="text-[11px] text-neutral-500">
-                프롬프트에 그대로 남아 모델에게 갑니다. 페르소나가 안 먹는 것이
-                대개 이것입니다
-              </span>
-            </div>
-          )}
-        </div>
-      )}
 
       {active && thread && (
         <div className="flex flex-col gap-4">
