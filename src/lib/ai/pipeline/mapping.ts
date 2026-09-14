@@ -253,6 +253,10 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
   // 문제 하나가 끝났다. 결과를 평가 단계가 읽는 자리에 옮긴다.
   '02 MODE A': [
     { source: 'literal', from: 'A', to: 'payload.learning_mode' },
+    // 무엇을 물었는지. 05 는 이것으로 null 과 0 을 가린다 —
+    // 전이를 안 물었으면 transfer_score 는 null 이다.
+    { source: 'input', from: 'payload.interaction.asked_questions', to: 'payload.problem_result.asked_questions' },
+    { source: 'input', from: 'payload.interaction.hint_count', to: 'payload.problem_result.hint_count' },
     { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
     // 도구가 센다. 모델에게 세라고 하면 틀리고, 안 세면 "덜 해 본 쪽"
     // 을 고를 수가 없다.
@@ -273,11 +277,21 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     // session 을 옮긴 **뒤에** 센다. 앞에 두면 통째 이월이 도로 덮는다.
     // 이게 total_problems 에 닿으면 01 이 하루를 끝낸다.
     { source: 'increment', from: 'session.problem_number', to: 'session.problem_number' },
+    // **낸 문제를 세션에 쌓는다.** 없으면 02 가 매번 백지에서 문제를 만들고,
+    // 같은 개념이 두 번 걸리면 같은 문제가 그대로 나온다(PR #119).
+    //
+    // **session 을 통째로 옮긴 뒤에 둔다.** 앞에 두면 그 이월이 방금 쌓은
+    // 것을 도로 덮는다 — 바로 위 problem_number 와 같은 이유다.
+    { source: 'append', from: 'problem_state.problem_text', to: 'session.previous_problems' },
     // 쌓아 둔 평가가 한 바퀴를 함께 돌아야 계속 붙는다.
     { source: 'input', from: 'payload.problem_evaluations', to: 'payload.problem_evaluations' },
   ],
   '03 MODE B': [
     { source: 'literal', from: 'B', to: 'payload.learning_mode' },
+    // 무엇을 물었는지. 05 는 이것으로 null 과 0 을 가린다 —
+    // 전이를 안 물었으면 transfer_score 는 null 이다.
+    { source: 'input', from: 'payload.interaction.asked_questions', to: 'payload.problem_result.asked_questions' },
+    { source: 'input', from: 'payload.interaction.hint_count', to: 'payload.problem_result.hint_count' },
     { source: 'input', from: 'payload.mode_status', to: 'payload.mode_status' },
     {
       source: 'increment',
@@ -296,6 +310,12 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     // session 을 옮긴 **뒤에** 센다. 앞에 두면 통째 이월이 도로 덮는다.
     // 이게 total_problems 에 닿으면 01 이 하루를 끝낸다.
     { source: 'increment', from: 'session.problem_number', to: 'session.problem_number' },
+    // **낸 문제를 세션에 쌓는다.** 없으면 02 가 매번 백지에서 문제를 만들고,
+    // 같은 개념이 두 번 걸리면 같은 문제가 그대로 나온다(PR #119).
+    //
+    // **session 을 통째로 옮긴 뒤에 둔다.** 앞에 두면 그 이월이 방금 쌓은
+    // 것을 도로 덮는다 — 바로 위 problem_number 와 같은 이유다.
+    { source: 'append', from: 'problem_state.problem_text', to: 'session.previous_problems' },
     // 쌓아 둔 평가가 한 바퀴를 함께 돌아야 계속 붙는다.
     { source: 'input', from: 'payload.problem_evaluations', to: 'payload.problem_evaluations' },
   ],
@@ -328,6 +348,29 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     //
     // 새 문제로 가므로 앞 문제의 대화는 안 넘긴다.
     { source: 'literal', from: '[]', to: 'conversation' },
+    // 물은 것과 힌트도 문제 단위다. 안 비우면 새 문제에서 "이미 물었다"
+    // 며 아무것도 안 묻는다.
+    { source: 'literal', from: '[]', to: 'payload.interaction.asked_questions' },
+    { source: 'literal', from: '[]', to: 'payload.interaction.hint_history' },
+    { source: 'literal', from: '0', to: 'payload.interaction.hint_count' },
+    // 세션에 쌓인 문제 목록은 하루가 끝날 때까지 이어진다.
+    { source: 'input', from: 'session', to: 'session' },
+  ],
+  // 하루가 끝났다. 다음 날 01 로 간다.
+  //
+  // **제품은 `student_memory` 표에 남긴다**(PR #123). 도구에는 DB 가
+  // 없으므로 06 이 낸 것을 그대로 다음 01 에 준다 — 01 은 "기존 학생이면
+  // student_memory 에서 오늘과 연결하기 좋은 내용 하나만 짧게 활용한다"
+  // 를 지켜야 하고, 그게 되는지 보려면 값이 있어야 한다.
+  '06 DAILY ANALYZER': [
+    { source: 'output', from: 'memory_update', to: 'payload.student_memory' },
+    { source: 'input', from: 'student', to: 'student' },
+    // 새 날이다. 문제 번호와 쌓인 것들을 비운다.
+    { source: 'literal', from: '1', to: 'session.problem_number' },
+    { source: 'literal', from: '[]', to: 'session.previous_problems' },
+    { source: 'literal', from: '[]', to: 'payload.problem_evaluations' },
+    { source: 'literal', from: '[]', to: 'conversation' },
+    { source: 'literal', from: 'START', to: 'payload.session_phase' },
   ],
 };
 
@@ -424,6 +467,10 @@ export const AIPM_CARRY: Record<string, MapRow[]> = {
       from: 'interaction_update.support_level',
       to: 'payload.interaction.support_level',
     },
+    // **내가 한 말을 쌓는다.** 없으면 모델은 자기가 앞서 무엇을 물었는지
+    // 모르는 채 "같은 내용을 반복해서 묻지 않는다" 를 지켜야 한다.
+    // 제품은 `message` 에서 읽어 넘긴다(`_actions.ts` 의 askedOf).
+    { source: 'append', from: 'ui.message', to: 'payload.interaction.asked_questions' },
   ],
   '03 MODE B': [
     { source: 'output', from: 'mode_phase', to: 'payload.mode_phase' },
@@ -445,12 +492,21 @@ export const AIPM_CARRY: Record<string, MapRow[]> = {
       from: 'interaction_update.support_level',
       to: 'payload.interaction.support_level',
     },
+    { source: 'append', from: 'ui.message', to: 'payload.interaction.asked_questions' },
   ],
   '04 HINT': [
     {
       source: 'output',
       from: 'interaction_update.support_level',
       to: 'payload.interaction.support_level',
+    },
+    // 힌트 이력. 없으면 힌트를 몇 번 눌러도 같은 말이 돌아온다
+    // (PR #112 에서 제품이 겪은 것과 같다).
+    { source: 'append', from: 'hint.message', to: 'payload.interaction.hint_history' },
+    {
+      source: 'increment',
+      from: 'payload.interaction.hint_count',
+      to: 'payload.interaction.hint_count',
     },
   ],
 };
