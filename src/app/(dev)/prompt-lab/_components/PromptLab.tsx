@@ -236,13 +236,18 @@ const LOG_LABEL: Record<AutoStep['kind'], string> = {
 
 /** 견줄 칸만 뽑는다. routing 은 프리셋 쪽 출처가 달라 부르는 쪽이 붙인다 */
 function pickComparable(
-  from: Omit<Comparable, 'routing' | 'mapping' | 'carry'>,
+  from: Omit<Comparable, 'routing' | 'mapping' | 'carry' | 'forceJsonMimeType'> & {
+    forceJsonMimeType?: boolean;
+  },
 ): Omit<Comparable, 'routing' | 'mapping' | 'carry'> {
   return {
     prompt: from.prompt,
     inputMode: from.inputMode,
     outputMode: from.outputMode,
     checkRule: from.checkRule,
+    // 프리셋에는 이 칸이 없다. 제품과 같은 규칙으로 정한다
+    // (`lib/ai/pipeline/run.ts`: outputMode 가 json 이면 켠다).
+    forceJsonMimeType: from.forceJsonMimeType ?? from.outputMode === 'json',
     historyKey: from.historyKey,
     replyKey: from.replyKey,
     recordKey: from.recordKey,
@@ -316,7 +321,14 @@ function toStage(base: StagePreset, key: string): Stage {
     maxTokens: '',
     topP: '',
     useCommonPrompt: true,
-    forceJsonMimeType: false,
+    // **JSON 을 내는 단계는 켠다.** 제품이 그렇게 부른다
+    // (`lib/ai/pipeline/run.ts` 의 `forceJsonMimeType`).
+    //
+    // 꺼 두면 모델이 코드펜스를 붙이고, 「JSON만 출력」 검사가 매 턴
+    // 실패한다. 도구는 걸러 읽으니 대화는 멀쩡해 보이는데 검증만
+    // 빨갛다 — **도구가 제품과 다른 조건으로 도는 것**이라 무엇이
+    // 진짜 문제인지 가릴 수 없다.
+    forceJsonMimeType: base.outputMode === 'json',
     rules: EMPTY_RULES,
     // 이름으로 찾는다. AIPM 프리셋이 아니면 빈 값이다.
     mapping: defaultMapping(base.name),
