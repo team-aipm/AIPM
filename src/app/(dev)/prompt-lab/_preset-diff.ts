@@ -35,6 +35,13 @@ export type Comparable = {
   inputMode: OutputMode;
   outputMode: OutputMode;
   checkRule: CheckRuleId | null;
+  /**
+   * JSON 을 강제할지. **제품은 JSON 단계에서 켠다**
+   * (`lib/ai/pipeline/run.ts`). 꺼 두면 모델이 코드펜스를 붙여
+   * 「JSON만 출력」 검사가 매 턴 실패하고, 도구가 제품과 다른 조건으로
+   * 돈다. 저장본에 남은 옛 값을 배너가 짚어 주도록 여기 둔다.
+   */
+  forceJsonMimeType: boolean;
   historyKey: string;
   replyKey: string;
   recordKey: string;
@@ -84,7 +91,11 @@ export const GROUPS: Group[] = [
     label: '응답·기록·보기 필드',
     fields: ['replyKey', 'recordKey', 'choicesKey'],
   },
-  { id: 'io', label: '입출력 형식', fields: ['inputMode', 'outputMode', 'checkRule'] },
+  {
+    id: 'io',
+    label: '입출력 형식',
+    fields: ['inputMode', 'outputMode', 'checkRule', 'forceJsonMimeType'],
+  },
 ];
 
 export type Diff = {
