@@ -87,6 +87,19 @@ const hintsOf = (messages: { is_hint: boolean; message_text: string; support_lev
     .filter((m) => m.is_hint)
     .map((m) => ({ message: m.message_text, support_level: m.support_level }));
 
+/**
+ * 이 문제에서 **내가 이미 한 말**.
+ *
+ * `response_history` 에는 학생의 말만 들어간다. 그래서 모델은 자기가 앞서
+ * 무엇을 물었는지 모르는 채 "같은 내용을 반복해서 묻지 않는다" 는 규칙을
+ * 지켜야 했다 — 알 방법을 주지 않고 요구하고 있었다.
+ *
+ * 힌트는 뺀다. 그쪽은 `hint_history` 로 따로 간다(COM-002 §7). 두 곳에
+ * 같은 말을 실으면 모델이 두 번 말한 것으로 센다.
+ */
+const askedOf = (messages: { speaker: string; is_hint: boolean; message_text: string }[]): string[] =>
+  messages.filter((m) => m.speaker === 'ai' && !m.is_hint).map((m) => m.message_text);
+
 function buildHostInput(args: {
   studentId: string;
   grade: number;
@@ -244,6 +257,8 @@ function buildModeAInput(args: {
   previousProblems?: string[];
   /** 지난 문제보다 어느 쪽인지 (COM-001 §9). 없으면 SAME */
   difficulty?: 'DOWN' | 'SAME' | 'UP';
+  /** 이 문제에서 내가 이미 한 말. 같은 것을 다시 묻지 않게 한다 */
+  asked?: string[];
 }): string {
   const stage = stageOf('02 MODE A');
   let input: unknown = JSON.parse(stage.sampleInput);
@@ -305,6 +320,7 @@ function buildModeAInput(args: {
   input = write(input, 'payload.interaction.support_level', args.supportLevel);
   input = write(input, 'payload.interaction.hint_count', args.hints?.length ?? 0);
   input = write(input, 'payload.interaction.hint_history', args.hints ?? []);
+  input = write(input, 'payload.interaction.asked_questions', args.asked ?? []);
 
   return JSON.stringify(input, null, 2);
 }
@@ -492,6 +508,8 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     // 힌트를 받고 나서 한 말이면, 모드도 그것을 알아야 같은 것을 또 묻지
     // 않는다.
     hints: hintsOf(before),
+    asked: askedOf(before),
+    // 내가 앞서 무엇을 물었는지. 없으면 같은 것을 또 묻는다.
     latest: said,
   };
 
@@ -623,6 +641,7 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     // 힌트를 몇 번 받았는지가 도움 수준 판단의 근거다. 0 으로 고정돼 있어서
     // 05 는 지금까지 "혼자 풀었다" 고 보고 평가했다.
     hints: hintsOf(before),
+    asked: askedOf(before),
     studentTexts: [...studentTexts, said],
     supportLevel: nextSupport,
     completionStatus: status,
@@ -715,6 +734,8 @@ async function evaluateProblem(
     supportLevel: number;
     /** 지금까지 준 힌트. 05 가 도움 수준을 판단할 때 쓴다 */
     hints?: Hint[];
+    /** 이 문제에서 AI 가 물은 것. 안 물은 항목은 null 이어야 한다 */
+    asked?: string[];
     completionStatus: string;
     correct: boolean;
   },
@@ -759,6 +780,9 @@ async function evaluateProblem(
   );
   input = write(input, 'payload.problem_result.support_level', args.supportLevel);
   input = write(input, 'payload.problem_result.hint_count', args.hints?.length ?? 0);
+  // **무엇을 물었는지 알아야 null 과 0 을 가릴 수 있다.** 전이를 묻지
+  // 않았으면 transfer_score 는 null 이고, 물었는데 못 했으면 0 이다.
+  input = write(input, 'payload.problem_result.asked_questions', args.asked ?? []);
 
   const result = await runStage('05 EVALUATOR', JSON.stringify(input, null, 2), args.student.persona_type);
   if (!result.ok) {
@@ -988,6 +1012,8 @@ function buildModeBInput(args: {
   hints?: Hint[];
   /** 지난 문제보다 어느 쪽인지 (COM-001 §9). 없으면 SAME */
   difficulty?: 'DOWN' | 'SAME' | 'UP';
+  /** 이 문제에서 내가 이미 한 말. 같은 것을 다시 묻지 않게 한다 */
+  asked?: string[];
   latest: string | null;
   /** 사진으로 가져왔는지. 기본은 글이다 */
   inputType?: 'TEXT' | 'IMAGE';
@@ -1065,6 +1091,7 @@ function buildModeBInput(args: {
   input = write(input, 'payload.interaction.support_level', args.supportLevel);
   input = write(input, 'payload.interaction.hint_count', args.hints?.length ?? 0);
   input = write(input, 'payload.interaction.hint_history', args.hints ?? []);
+  input = write(input, 'payload.interaction.asked_questions', args.asked ?? []);
 
   return JSON.stringify(input, null, 2);
 }

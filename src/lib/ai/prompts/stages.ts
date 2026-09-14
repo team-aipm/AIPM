@@ -413,7 +413,9 @@ MODE A가 담당하는 범위는 다음과 같다.
       "response_history": [],
       "support_level": 0,
       "hint_count": 0,
-      "hint_history": []
+      "asked_questions": [],
+      "hint_history": [],
+      "asked_questions": []
     }
   }
 }
@@ -437,25 +439,20 @@ learning_target을 기준으로 문제 1개를 생성한다.
 문제는 다음 조건을 만족해야 한다.
 - student.grade에 적합하다. 아래 [학년별 범위]를 따른다.
 - learning_target.concept와 관련된다.
+- target_logic_gap이 있다면 해당 사고를 관찰하기 적합하다.
+- 문제 조건이 명확하다.
+- 필요한 정보가 빠져 있지 않다.
+- 정답이 명확하게 결정된다.
+- 불필요하게 복잡하지 않다.
+- 가능한 경우 단순 계산보다 사고과정을 관찰할 수 있는 문제를 우선한다.
 - session.previous_problems 에 있는 문제와 **다른 문제**다.
   숫자만 바꾼 같은 문제도 안 된다. 묻는 것이 달라야 한다.
   이미 낸 개념을 다시 다루더라도 상황과 묻는 방식을 바꾼다.
 - 아래 [문제 유형]에서 **매번 다른 유형**을 고른다.
 
 [학년별 범위]
-4학년
-  큰 수 · 각도 · 곱셈과 나눗셈 · 분수의 덧셈과 뺄셈
-  소수의 덧셈과 뺄셈 · 삼각형 · 사각형 · 꺾은선그래프 · 규칙 찾기
-5학년
-  자연수의 혼합 계산 · 약수와 배수 · 약분과 통분
-  분수의 덧셈과 뺄셈 · 다각형의 둘레와 넓이 · 평균과 가능성
-  분수의 곱셈 · 소수의 곱셈 · 합동과 대칭 · 직육면체
-6학년
-  분수의 나눗셈 · 소수의 나눗셈 · 비와 비율 · 여러 가지 그래프
-  직육면체의 부피와 겉넓이 · 각기둥과 각뿔
-  비례식과 비례배분 · 원의 넓이 · 원기둥과 원뿔
-
-해당 학년에서 아직 배우지 않은 것을 쓰지 않는다.
+COMMON SYSTEM 의 CONCEPTS 목록을 따른다.
+**해당 학년에서 아직 배우지 않은 것을 쓰지 않는다.**
 4학년에게 혼합 계산의 우선순위나 비례식을 묻지 않는다.
 
 [문제 유형]
@@ -473,8 +470,7 @@ learning_target을 기준으로 문제 1개를 생성한다.
 
 [영역을 옮긴다]
 previous_problems 의 **마지막 두 문제가 다룬 영역을 확인하고, 이번에는
-다른 영역으로 옮긴다.** [학년별 범위]는 한 학년 안에도 여러 영역을
-담고 있다.
+다른 영역으로 옮긴다.** CONCEPTS 는 한 학년 안에도 여러 영역을 담고 있다.
 
   수와 연산  →  도형  →  측정  →  규칙성  →  자료와 가능성
 
@@ -484,12 +480,7 @@ previous_problems 의 **마지막 두 문제가 다룬 영역을 확인하고, �
 
 **연속으로 같은 영역을 내지 않는다.** 직육면체를 물었으면 다음은
 직육면체가 아니다.
-- target_logic_gap이 있다면 해당 사고를 관찰하기 적합하다.
-- 문제 조건이 명확하다.
-- 필요한 정보가 빠져 있지 않다.
-- 정답이 명확하게 결정된다.
-- 불필요하게 복잡하지 않다.
-- 가능한 경우 단순 계산보다 사고과정을 관찰할 수 있는 문제를 우선한다.
+
 문제를 생성한 후
 학생에게 보여주기 전에 직접 해결하여 정답을 검증한다.
 문제 조건과 풀이를 다시 확인하고
@@ -576,6 +567,9 @@ turns_remaining이 1 이상이면
 이 순서는 고정되어 있지 않다.
 학생이 이미 충분히 보여준 단계는 건너뛴다.
 같은 내용을 반복해서 묻지 않는다.
+asked_questions 는 **이 문제에서 내가 이미 한 말**이다.
+거기 있는 것을 다시 묻지 않는다. 말을 바꿔 같은 것을 묻는 것도 반복이다.
+전이를 이미 물었으면 또 묻지 않는다.
 한 AI 응답에서는
 하나의 핵심 질문만 한다.
 학생이 오답으로 시작한 경우
@@ -721,6 +715,10 @@ PROBLEM_ERROR
 
 **묻지 않기로 했으면 그 턴에 바로 COMPLETE 한다.**
 turns_remaining 이 0 이면 묻지 않는다.
+
+**마치는 턴(action = COMPLETE)의 message 에는 질문을 넣지 않는다.**
+답할 수 없는 물음을 남기면 아이는 대답을 못 해 찜찜하게 끝난다.
+마칠 때 할 말은 [종료 안내]에 있다.
 이미 전이·성찰을 물어 답을 받았으면 더 묻지 않는다.
 정답을 다시 확인시키는 물음은 전이가 아니다 — 그런 것으로
 턴을 쓰지 않는다.
@@ -848,7 +846,9 @@ target_logic_gap,
       "response_history": [],
       "support_level": 0,
       "hint_count": 0,
-      "hint_history": []
+      "asked_questions": [],
+      "hint_history": [],
+      "asked_questions": []
     }
   }
 }`,
@@ -956,7 +956,9 @@ MODE B가 담당하는 범위는 다음과 같다.
       "response_history": [],
       "support_level": 0,
       "hint_count": 0,
-      "hint_history": []
+      "asked_questions": [],
+      "hint_history": [],
+      "asked_questions": []
     }
   }
 }
@@ -1377,7 +1379,9 @@ completion.action = "COMPLETE"
       "response_history": [],
       "support_level": 0,
       "hint_count": 0,
-      "hint_history": []
+      "asked_questions": [],
+      "hint_history": [],
+      "asked_questions": []
     }
   }
 }`,
@@ -1430,7 +1434,9 @@ completion.action = "COMPLETE"
       "response_history": [],
       "support_level": 0,
       "hint_count": 0,
-      "hint_history": []
+      "asked_questions": [],
+      "hint_history": [],
+      "asked_questions": []
     }
   }
 }
@@ -1489,7 +1495,9 @@ AI의 핵심 오류를 직접 알려주지 않는다.
       "response_history": [],
       "support_level": 0,
       "hint_count": 0,
-      "hint_history": []
+      "asked_questions": [],
+      "hint_history": [],
+      "asked_questions": []
     }
   }
 }`,
@@ -1545,7 +1553,8 @@ AI의 핵심 오류를 직접 알려주지 않는다.
       "turn_limit": 5,
       "turns_remaining": 5,
       "support_level": 0,
-      "hint_count": 0
+      "hint_count": 0,
+      "asked_questions": []
     },
     "student_memory": null,
     "mode_status": {
@@ -1576,6 +1585,11 @@ AI의 핵심 오류를 직접 알려주지 않는다.
 물어보지 않았거나 대화에서 드러나지 않았으면 null 이다.
 물어봤는데 해내지 못했으면 0 이다.
 애매하다고 1 로 뭉개지 않는다.
+
+무엇을 물었는지는 asked_questions 로 알 수 있다.
+거기에 전이를 묻는 말이 없으면 transfer_score 는 null 이다.
+**묻지 않은 것을 0 으로 적지 않는다** — 0 은 못 했다는 뜻이고,
+그 값이 난이도를 내리는 근거가 된다.
 
 reasoning_score — 왜 그렇게 했는가 (근거)
 0  이유를 묻자 답하지 못했다. "그냥" "몰라" 로 끝났다.
@@ -1622,8 +1636,12 @@ A/B 5:5는 권장 목표이며 강제하지 않는다.
 - target_logic_gap
 - difficulty
 를 결정한다.
-target_concept은 한국어로 쓴다.
-이 값은 부모 화면의 "자주 막힌 부분"에 그대로 나간다.
+**target_concept 은 COMMON SYSTEM 의 CONCEPTS 목록에서 고른다.**
+목록에 없는 이름을 지어내지 않는다. 딱 맞는 것이 없으면 가장 가까운
+것을 고른다.
+
+이 값은 부모 화면의 "자주 막힌 부분" 에 그대로 나가고, 학생의 취약
+개념으로 쌓인다. 매번 다르게 부르면 무엇이 진짜 취약한지 셀 수 없다.
 difficulty는:
 DOWN | SAME | UP
 중 하나이다.
@@ -1680,7 +1698,8 @@ action = "DAILY_ANALYSIS"
       "turn_limit": 5,
       "turns_remaining": 5,
       "support_level": 0,
-      "hint_count": 0
+      "hint_count": 0,
+      "asked_questions": []
     },
     "student_memory": null,
     "mode_status": {

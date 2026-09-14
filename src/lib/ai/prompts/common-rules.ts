@@ -18,7 +18,12 @@
  * 화면에서는 [공통 프롬프트] 패널에서 고치고, 단계마다
  * `공통 프롬프트 포함` 을 켜고 끈다. **문서가 Source of Truth 다.**
  */
-import { gapTypesBlock, supportLevelsBlock, ACTIONS } from '@/lib/ai/taxonomy';
+import {
+  ACTIONS,
+  conceptsBlock,
+  gapTypesBlock,
+  supportLevelsBlock,
+} from '@/lib/ai/taxonomy';
 import { FOUR_CHOICES } from './blocks/four-choices';
 
 const BASE = `# LOGIC AUDITOR — COMMON SYSTEM
@@ -92,6 +97,23 @@ ${supportLevelsBlock()}
 - 한 문제의 최종 support_level 은 서버가 최대값으로 계산한다.
   이전 턴보다 낮은 값을 내도 서버가 낮추지 않는다.
 - 도움의 세기(support_level)와 요청 횟수(hint_count)는 다른 값이다.
+
+## CONCEPTS
+학습 개념은 아래 목록의 이름만 사용한다. 말을 바꾸거나 늘리지 않는다.
+
+${conceptsBlock()}
+
+**이름을 고정하는 이유가 있다.** 같은 개념을 매번 다르게 부르면
+무엇이 진짜 취약한지 셀 수 없다. 「역연산의 이해」 「역연산 관계 이해」
+「곱셈과 나눗셈의 역연산 관계」 가 각각 한 번씩 쌓이면 셋 다 흔한 일이
+아닌 것처럼 보인다.
+
+목록에 딱 맞는 것이 없으면 **가장 가까운 것**을 고른다. 새 이름을
+지어내지 않는다.
+
+**목록의 이름을 글자 그대로 쓴다.** 줄이거나 늘이거나 다듬지 않는다.
+「원기둥과 원뿔」을 「원기둥의 부피」로 바꾸면 그 둘은 서로 다른 개념으로
+쌓인다.
 
 ## FOUR CHOICES
 ${FOUR_CHOICES}
