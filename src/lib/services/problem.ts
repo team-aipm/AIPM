@@ -111,3 +111,31 @@ export async function listSessionProblemTexts(
   if (error !== null) throw new Error(`문제 목록을 불러오지 못했습니다: ${error.message}`);
   return (data ?? []).map((row) => row.problem_text);
 }
+
+/**
+ * 가장 최근에 낸 문제의 난이도 (COM-001 §9)
+ *
+ * 02 · 03 의 `learning_target.difficulty` 는 절대 수준이 아니라 **지난
+ * 문제보다 어떤지**를 받는다. 견줄 대상이 필요하다.
+ *
+ * 세션을 가리지 않는다. 어제 3 이었다가 오늘 4 가 됐으면 오늘 첫 문제도
+ * UP 이다 — 아이에게는 어제와 오늘이 이어진 하나의 학습이다.
+ */
+export async function lastProblemLevel(
+  client: Client,
+  studentId: string,
+): Promise<number | null> {
+  const { data, error } = await client
+    .from('problem')
+    .select('difficulty')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error !== null) {
+    console.error(`[problem] 지난 난이도를 읽지 못했습니다: ${error.message}`);
+    return null;
+  }
+  return data?.difficulty ?? null;
+}

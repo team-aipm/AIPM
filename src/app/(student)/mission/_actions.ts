@@ -20,8 +20,10 @@ import {
   createProblem,
   findActiveProblem,
   finishProblem,
+  lastProblemLevel,
   listSessionProblemTexts,
 } from '@/lib/services/problem';
+import { moveFrom, updateDifficulty } from '@/lib/services/difficulty';
 import { appendMessage, listMessages } from '@/lib/services/message';
 import { pickConcept } from '@/lib/services/concept';
 import { EVENT, record } from '@/lib/analytics/events';
@@ -224,6 +226,8 @@ function buildModeAInput(args: {
   concept?: string | null;
   /** 이번 세션에서 이미 낸 문제. 같은 것을 다시 내지 않게 한다 */
   previousProblems?: string[];
+  /** 지난 문제보다 어느 쪽인지 (COM-001 §9). 없으면 SAME */
+  difficulty?: 'DOWN' | 'SAME' | 'UP';
 }): string {
   const stage = stageOf('02 MODE A');
   let input: unknown = JSON.parse(stage.sampleInput);
@@ -250,7 +254,7 @@ function buildModeAInput(args: {
   // 넣는 것보다 낫다.
   input = write(input, 'payload.learning_target.concept', args.concept ?? null);
   input = write(input, 'payload.learning_target.target_logic_gap', null);
-  input = write(input, 'payload.learning_target.difficulty', 'SAME');
+  input = write(input, 'payload.learning_target.difficulty', args.difficulty ?? 'SAME');
 
   input = write(input, 'payload.problem.problem_text', args.problem?.text ?? null);
   input = write(input, 'payload.problem.verified_answer', args.problem?.verifiedAnswer ?? null);
@@ -344,10 +348,13 @@ export async function startProblem(): Promise<ProblemReply> {
   }
 
   const problemNumber = session.completed_problem_count + 1;
-  const [picked, previousProblems] = await Promise.all([
+  const [picked, previousProblems, lastLevel] = await Promise.all([
     pickConcept(supabase, student.student_id, problemNumber),
     listSessionProblemTexts(supabase, session.session_id),
+    lastProblemLevel(supabase, student.student_id),
   ]);
+  // 지난 문제와 견준다. 05 가 올리거나 내린 결과가 여기서 처음 쓰인다.
+  const difficulty = moveFrom(lastLevel, student.current_difficulty);
   if (picked.concept !== null) {
     console.log(`[mission] 개념 선정: ${picked.concept} (${picked.reason})`);
   }
@@ -361,6 +368,7 @@ export async function startProblem(): Promise<ProblemReply> {
     totalProblems: session.target_problem_count,
     concept: picked.concept,
     previousProblems,
+    difficulty,
     phase: 'PREPARE',
     problem: null,
     studentTexts: [],
@@ -582,6 +590,7 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
       student_id: student.student_id,
       grade: student.grade,
       persona_type: student.persona_type,
+      current_difficulty: student.current_difficulty,
     },
     session: {
       session_id: session.session_id,
@@ -671,7 +680,13 @@ const boolOrNull = (value: unknown): boolean | null =>
 async function evaluateProblem(
   supabase: Awaited<ReturnType<typeof createClient>>,
   args: {
-    student: { student_id: string; grade: number; persona_type: 'friend' | 'villain' };
+    student: {
+      student_id: string;
+      grade: number;
+      persona_type: 'friend' | 'villain';
+      /** 난이도를 옮길 기준점 (COM-001 §9) */
+      current_difficulty: number;
+    };
     session: { session_id: string; completed_problem_count: number; target_problem_count: number };
     problem: {
       problem_id: string;
@@ -779,6 +794,17 @@ async function evaluateProblem(
         gapOf(read(evaluation, 'secondary_logic_gap')),
       ],
     });
+
+    // **05 의 next_learning.difficulty 를 그대로 쓰지 않는다.** 그것은 한
+    // 문제짜리 신호다. 서버가 최근 세 문제를 모아서 정한다(COM-001 §9).
+    const moved = await updateDifficulty(
+      supabase,
+      args.student.student_id,
+      args.student.current_difficulty,
+    );
+    if (moved.move !== 'SAME') {
+      console.log(`[mission] 난이도 ${moved.move} → ${moved.level} (${moved.reason})`);
+    }
   } catch (error) {
     console.error(`[mission] 평가 저장 실패: ${String(error)}`);
   }
@@ -917,6 +943,8 @@ function buildModeBInput(args: {
   supportLevel: number;
   /** 지금까지 준 힌트. 04 · 02 · 03 · 05 가 모두 이것을 본다(COM-002 §7) */
   hints?: Hint[];
+  /** 지난 문제보다 어느 쪽인지 (COM-001 §9). 없으면 SAME */
+  difficulty?: 'DOWN' | 'SAME' | 'UP';
   latest: string | null;
   /** 사진으로 가져왔는지. 기본은 글이다 */
   inputType?: 'TEXT' | 'IMAGE';
@@ -938,7 +966,7 @@ function buildModeBInput(args: {
   input = write(input, 'payload.mode_phase', args.phase);
   input = write(input, 'payload.learning_target.concept', null);
   input = write(input, 'payload.learning_target.target_logic_gap', null);
-  input = write(input, 'payload.learning_target.difficulty', 'SAME');
+  input = write(input, 'payload.learning_target.difficulty', args.difficulty ?? 'SAME');
 
   input = write(input, 'payload.source_problem.input_type', args.inputType ?? 'TEXT');
   input = write(input, 'payload.source_problem.raw_text', args.rawText);
