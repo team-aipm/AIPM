@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getMemory } from '@/lib/services/student-memory';
 import type { Database } from '@/types/database';
 
 type Client = SupabaseClient<Database>;
@@ -86,10 +87,28 @@ export async function pickConcept(
     return sorted[0]?.[0] ?? null;
   };
 
+  // **복습은 06 의 판단을 먼저 본다** (COM-002 §10).
+  //
+  // 세기로는 "한동안 안 본 개념" 까지만 알 수 있다. 하루를 통째로 본 06 이
+  // `memory_update.priority_concepts` 로 무엇을 다시 볼지 정해 두었다면,
+  // 그것이 더 나은 답이다. 없으면 지금까지처럼 센다.
+  const memory = await getMemory(client, studentId);
+  const fromMemory = ((): string | null => {
+    const list = memory?.review_concepts;
+    if (!Array.isArray(list) || list.length === 0) return null;
+    const first = list[0];
+    if (typeof first === 'string') return first.trim() || null;
+    if (first !== null && typeof first === 'object' && 'concept' in first) {
+      const name = (first as { concept?: unknown }).concept;
+      return typeof name === 'string' ? name.trim() || null : null;
+    }
+    return null;
+  })();
+
   const byWant: Record<string, string | null> = {
     weak: mostCommon(weak.data),
     current: mostCommon(current.data),
-    review: mostCommon(review.data),
+    review: fromMemory ?? mostCommon(review.data),
   };
 
   // 원하는 쪽이 비면 다른 쪽에서 고른다. 첫날에는 셋 다 비어 있다.
