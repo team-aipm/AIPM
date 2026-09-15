@@ -374,6 +374,10 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
   // 를 지켜야 하고, 그게 되는지 보려면 값이 있어야 한다.
   '06 DAILY ANALYZER': [
     { source: 'output', from: 'memory_update', to: 'payload.student_memory' },
+    // **하루 총평을 쌓는다.** 07 주간 리포트가 이 배열을 받는다.
+    // 하루에 세션을 몇 번 돌려도 하루치는 하나다 — 날이 바뀔 때마다
+    // 하나씩 붙는다. 날짜는 도구가 찍는다(모델이 지어내면 안 된다).
+    { source: 'append', from: 'daily_summary', to: 'payload.daily_summaries' },
     { source: 'input', from: 'student', to: 'student' },
     // 새 날이다. 문제 번호와 쌓인 것들을 비운다.
     { source: 'literal', from: '1', to: 'session.problem_number' },
@@ -381,6 +385,18 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     { source: 'literal', from: '[]', to: 'payload.problem_evaluations' },
     { source: 'literal', from: '[]', to: 'conversation' },
     { source: 'literal', from: 'START', to: 'payload.session_phase' },
+  ],
+  // 날을 다 돌았다. 07 주간 리포트로 간다.
+  //
+  // **제품에는 이 길이 없다.** 07 은 주간 배치이고
+  // (`api/batch/weekly-report`), `learning_report` 의 daily_student 행을
+  // 월~일로 읽는다. 도구에는 DB 도 달력도 없으므로 쌓아 둔 배열을
+  // 그대로 넘긴다 — 07 프롬프트가 그것을 제대로 읽는지를 보는 것이
+  // 목적이다.
+  '06 DAILY ANALYZER → 07': [
+    { source: 'input', from: 'payload.daily_summaries', to: 'payload.daily_summaries' },
+    { source: 'input', from: 'payload.student_memory', to: 'payload.student_memory' },
+    { source: 'input', from: 'student', to: 'student' },
   ],
 };
 
