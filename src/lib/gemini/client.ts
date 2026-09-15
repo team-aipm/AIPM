@@ -86,6 +86,22 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
     return { ok: false, error: '모델명이 비어 있습니다.', elapsed_ms: elapsed() };
   }
 
+  /**
+   * 응답이 안 오면 끊는다.
+   *
+   * **없으면 영원히 기다린다.** 자동 실행이 두 번 그렇게 멈췄다 —
+   * 오류도 재시도도 없이 화면만 「도는 중」이었다. `withRetry` 는 503 같은
+   * **돌아온 오류**를 다시 부를 뿐, 안 돌아오는 것은 다루지 못한다.
+   *
+   * 제품에서는 더 나쁘다. 아이가 답을 기다리다 아무 일도 안 일어난다.
+   * 끊어야 "잠깐 멈췄어. 다시 말해줄래?" 라도 보여줄 수 있다.
+   *
+   * 60초는 넉넉하다. 오늘 가장 오래 걸린 호출이 21초였다.
+   */
+  const TIMEOUT_MS = 60_000;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
+
   let response: Response;
   try {
     response = await fetch(
@@ -122,14 +138,26 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
               : {}),
           },
         }),
+        signal: abort.signal,
       },
     );
   } catch (cause) {
+    // 끊긴 것과 못 보낸 것을 나눠 말한다. 부르는 쪽이 다시 부를지
+    // 정해야 하는데, "요청을 보내지 못했습니다" 로 뭉치면 알 수 없다.
+    if (abort.signal.aborted) {
+      return {
+        ok: false,
+        error: `응답이 ${TIMEOUT_MS / 1000}초 안에 오지 않아 끊었습니다.`,
+        elapsed_ms: elapsed(),
+      };
+    }
     return {
       ok: false,
       error: `요청을 보내지 못했습니다: ${String(cause)}`,
       elapsed_ms: elapsed(),
     };
+  } finally {
+    clearTimeout(timer);
   }
 
   const raw = await response.text();

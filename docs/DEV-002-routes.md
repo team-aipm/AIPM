@@ -166,58 +166,78 @@ Next.js 라우팅 특성상 `students/new`가 `students/[studentId]`보다 먼�
 | RPT | 3 | 3 |
 | BIL | 6 | 6 |
 | MY | 10 | 10 |
-| **합계** | **35** | **35** |
+| ADM | 4 | 5 |
+| **합계** | **39** | **40** |
+
+> ADM 이 하나 더 많다. `ADM-005` 가 목록과 상세 두 Route 를 쓴다 —
+> 서로 다른 Screen 이며 State/Modal 을 Route 로 만든 것이 아니다.
 
 ---
 
-## 11. 미확정 · ADM Area
+## 11. ADM · 운영/백오피스 (4)
 
-**현재 운영 및 백오피스 PM의 담당 화면이 0개다.** COM-001 §18은 이 PM의 범위를
-"오류, 중단 세션, 상태 관리, 운영 예외"로 정의했으나 COM-003에 해당 Area가
-없다.
-
-### 상태
+### 상태 · **2026-09-15 확정**
 
 | 항목 | 상태 |
 |---|---|
 | 오너 | 운영 및 백오피스 PM (COM-001 §18, COM-005 §6 `pm-admin`) |
-| Area ID | 미정 (`ADM` 후보) |
-| Route prefix | 미정 (`/admin` 후보) |
-| MVP 포함 여부 | **미정 — 팀 합의 필요** |
+| Area ID | `ADM` |
+| Route prefix | `/admin` |
+| MVP 포함 여부 | **포함** — 화면 4개 |
 
-### 선행 조건 (순서 중요)
+선행 조건 넷을 모두 채웠다.
 
 ```text
-COM-007   운영자의 아동 학습기록·AI 대화·문제 사진 열람 범위 확정
+COM-007 §7      운영자 열람 범위 · 마스킹 · 감사        확정
    ↓
-COM-002   AdminUser / AuditLog 엔티티 도입 여부 결정
+COM-002 §20-B   admin_user · audit_log · consent_log   확정
    ↓
-COM-003   ADM Area 및 Screen ID 정의 (§3 Area 목록, §12 합계 갱신)
+COM-003 §4.8    ADM Area 및 Screen ID                  확정
    ↓
-DEV-002   Route 매핑 추가
+DEV-002         Route 매핑                              ← 여기
 ```
 
-COM-003부터 손대면 COM-007 결과에 따라 화면이 폐기될 수 있다.
+### Route 매핑
 
-### MVP 잠정 운영 방식
+| Screen ID | Route | 파일 |
+|---|---|---|
+| `ADM-001` | `/admin` | `src/app/(admin)/admin/page.tsx` |
+| `ADM-004` | `/admin/accounts` | `.../admin/accounts/page.tsx` |
+| `ADM-005` | `/admin/students` | `.../admin/students/page.tsx` |
+| `ADM-005` | `/admin/students/[studentId]` | `.../admin/students/[studentId]/page.tsx` |
+| `ADM-012` | `/admin/operators` | `.../admin/operators/page.tsx` |
 
-ADM 화면 없이 **Supabase Studio 조회 + `scripts/ops/` 스크립트**로 처리한다.
-Studio에서의 직접 데이터 수정은 하지 않고, 상태 변경이 필요하면 기록이 남는
-스크립트를 통한다. (COM-005 §10과 같은 취지)
+`(admin)`은 괄호 폴더라 경로에 세그먼트를 더하지 않는다. 그래서 안쪽에
+`admin/`을 한 번 더 둔다 — `(parent)` 가 `parent/` 를 두는 것과 같다.
 
-이 기간 동안 운영 PM의 소유 범위는 화면이 아니라 `components/system/**`,
-`lib/errors/**`, `src/middleware.ts`, `scripts/ops/**`다. (DEV-001 §6)
+**권한이 없으면 404다.** 로그인한 사람이 `admin_user` 에 없거나
+`is_active` 가 false 면 route 자체가 없는 것처럼 군다. 「권한이
+없습니다」는 여기 무엇이 있다는 것을 알려주는 답이다.
 
-### 팀 논의 안건
+`ADM-005`가 Route 둘을 쓴다. 목록과 상세는 서로 다른 Screen 이며,
+State/Modal 을 Route 로 만들지 않는다는 COM-003 §13-3 과 무관하다.
 
-1. MVP에 어드민 화면이 필요한가, Supabase Studio로 충분한가
-2. 필요하다면 최소 화면은 무엇인가
-   (후보: 학생/계정 조회, 구독·결제 상태 조회, AI 오류·검증실패 로그, 중단 세션 현황)
-3. 운영자가 아동 학습기록·AI 대화·문제 사진을 열람할 수 있는가 → COM-007 선행
-4. 어드민 권한 등급을 둘 것인가 (전체 / 읽기전용 / CS)
-5. 감사 로그를 남길 것인가 → COM-002에 `AuditLog` 추가 여부
-6. 어드민의 쓰기 작업은 각 PM 서비스 레이어 경유를 강제할 것인가
-7. ADM Area ID · Screen ID 체계를 COM-003에 추가할 것인가
+### 아직 없는 Route
+
+| Screen ID | 왜 |
+|---|---|
+| `ADM-008` | CS 문의를 담을 테이블이 COM-002 에 없다(COM-003 §4.8) |
+
+### 그동안 어떻게 했나
+
+ADM 화면이 없던 동안에는 Supabase Studio 조회로 버텼다. 이제 조회는 화면이
+맡는다. **Studio 에서 직접 데이터를 고치지 않는다** — 상태를 바꿔야 하면
+기록이 남는 경로를 쓴다(COM-005 §10과 같은 취지).
+
+운영 PM 의 소유 범위에 `src/app/(admin)/**` 와 `lib/services/admin.ts` 가
+더해진다. 기존의 `components/system/**` · `lib/errors/**` ·
+`src/middleware.ts` 는 그대로다(DEV-001 §6).
+
+### 남은 논의
+
+1. `ADM-008`(CS 문의 · 대화 열람)을 만들 것인가 → COM-002 에 문의 테이블 필요
+2. 결제·정산 화면 → COM-005 §13 에서 PG 확정 뒤
+3. `consent_log` 를 쌓는 지점 → 가입 시점이 맞는지 COM-007 과 대조
 
 ---
 
