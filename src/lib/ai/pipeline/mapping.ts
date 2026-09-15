@@ -374,10 +374,6 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
   // 를 지켜야 하고, 그게 되는지 보려면 값이 있어야 한다.
   '06 DAILY ANALYZER': [
     { source: 'output', from: 'memory_update', to: 'payload.student_memory' },
-    // **하루 총평을 쌓는다.** 07 주간 리포트가 이 배열을 받는다.
-    // 하루에 세션을 몇 번 돌려도 하루치는 하나다 — 날이 바뀔 때마다
-    // 하나씩 붙는다. 날짜는 도구가 찍는다(모델이 지어내면 안 된다).
-    { source: 'append', from: 'daily_summary', to: 'payload.daily_summaries' },
     { source: 'input', from: 'student', to: 'student' },
     // 새 날이다. 문제 번호와 쌓인 것들을 비운다.
     { source: 'literal', from: '1', to: 'session.problem_number' },
@@ -394,9 +390,15 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
   // 그대로 넘긴다 — 07 프롬프트가 그것을 제대로 읽는지를 보는 것이
   // 목적이다.
   '06 DAILY ANALYZER → 07': [
-    { source: 'input', from: 'payload.daily_summaries', to: 'payload.daily_summaries' },
     { source: 'input', from: 'payload.student_memory', to: 'payload.student_memory' },
     { source: 'input', from: 'student', to: 'student' },
+    // `payload.daily_summaries` 는 여기 없다. **도구가 들고 있다가
+    // 넣는다**(`PromptLab` 의 dailySummaries).
+    //
+    // `append` 로는 안 된다. 쌓을 배열을 **보내는 쪽 입력**에서 읽는데
+    // 06 의 입력에는 그 칸이 없어 매번 빈 배열에서 시작한다 — 이틀을
+    // 돌려도 마지막 하루만 들어갔다. 날짜를 도구가 찍는 것과 같은
+    // 이유다.
   ],
 };
 

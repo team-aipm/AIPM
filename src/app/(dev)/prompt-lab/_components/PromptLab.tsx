@@ -1823,6 +1823,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
      * 이튿날 첫 문제에서 바퀴 상한에 걸린다.
      */
     let startingDay = false;
+    /**
+     * 날마다 쌓는 하루 총평. **도구가 들고 있는다.**
+     *
+     * 매핑의 `append` 로는 안 된다 — 쌓을 배열을 보내는 쪽 입력에서
+     * 읽는데 06 의 입력에는 그 칸이 없어 매번 빈 배열이 된다.
+     */
+    const dailySummaries: unknown[] = [];
     /** 하루 총평에 찍을 날짜. 모델이 지어내지 않게 도구가 센다 */
     const dayZero = new Date();
     dayZero.setDate(dayZero.getDate() - Math.max(1, autoLimits.days) + 1);
@@ -1942,6 +1949,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         days += 1;
         // 모델이 낸 하루 총평에 날짜를 찍는다. 07 이 date 로 받는다.
         parsed = stamp(parsed, 'daily_summary.date', dateOf(days - 1)) as typeof parsed;
+        const summary = getPath(parsed, parsePath('daily_summary') ?? []);
+        if (summary.exists) dailySummaries.push(summary.value);
         add({
           stage: at,
           kind: 'move',
@@ -1983,15 +1992,18 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
           : targetInput;
         // 06 은 가는 곳이 둘이라 매핑도 둘이다. 다음 날로 가면 화면에
         // 설정된 매핑, 07 로 가면 쌓아 둔 배열을 넘기는 매핑이다.
-        const rows =
-          atDaily && names[next].startsWith('07')
-            ? defaultMapping('06 DAILY ANALYZER → 07')
-            : stage.mapping;
+        const toWeekly = atDaily && names[next].startsWith('07');
+        const rows = toWeekly ? defaultMapping('06 DAILY ANALYZER → 07') : stage.mapping;
         input =
           applyMapping(rows, parsed, input, cleanTarget)?.json ??
           bridge(stage.checkRule, parsed, input, cleanTarget) ??
           mergeOutput(cleanTarget, parsed) ??
           result.raw;
+        // 도구가 들고 있던 하루 총평을 07 에 넣는다.
+        if (toWeekly) {
+          const filled = stamp0(input, 'payload.daily_summaries', dailySummaries);
+          if (filled !== null) input = filled;
+        }
 
         add({ stage: next, kind: 'move', text: `${names[at]} → ${to}`, note: matched?.note });
         at = next;
