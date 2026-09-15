@@ -75,11 +75,28 @@ export async function unlockWith(input: string): Promise<boolean> {
 }
 
 /**
- * 서버에서 키를 대신 써 줄지.
+ * 이 도구가 대신 써 줄 Gemini 키.
  *
- * 배포본에서는 쓰지 않는다. 잠금을 통과한 사람이라도 세팅 담당 개인의
- * Gemini 키로 무제한 호출하게 두지 않는다. 각자 화면에 자기 키를 넣는다.
+ * 없으면 빈 문자열이다. 그때는 각자 화면에 자기 키를 넣어야 한다.
+ *
+ * ## 제품 키(`GEMINI_API_KEY`)를 쓰지 않는 이유
+ *
+ * 배포본의 랩은 암호만 알면 들어온다. 거기서 제품 키를 쓰게 하면 **학생이
+ * 쓸 몫을 도구가 갉아먹는다.** 어디서 얼마나 썼는지도 구분되지 않는다.
+ *
+ * `PROMPT_LAB_GEMINI_API_KEY` 는 따로 발급한 키다. 한도를 따로 걸 수 있고,
+ * 새면 이것만 버리면 된다. 제품은 멈추지 않는다.
+ *
+ * 개발 서버에서는 지금까지처럼 `GEMINI_API_KEY` 로 물러난다 — 내 기계의
+ * 내 키다.
  */
+export function labApiKey(): string {
+  const own = process.env.PROMPT_LAB_GEMINI_API_KEY?.trim() ?? '';
+  if (own !== '') return own;
+  return isProduction() ? '' : (process.env.GEMINI_API_KEY?.trim() ?? '');
+}
+
+/** 화면의 「키 출처」 표시등에 쓴다 */
 export function allowServerApiKey(): boolean {
-  return !isProduction();
+  return labApiKey() !== '';
 }
