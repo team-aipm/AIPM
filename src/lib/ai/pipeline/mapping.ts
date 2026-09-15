@@ -374,6 +374,13 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
   // 를 지켜야 하고, 그게 되는지 보려면 값이 있어야 한다.
   '06 DAILY ANALYZER': [
     { source: 'output', from: 'memory_update', to: 'payload.student_memory' },
+    // **어제가 어땠는지.** 01 프롬프트는 "기존 학생이면 student_memory
+    // 또는 previous_daily_summary 에서 오늘과 연결하기 좋은 내용 하나만
+    // 짧게 활용한다" 고 한다. 둘 중 하나만 주고 있었다.
+    //
+    // student_memory 는 요약값(수준 · 취약 개념)이라 "어제 분수 덧셈에서
+    // 막혔었지?" 같은 구체적인 말이 안 나온다.
+    { source: 'output', from: 'daily_summary', to: 'payload.previous_daily_summary' },
     { source: 'input', from: 'student', to: 'student' },
     // 새 날이다. 문제 번호와 쌓인 것들을 비운다.
     { source: 'literal', from: '1', to: 'session.problem_number' },

@@ -252,6 +252,24 @@ function stamp(output: unknown, path: string, value: string): unknown {
   return setPath(output, segments, value);
 }
 
+/**
+ * 자동 실행이 쓸 날짜. **마지막 날이 오늘이 되게 거꾸로 센다.**
+ *
+ * 07 주간 리포트는 `daily_summaries[].date` 로 날짜를 받는다. 모델에게
+ * "오늘이 며칠" 을 시키면 지어내므로 도구가 센다. 화면에도 같은 함수로
+ * 보여 준다 — 무엇으로 도는지 물어봐야 아는 것이 아니어야 한다.
+ */
+export function autoDates(days: number): string[] {
+  const n = Math.max(1, days);
+  const zero = new Date();
+  zero.setDate(zero.getDate() - n + 1);
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(zero);
+    d.setDate(zero.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+}
+
 /** 입력 JSON 의 한 칸을 덮는다. 못 읽으면 건드리지 않는다 */
 function stamp0(json: string, path: string, value: unknown): string | null {
   const segments = parsePath(path);
@@ -830,13 +848,30 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * 문제 풀기 5. 넉넉히 7 로 잡는다.
    */
   const perLap = 7;
+
+  /**
+   * 며칠을 돌려면 얼마나 필요한가.
+   *
+   * **날을 빼고 세면 안 된다.** 하루치만 보고 잡으면 이튿날 첫 문제에서
+   * 멈춘다. 하루가 끝날 때도 걸음이 든다 — 01 이 END 를 내고 06 으로
+   * 가는 이동, 06 에서 다음 날이나 07 로 가는 이동이다.
+   */
+  const needFor = (limits: AutoLimits) => {
+    const days = Math.max(1, limits.days);
+    return {
+      students: days * (limits.laps * perLap + 1),
+      moves: days * (limits.laps * 3 + 2),
+    };
+  };
+
   const limitWarning = ((): string | null => {
-    const need = autoLimits.laps * perLap;
-    if (autoLimits.students < need) {
-      return `최대 바퀴 ${autoLimits.laps}을 돌려면 발화가 ${need} 쯤 필요합니다. 지금 ${autoLimits.students}이면 ${Math.floor(autoLimits.students / perLap)}바퀴에서 멈춥니다.`;
+    const need = needFor(autoLimits);
+    const days = Math.max(1, autoLimits.days);
+    if (autoLimits.students < need.students) {
+      return `하루 ${autoLimits.laps}문제 × ${days}일이면 발화가 ${need.students} 쯤 필요합니다. 지금 ${autoLimits.students}이면 중간에 멈춥니다.`;
     }
-    if (autoLimits.moves < autoLimits.laps * 3) {
-      return `한 바퀴에 단계를 3번 옮깁니다. 최대 바퀴 ${autoLimits.laps}이면 이동이 ${autoLimits.laps * 3} 쯤 필요합니다.`;
+    if (autoLimits.moves < need.moves) {
+      return `하루 ${autoLimits.laps}문제 × ${days}일이면 이동이 ${need.moves} 쯤 필요합니다. 한 문제에 3번, 하루를 넘길 때 2번 옮깁니다.`;
     }
     return null;
   })();
@@ -1831,13 +1866,8 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
      */
     const dailySummaries: unknown[] = [];
     /** 하루 총평에 찍을 날짜. 모델이 지어내지 않게 도구가 센다 */
-    const dayZero = new Date();
-    dayZero.setDate(dayZero.getDate() - Math.max(1, autoLimits.days) + 1);
-    const dateOf = (n: number) => {
-      const d = new Date(dayZero);
-      d.setDate(dayZero.getDate() + n);
-      return d.toISOString().slice(0, 10);
-    };
+    const dates = autoDates(autoLimits.days);
+    const dateOf = (n: number) => dates[Math.min(n, dates.length - 1)];
     let at = start;
     let input = stages[at].threads[stages[at].activeThread]?.input ?? '';
     const written = writtenPaths(stages.map((stage) => stage.mapping));
@@ -3302,6 +3332,23 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     onChange={setAutoFresh}
                     label="대화 비우고 시작"
                   />
+                  {/*
+                    **무엇이 달라지는지 숫자에 숨기지 않는다.**
+                    「며칠 = 1」 이 하루짜리라는 것을 읽어내야 알 수 있었다.
+                    켜고 끄는 것으로 드러낸다.
+                  */}
+                  <Toggle
+                    checked={autoLimits.days > 1}
+                    onChange={(on) =>
+                      setAutoLimits((prev) => ({ ...prev, days: on ? 7 : 1 }))
+                    }
+                    label="날을 이어서"
+                  />
+                  <span className="text-[11px] text-neutral-500">
+                    {autoLimits.days > 1
+                      ? `${autoDates(autoLimits.days)[0]} ~ ${autoDates(autoLimits.days).at(-1)} · ${autoLimits.days}일치를 돌고 07 로 갑니다`
+                      : `${autoDates(1)[0]} 하루만 돌고 06 에서 끝납니다`}
+                  </span>
                   {profileDrift.added.length + profileDrift.changed.length > 0 && (
                     <button
                       onClick={() => {
@@ -3434,13 +3481,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   onClick={() =>
                     setAutoLimits((prev) => ({
                       ...prev,
-                      students: Math.max(prev.students, prev.laps * perLap),
-                      moves: Math.max(prev.moves, prev.laps * 3),
+                      students: Math.max(prev.students, needFor(prev).students),
+                      moves: Math.max(prev.moves, needFor(prev).moves),
                     }))
                   }
                   className="underline"
                 >
-                  바퀴에 맞춰 올리기
+                  필요한 만큼 올리기
                 </button>
               </p>
             )}
