@@ -216,6 +216,13 @@ export const AIPM_ROUTES: Record<string, Routing> = {
     from: 'module',
     rows: [{ equals: '', to: FINISH }],
   },
+  // **마지막 단계다.** 분기가 없으면 도구가 「계속」으로 보고 학생 발화를
+  // 기다리는데, 주간 리포트에는 학생에게 할 말이 없다. 그래서
+  // 「사용자에게 보여줄 말이 없습니다」로 멈췄다.
+  '07 WEEKLY REPORT': {
+    from: 'module',
+    rows: [{ equals: '', to: FINISH }],
+  },
 };
 
 export function defaultRouting(name: string): Routing {

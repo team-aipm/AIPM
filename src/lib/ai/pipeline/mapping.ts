@@ -374,6 +374,13 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
   // 를 지켜야 하고, 그게 되는지 보려면 값이 있어야 한다.
   '06 DAILY ANALYZER': [
     { source: 'output', from: 'memory_update', to: 'payload.student_memory' },
+    // **어제가 어땠는지.** 01 프롬프트는 "기존 학생이면 student_memory
+    // 또는 previous_daily_summary 에서 오늘과 연결하기 좋은 내용 하나만
+    // 짧게 활용한다" 고 한다. 둘 중 하나만 주고 있었다.
+    //
+    // student_memory 는 요약값(수준 · 취약 개념)이라 "어제 분수 덧셈에서
+    // 막혔었지?" 같은 구체적인 말이 안 나온다.
+    { source: 'output', from: 'daily_summary', to: 'payload.previous_daily_summary' },
     { source: 'input', from: 'student', to: 'student' },
     // 새 날이다. 문제 번호와 쌓인 것들을 비운다.
     { source: 'literal', from: '1', to: 'session.problem_number' },
@@ -381,6 +388,24 @@ export const AIPM_MAPS: Record<string, MapRow[]> = {
     { source: 'literal', from: '[]', to: 'payload.problem_evaluations' },
     { source: 'literal', from: '[]', to: 'conversation' },
     { source: 'literal', from: 'START', to: 'payload.session_phase' },
+  ],
+  // 날을 다 돌았다. 07 주간 리포트로 간다.
+  //
+  // **제품에는 이 길이 없다.** 07 은 주간 배치이고
+  // (`api/batch/weekly-report`), `learning_report` 의 daily_student 행을
+  // 월~일로 읽는다. 도구에는 DB 도 달력도 없으므로 쌓아 둔 배열을
+  // 그대로 넘긴다 — 07 프롬프트가 그것을 제대로 읽는지를 보는 것이
+  // 목적이다.
+  '06 DAILY ANALYZER → 07': [
+    { source: 'input', from: 'payload.student_memory', to: 'payload.student_memory' },
+    { source: 'input', from: 'student', to: 'student' },
+    // `payload.daily_summaries` 는 여기 없다. **도구가 들고 있다가
+    // 넣는다**(`PromptLab` 의 dailySummaries).
+    //
+    // `append` 로는 안 된다. 쌓을 배열을 **보내는 쪽 입력**에서 읽는데
+    // 06 의 입력에는 그 칸이 없어 매번 빈 배열에서 시작한다 — 이틀을
+    // 돌려도 마지막 하루만 들어갔다. 날짜를 도구가 찍는 것과 같은
+    // 이유다.
   ],
 };
 

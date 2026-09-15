@@ -42,6 +42,7 @@ import {
   resetWritten,
   writtenPaths,
 } from '@/lib/ai/pipeline/mapping';
+import { getPath, parsePath, setPath } from '@/lib/ai/pipeline/paths';
 import {
   BLANK_ROUTE_ROW,
   defaultRouting,
@@ -233,6 +234,53 @@ const LOG_LABEL: Record<AutoStep['kind'], string> = {
   error: '오류',
   retry: '재시도',
 };
+
+/**
+ * 출력의 빈 칸에 값을 찍는다. **이미 값이 있으면 두지 않는다.**
+ *
+ * 06 의 하루 총평에 날짜를 넣는 데 쓴다. 모델에게 "오늘이 며칠인지" 를
+ * 시키면 지어낸다 — 도구가 센다. 다만 모델이 제대로 채웠다면 그것을
+ * 존중한다.
+ */
+function stamp(output: unknown, path: string, value: string): unknown {
+  const segments = parsePath(path);
+  if (segments === null) return output;
+  const found = getPath(output, segments);
+  if (found.exists && typeof found.value === 'string' && found.value.trim() !== '') {
+    return output;
+  }
+  return setPath(output, segments, value);
+}
+
+/**
+ * 자동 실행이 쓸 날짜. **마지막 날이 오늘이 되게 거꾸로 센다.**
+ *
+ * 07 주간 리포트는 `daily_summaries[].date` 로 날짜를 받는다. 모델에게
+ * "오늘이 며칠" 을 시키면 지어내므로 도구가 센다. 화면에도 같은 함수로
+ * 보여 준다 — 무엇으로 도는지 물어봐야 아는 것이 아니어야 한다.
+ */
+export function autoDates(days: number): string[] {
+  const n = Math.max(1, days);
+  const zero = new Date();
+  zero.setDate(zero.getDate() - n + 1);
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(zero);
+    d.setDate(zero.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+}
+
+/** 입력 JSON 의 한 칸을 덮는다. 못 읽으면 건드리지 않는다 */
+function stamp0(json: string, path: string, value: unknown): string | null {
+  const segments = parsePath(path);
+  if (segments === null) return null;
+  try {
+    const next = setPath(JSON.parse(json), segments, value);
+    return JSON.stringify(next, null, 2);
+  } catch {
+    return null;
+  }
+}
 
 /** 견줄 칸만 뽑는다. routing 은 프리셋 쪽 출처가 달라 부르는 쪽이 붙인다 */
 function pickComparable(
@@ -800,13 +848,30 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    * 문제 풀기 5. 넉넉히 7 로 잡는다.
    */
   const perLap = 7;
+
+  /**
+   * 며칠을 돌려면 얼마나 필요한가.
+   *
+   * **날을 빼고 세면 안 된다.** 하루치만 보고 잡으면 이튿날 첫 문제에서
+   * 멈춘다. 하루가 끝날 때도 걸음이 든다 — 01 이 END 를 내고 06 으로
+   * 가는 이동, 06 에서 다음 날이나 07 로 가는 이동이다.
+   */
+  const needFor = (limits: AutoLimits) => {
+    const days = Math.max(1, limits.days);
+    return {
+      students: days * (limits.laps * perLap + 1),
+      moves: days * (limits.laps * 3 + 2),
+    };
+  };
+
   const limitWarning = ((): string | null => {
-    const need = autoLimits.laps * perLap;
-    if (autoLimits.students < need) {
-      return `최대 바퀴 ${autoLimits.laps}을 돌려면 발화가 ${need} 쯤 필요합니다. 지금 ${autoLimits.students}이면 ${Math.floor(autoLimits.students / perLap)}바퀴에서 멈춥니다.`;
+    const need = needFor(autoLimits);
+    const days = Math.max(1, autoLimits.days);
+    if (autoLimits.students < need.students) {
+      return `하루 ${autoLimits.laps}문제 × ${days}일이면 발화가 ${need.students} 쯤 필요합니다. 지금 ${autoLimits.students}이면 중간에 멈춥니다.`;
     }
-    if (autoLimits.moves < autoLimits.laps * 3) {
-      return `한 바퀴에 단계를 3번 옮깁니다. 최대 바퀴 ${autoLimits.laps}이면 이동이 ${autoLimits.laps * 3} 쯤 필요합니다.`;
+    if (autoLimits.moves < need.moves) {
+      return `하루 ${autoLimits.laps}문제 × ${days}일이면 이동이 ${need.moves} 쯤 필요합니다. 한 문제에 3번, 하루를 넘길 때 2번 옮깁니다.`;
     }
     return null;
   })();
@@ -1766,7 +1831,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     /** 단계별 마지막 입력과 결과. 반복 실행이 끝나고 화면에 옮긴다 */
     final: Map<number, { thread: number; input: string; result: RunResult | null }>;
     /** 상한을 얼마나 썼나. 어디에 걸렸는지 화면에서 바로 보이게 한다 */
-    used: { students: number; moves: number; calls: number; laps: number };
+    used: { students: number; moves: number; calls: number; laps: number; days: number };
   }> {
     const log: AutoStep[] = [];
     const final = new Map<
@@ -1778,6 +1843,31 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     /** 지나간 단계. 중복 없이 순서대로 */
     const visited: string[] = [names[start]];
     let laps = 0;
+    /**
+     * 며칠째인가. **06 하루 총평에 닿으면 하루다.**
+     *
+     * 바퀴는 하루 안의 문제 수라 날이 바뀌면 0 으로 돌린다. 안 그러면
+     * 이틀째 첫 문제에서 바퀴 상한에 걸린다.
+     */
+    let days = 0;
+    /**
+     * 방금 하루를 마치고 01 로 돌아가는 길인가.
+     *
+     * 바퀴는 **문제를 하나 푼 것**을 센다. 06 에서 01 로 오는 것은 새
+     * 날이 시작되는 것이지 문제를 푼 것이 아니다. 이것을 안 가리면
+     * 이튿날 첫 문제에서 바퀴 상한에 걸린다.
+     */
+    let startingDay = false;
+    /**
+     * 날마다 쌓는 하루 총평. **도구가 들고 있는다.**
+     *
+     * 매핑의 `append` 로는 안 된다 — 쌓을 배열을 보내는 쪽 입력에서
+     * 읽는데 06 의 입력에는 그 칸이 없어 매번 빈 배열이 된다.
+     */
+    const dailySummaries: unknown[] = [];
+    /** 하루 총평에 찍을 날짜. 모델이 지어내지 않게 도구가 센다 */
+    const dates = autoDates(autoLimits.days);
+    const dateOf = (n: number) => dates[Math.min(n, dates.length - 1)];
     let at = start;
     let input = stages[at].threads[stages[at].activeThread]?.input ?? '';
     const written = writtenPaths(stages.map((stage) => stage.mapping));
@@ -1833,7 +1923,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
       const failed = result.checks.filter((check) => check.level === 'fail');
       const shown = readChoices(result.raw, stage.outputMode, stage.choicesKey);
-      const parsed = parseOutput(result.raw) ?? result.raw;
+      let parsed = parseOutput(result.raw) ?? result.raw;
       const pick = pickReply(result.raw, stage.outputMode, stage.replyKey);
       const narrow =
         stage.recordKey.trim() === ''
@@ -1875,7 +1965,34 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
       // ── 어디로 갈지 ──────────────────────────────────────────────
       const matched = matchRoute(stage.routing, parsed);
-      const to = matched?.to ?? STAY;
+      let to = matched?.to ?? STAY;
+
+      /**
+       * 하루가 끝났다.
+       *
+       * 06 은 분기가 없다(`AIPM_ROUTES`). 다음이 어디인지는 **도구가**
+       * 정한다 — 날이 남았으면 다시 01, 다 돌았으면 07 이다. 모델은 오늘
+       * 며칠째인지 모른다.
+       */
+      const atDaily = names[at].startsWith('06');
+      if (atDaily) {
+        days += 1;
+        // 모델이 낸 하루 총평에 날짜를 찍는다. 07 이 date 로 받는다.
+        parsed = stamp(parsed, 'daily_summary.date', dateOf(days - 1)) as typeof parsed;
+        const summary = getPath(parsed, parsePath('daily_summary') ?? []);
+        if (summary.exists) dailySummaries.push(summary.value);
+        add({
+          stage: at,
+          kind: 'move',
+          text: `${days}일째 마침 · ${dateOf(days - 1)}`,
+        });
+        laps = 0;
+        startingDay = true;
+        const weekly = names.findIndex((n) => n.startsWith('07'));
+        to = days >= Math.max(1, autoLimits.days)
+          ? (weekly === -1 ? FINISH : names[weekly])
+          : names[start];
+      }
 
       if (to === FINISH) {
         add({ stage: at, kind: 'end', text: matched?.note ?? '' });
@@ -1903,20 +2020,41 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         const cleanTarget = autoFresh
           ? freshInput(target, targetInput, written, cleanSample(target))
           : targetInput;
+        // 06 은 가는 곳이 둘이라 매핑도 둘이다. 다음 날로 가면 화면에
+        // 설정된 매핑, 07 로 가면 쌓아 둔 배열을 넘기는 매핑이다.
+        const toWeekly = atDaily && names[next].startsWith('07');
+        const rows = toWeekly ? defaultMapping('06 DAILY ANALYZER → 07') : stage.mapping;
         input =
-          applyMapping(stage.mapping, parsed, input, cleanTarget)?.json ??
+          applyMapping(rows, parsed, input, cleanTarget)?.json ??
           bridge(stage.checkRule, parsed, input, cleanTarget) ??
           mergeOutput(cleanTarget, parsed) ??
           result.raw;
+        // 도구가 들고 있던 하루 총평을 07 에 넣는다.
+        if (toWeekly) {
+          const filled = stamp0(input, 'payload.daily_summaries', dailySummaries);
+          if (filled !== null) input = filled;
+        }
 
         add({ stage: next, kind: 'move', text: `${names[at]} → ${to}`, note: matched?.note });
         at = next;
         if (!visited.includes(names[at])) visited.push(names[at]);
 
         // 시작 단계로 돌아오면 한 바퀴다. AIPM 에서는 한 문제다.
-        if (at === start) {
+        // 다만 하루를 마치고 오는 길은 세지 않는다.
+        if (at === start && startingDay) {
+          startingDay = false;
+        } else if (at === start) {
           laps += 1;
-          if (laps >= autoLimits.laps) {
+          // **하루 문제 수를 입력에 심는다.**
+          //
+          // 01 은 `session.problem_number >= total_problems` 일 때
+          // 하루를 끝낸다. 입력에 적힌 10 을 그대로 두면 열 문제를 다
+          // 돌 때까지 06 에 못 간다 — 며칠을 돌려 보려면 짧아야 한다.
+          const capped = stamp0(input, 'session.total_problems', autoLimits.laps);
+          if (capped !== null) input = capped;
+
+          // 하루 안에서만 센다. 날이 바뀌면 06 처리에서 0 으로 돌린다.
+          if (laps > autoLimits.laps) {
             add({ stage: at, kind: 'end', text: `${laps}바퀴 돌았습니다.` });
             reason = 'lap-limit';
             break;
@@ -1993,7 +2131,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       reason,
       visited,
       final,
-      used: { students, moves, calls, laps },
+      used: { students, moves, calls, laps, days },
     };
   }
 
@@ -3106,8 +3244,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   ],
                   [
                     'laps',
-                    '최대 바퀴',
-                    '시작 단계로 돌아올 횟수. 여기서 멈추는 것이 정상 종료입니다',
+                    '하루 문제 수',
+                    '하루에 문제를 몇 개 풀지. 이 값이 입력의 session.total_problems 를 덮습니다 — 안 덮으면 입력에 적힌 수만큼 다 돌아야 06 하루 총평에 닿습니다',
+                  ],
+                  [
+                    'days',
+                    '며칠',
+                    '며칠을 돌지. 06 하루 총평에 닿으면 하루입니다. 2 이상이면 날마다 총평을 쌓아 마지막에 07 주간 리포트로 갑니다. 1 이면 하루만 돌고 06 에서 끝납니다',
                   ],
                 ] as const
               ).map(([key, label, help]) => (
@@ -3189,6 +3332,23 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     onChange={setAutoFresh}
                     label="대화 비우고 시작"
                   />
+                  {/*
+                    **무엇이 달라지는지 숫자에 숨기지 않는다.**
+                    「며칠 = 1」 이 하루짜리라는 것을 읽어내야 알 수 있었다.
+                    켜고 끄는 것으로 드러낸다.
+                  */}
+                  <Toggle
+                    checked={autoLimits.days > 1}
+                    onChange={(on) =>
+                      setAutoLimits((prev) => ({ ...prev, days: on ? 7 : 1 }))
+                    }
+                    label="날을 이어서"
+                  />
+                  <span className="text-[11px] text-neutral-500">
+                    {autoLimits.days > 1
+                      ? `${autoDates(autoLimits.days)[0]} ~ ${autoDates(autoLimits.days).at(-1)} · ${autoLimits.days}일치를 돌고 07 로 갑니다`
+                      : `${autoDates(1)[0]} 하루만 돌고 06 에서 끝납니다`}
+                  </span>
                   {profileDrift.added.length + profileDrift.changed.length > 0 && (
                     <button
                       onClick={() => {
@@ -3321,13 +3481,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                   onClick={() =>
                     setAutoLimits((prev) => ({
                       ...prev,
-                      students: Math.max(prev.students, prev.laps * perLap),
-                      moves: Math.max(prev.moves, prev.laps * 3),
+                      students: Math.max(prev.students, needFor(prev).students),
+                      moves: Math.max(prev.moves, needFor(prev).moves),
                     }))
                   }
                   className="underline"
                 >
-                  바퀴에 맞춰 올리기
+                  필요한 만큼 올리기
                 </button>
               </p>
             )}
