@@ -335,12 +335,27 @@ export function cleanStudentReply(raw: string): string {
  *
  * 오류 글은 `Gemini 503\n{...}` 모양으로 온다. 앞의 숫자를 본다.
  */
-export function isTransient(error: string | null): boolean {
+export function isTransient(error: string | null, hadSuccess = false): boolean {
   if (error === null) return false;
 
   const code = /^\D*(\d{3})\b/.exec(error);
   if (code !== null) {
-    return ['429', '500', '502', '503', '504'].includes(code[1]);
+    if (['429', '500', '502', '503', '504'].includes(code[1])) return true;
+
+    /**
+     * **이미 한 번이라도 성공했다면 400 · 401 · 403 도 다시 불러 본다.**
+     *
+     * 보통은 "다시 불러도 똑같다" 가 맞다 — 키가 틀렸으면 기다려도 안
+     * 고쳐진다. 그래서 바로 멈춘다.
+     *
+     * 그런데 **키가 진짜 틀렸다면 첫 호출부터 틀린다.** 155번 성공한 뒤에
+     * 나온 `API_KEY_INVALID` 는 키 문제가 아니라 저쪽에서 잠깐 내려준
+     * 것이다. 7일치 실행이 그렇게 통째로 날아갔다 — 15분어치였다.
+     *
+     * 첫 호출부터 400 이면 지금처럼 즉시 멈춘다. 틀린 키로 네 번 두드릴
+     * 이유가 없다.
+     */
+    return hadSuccess && ['400', '401', '403'].includes(code[1]);
   }
 
   // 상태 코드가 안 붙는 것들. 그물을 좁게 친다 — 애매하면 안 기다린다.

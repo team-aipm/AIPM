@@ -1796,6 +1796,12 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
    *
    * 400 · 401 · 404 는 다시 불러도 똑같으므로 바로 포기한다.
    */
+  /**
+   * 한 번이라도 성공했는가. `isTransient` 가 400 을 다시 부를지 정하는
+   * 근거다. 실행 하나 안에서만 쓰므로 ref 로 둔다.
+   */
+  const sawSuccess = useRef(false);
+
   async function withRetry(
     call: () => Promise<RunResult | null>,
     limit: number,
@@ -1803,8 +1809,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
   ): Promise<RunResult | null> {
     for (let attempt = 0; ; attempt += 1) {
       const result = await call();
+      if (result?.ok) sawSuccess.current = true;
       if (result === null || result.ok) return result;
-      if (attempt >= limit || !isTransient(result.error) || stopFlag.current) {
+      if (
+        attempt >= limit ||
+        !isTransient(result.error, sawSuccess.current) ||
+        stopFlag.current
+      ) {
         return result;
       }
       const seconds = waitFor(attempt);
@@ -2183,6 +2194,11 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
 
     const got: Trial[] = [];
     let n = 0;
+    /** 마지막 회차가 왜 끝났는지. 오류면 오류라고 적어야 한다 */
+    let last: StopReason = 'finished';
+    // **finally 로 감싼다.** 중간에 예외가 나면 화면이 「도는 중」인 채로
+    // 굳는다. 실제로 그랬다 — 실행은 끊겼는데 중지 버튼만 남아 있었다.
+    try {
     for (const profile of list) {
       for (let round = 0; round < rounds; round += 1) {
         if (stopFlag.current) break;
@@ -2190,6 +2206,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         setAutoAt(`${n} / ${list.length * rounds} · ${profile.name} ${round + 1}번째`);
 
         const done = await runOnce(profile.prompt, false);
+        last = done.reason;
         const checked = auditRun(done.steps, shapes);
         got.push({
           n,
@@ -2212,10 +2229,13 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
       }
       if (stopFlag.current) break;
     }
-
-    setAutoAt(null);
-    setAutoStop(stopFlag.current ? 'stopped' : 'finished');
-    setAutoRunning(false);
+    } finally {
+      setAutoAt(null);
+      // **마지막 회차가 왜 끝났는지 그대로 적는다.** 오류로 끊겼는데
+      // 「마쳤습니다」라고 적으면 무엇을 봐야 할지 알 수 없다.
+      setAutoStop(stopFlag.current ? 'stopped' : last);
+      setAutoRunning(false);
+    }
   }
 
   /** 지금 단계의 프로바이더에 실제 모델 목록을 물어본다. */
