@@ -262,7 +262,26 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
 GEMINI_API_KEY=
+
+CRON_SECRET=
+PROMPT_LAB_PASSCODE=
+PROMPT_LAB_GEMINI_API_KEY=
 ```
+
+`PROMPT_LAB_*` 두 개는 **개발 도구(`/prompt-lab`) 전용**이다.
+
+-   `PROMPT_LAB_PASSCODE` — 배포본에서 도구를 열 때 묻는 암호. **없으면
+    도구가 404가 된다.** 열어두는 쪽이 아니라 닫는 쪽으로 실패한다.
+-   `PROMPT_LAB_GEMINI_API_KEY` — 도구가 쓰는 Gemini 키. **제품 키와
+    일부러 나눈다.**
+
+키를 나누는 이유가 있다. 배포본의 도구는 암호만 알면 들어온다. 거기서
+제품 키를 쓰게 하면 학생이 쓸 몫을 도구가 갉아먹고, 어디서 얼마나 썼는지
+구분되지 않는다. 따로 두면 한도를 따로 걸 수 있고, 새면 이것만 버리면
+된다 — 제품은 멈추지 않는다.
+
+비워두면 도구는 **화면에 직접 넣은 키만** 쓴다. 개발 서버에서는
+`GEMINI_API_KEY`로 물러난다(내 기계의 내 키다).
 
 향후 필요한 경우:
 
