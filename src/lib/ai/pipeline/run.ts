@@ -14,6 +14,7 @@ import { COMMON_RULES } from '@/lib/ai/prompts/common-rules';
 import { AIPM_PRESET, type StagePreset } from '@/lib/ai/prompts/stages';
 import { personaBlock } from '@/lib/ai/prompts/variables';
 import { parseOutput } from '@/lib/ai/pipeline/chat';
+import { recordAiFailure } from '@/lib/analytics/ai-failure';
 
 /**
  * 제품이 쓰는 모델.
@@ -56,6 +57,10 @@ export function stageOf(name: StageName): StagePreset {
  *
  * **던지지 않는다.** 모델은 흔하게 실패한다(과부하 · JSON 깨짐). 부르는
  * 쪽이 그 사실을 보고 재시도하거나 학생에게 다시 말해 달라고 해야 한다.
+ *
+ * **실패는 여기서 한 번만 남긴다.** 모든 단계 호출이 이 문을 지나므로,
+ * 부르는 쪽 열한 군데에 같은 줄을 적는 것보다 여기가 맞다. 누구 것인지
+ * (`who`)를 안 주면 안 남긴다 — 개발 도구가 그 경우다.
  */
 export async function runStage(
   name: StageName,
@@ -63,6 +68,8 @@ export async function runStage(
   persona: 'friend' | 'villain' = 'friend',
   /** 사진으로 가져온 문제. 03 RECOGNIZE 만 쓴다 */
   images: GeminiImage[] = [],
+  /** 누구의 호출인가. 실패를 남길 때만 쓴다(COM-002 §14 `ai_call_failed`) */
+  who: { studentId?: string; sessionId?: string } = {},
 ): Promise<RunResult> {
   const stage = stageOf(name);
 
@@ -84,11 +91,15 @@ export async function runStage(
   });
 
   if (!result.ok) {
+    recordAiFailure(who, name, result.error);
     return { ok: false, error: result.error, raw: null, elapsedMs: result.elapsed_ms };
   }
 
   const parsed = parseOutput(result.text);
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    // 모델은 답했는데 우리가 못 읽었다. 위의 실패와 원인이 다르므로
+    // 구분해 남긴다 — 프롬프트를 고칠 일인지 기다릴 일인지가 갈린다.
+    recordAiFailure(who, name, 'JSON 으로 읽지 못했습니다');
     return {
       ok: false,
       error: 'JSON 으로 읽지 못했습니다',
