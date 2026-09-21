@@ -23,7 +23,16 @@ const NAV = [
       { href: '/admin/students', label: '학생' },
     ],
   },
-  { group: '시스템', items: [{ href: '/admin/operators', label: '운영자 계정' }] },
+  {
+    group: '시스템',
+    items: [
+      { href: '/admin/operators', label: '운영자 계정' },
+      // **프롬프트랩으로 가는 문.** 전에는 주소를 알아야 들어갔고 팀 공용
+      // 암호를 물었다. 이제 운영자만 열리므로(`prompt-lab/_access.ts`)
+      // 여기 두는 것이 맞다 — 들어갈 수 있는 사람과 여기 오는 사람이 같다.
+      { href: '/prompt-lab', label: '프롬프트랩' },
+    ],
+  },
 ] as const;
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

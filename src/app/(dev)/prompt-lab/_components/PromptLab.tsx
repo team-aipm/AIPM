@@ -864,6 +864,21 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
     };
   };
 
+  /**
+   * 프리셋에는 있는데 지금 목록에 없는 단계.
+   *
+   * **저장해 둔 단계 목록이 프리셋을 통째로 덮는다.** 그래서 프리셋에
+   * 단계가 새로 들어와도 예전에 저장해 둔 브라우저에는 안 나타나고,
+   * 「단계 초기화」로 프리셋 전체를 되돌리는 길밖에 없었다 — 고쳐 둔
+   * 프롬프트를 다 잃는다.
+   *
+   * 07 WEEKLY REPORT 가 그랬다. 이레를 돌리고 나서야 주간 리포트가
+   * 아예 만들어지지 않았다는 것을 알았다.
+   */
+  const missingStages = preset.filter(
+    (base) => !stages.some((stage) => stage.name === base.name),
+  );
+
   const limitWarning = ((): string | null => {
     const need = needFor(autoLimits);
     const days = Math.max(1, autoLimits.days);
@@ -1956,6 +1971,9 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
             : ''),
         note: failed.length > 0 ? `검증 실패 ${failed.length}건` : undefined,
         raw: result.raw,
+        // 06 · 07 은 응답 필드가 없어 여기가 「보여줄 말 없음」이 된다.
+        // 로그에서 원문을 펼칠 수 있게 표시만 남긴다.
+        silent: !pick.show,
         // 점검이 나중에 읽는다. 보낸 뒤가 아니라 **보낸 그 입력**이어야
         // turn_limit 과 student_turn_count 가 그 걸음의 값이 된다.
         input,
@@ -2000,9 +2018,29 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         laps = 0;
         startingDay = true;
         const weekly = names.findIndex((n) => n.startsWith('07'));
-        to = days >= Math.max(1, autoLimits.days)
-          ? (weekly === -1 ? FINISH : names[weekly])
-          : names[start];
+        const lastDay = days >= Math.max(1, autoLimits.days);
+
+        /**
+         * **07 이 목록에 없으면 그렇게 말한다.**
+         *
+         * 여태는 조용히 `FINISH` 로 갔다. 단계 목록은 브라우저에 저장한
+         * 것이 프리셋을 통째로 덮으므로, 07 이 프리셋에 들어오기 전에
+         * 저장해 둔 사람에게는 06 까지만 있다. 그 상태로 이레를 돌리면
+         * 마지막에 빈 「끝」 한 줄만 남고 주간 리포트는 어디에도 없다 —
+         * 무엇이 빠졌는지 알 길이 없었다.
+         */
+        if (lastDay && weekly === -1) {
+          add({
+            stage: at,
+            kind: 'error',
+            text: `${days}일을 다 돌았지만 "07" 로 시작하는 단계가 목록에 없어 주간 리포트를 만들지 못했습니다.`,
+            note: '[프리셋] 에서 07 WEEKLY REPORT 를 들여오세요',
+          });
+          reason = 'error';
+          break;
+        }
+
+        to = lastDay ? names[weekly] : names[start];
       }
 
       if (to === FINISH) {
@@ -2855,6 +2893,48 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
         >
           단계 초기화
         </button>
+        {/*
+          **빠진 것만 들여온다.** 「단계 초기화」는 프리셋 전체를 되돌리므로
+          고쳐 둔 프롬프트가 같이 날아간다. 단계 하나가 모자랄 뿐인데 그걸
+          치르게 할 수는 없다.
+        */}
+        {missingStages.length > 0 && (
+          <button
+            onClick={() => {
+              if (
+                !window.confirm(
+                  '목록에 없는 단계를 들여옵니다.\n\n' +
+                    missingStages.map((base) => `· ${base.name}`).join('\n') +
+                    '\n\n이미 있는 단계는 건드리지 않습니다.\n' +
+                    '고쳐 두신 프롬프트도 그대로 둡니다.\n\n계속할까요?',
+                )
+              ) {
+                return;
+              }
+              setStages((prev) => {
+                const next = [...prev];
+                for (const [i, base] of missingStages.entries()) {
+                  // 프리셋 순서를 지킨다. 앞선 프리셋 단계 바로 뒤에 넣고,
+                  // 앞선 것이 하나도 없으면 맨 뒤에 붙인다. 직접 만든
+                  // 단계의 자리는 건드리지 않는다.
+                  const order = preset.findIndex((item) => item.name === base.name);
+                  const before = preset
+                    .slice(0, order)
+                    .map((item) => next.findIndex((stage) => stage.name === item.name))
+                    .filter((found) => found !== -1);
+                  const at = before.length === 0 ? next.length : Math.max(...before) + 1;
+                  next.splice(at, 0, toStage(base, `m${keySeq + i}`));
+                }
+                return next;
+              });
+              setKeySeq((prev) => prev + missingStages.length);
+            }}
+            className="rounded border border-dashed border-amber-500 px-2 py-1 text-amber-700 dark:text-amber-500"
+            title={missingStages.map((base) => base.name).join(' · ')}
+          >
+            빠진 단계 {missingStages.length}개 들여오기
+          </button>
+        )}
         <button
           onClick={() => {
             if (
@@ -3647,7 +3727,7 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                     <span className="w-12 shrink-0 text-[11px] text-neutral-500">
                       {LOG_LABEL[step.kind]}
                     </span>
-                    <span
+                    <div
                       className={`min-w-0 flex-1 whitespace-pre-wrap ${
                         step.kind === 'error' ? 'text-red-600 dark:text-red-400' : ''
                       }`}
@@ -3656,7 +3736,25 @@ export function PromptLab({ preset, varPreset, hasEnvApiKey }: Props) {
                       {step.note !== undefined && (
                         <span className="text-[11px] text-neutral-500"> · {step.note}</span>
                       )}
-                    </span>
+                      {/*
+                        **보여 줄 말이 없는 단계의 원문을 여기서 연다.**
+                        06 하루 총평과 07 주간 리포트가 그렇다. 대화가
+                        아니라 데이터를 만드는 단계라 응답 필드가 없고,
+                        그래서 로그에는 「보여줄 말 없음」만 남았다.
+                        단계를 하나하나 열어 봐야 결과를 볼 수 있었다 —
+                        이레를 돌린 이유가 바로 그 결과인데도.
+                      */}
+                      {step.silent === true && step.raw !== undefined && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-[11px] text-neutral-500">
+                            결과 원문 보기
+                          </summary>
+                          <pre className="mt-1 max-h-80 overflow-auto rounded bg-neutral-100 p-2 text-[11px] dark:bg-neutral-900">
+                            {step.raw}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
                   </div>
                 ))}
 
