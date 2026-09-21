@@ -146,9 +146,14 @@ src/app/
 6. **`(dev)/`는 개발 도구 전용이다.** 만드는 프로그램이 아니라 만들기 위해
    쓰는 프로그램을 둔다. Screen ID·COM-003 용어 정책·Navigation이 적용되지
    않는다. 대신 다음을 지킨다.
-   - **잠그고 연다.** 개발 서버에서는 그냥 열리고, 배포본에서는 전용
-     환경변수(예: `PROMPT_LAB_PASSCODE`)가 있어야 열린다. 변수가 없으면
-     `notFound()`. 열어두는 쪽이 아니라 닫는 쪽으로 실패한다
+   - **잠금이 있다.** 개발 서버에서는 그냥 열리고, 배포본에서는
+     **운영자만**(`admin_user` 에 행이 있는 사람) 열린다. 아니면
+     `notFound()`. 실패는 여는 쪽이 아니라 닫는 쪽으로 향한다
+
+     2026-09-18 개정. 전에는 팀 공용 통과 암호였는데, 공용 문자열은
+     한번 퍼지면 회수할 수 없다. 운영자 행은 `is_active` 를 내리면
+     그 순간 막힌다. 어드민 왼쪽 메뉴에 「프롬프트랩」을 둔 것도
+     이 때문이다 — 들어갈 수 있는 사람과 그 메뉴를 보는 사람이 같아졌다
    - page와 Server Action **양쪽 모두**에서 확인한다. Server Action은
      별도 엔드포인트로 노출되므로 page만 막으면 뚫린다
    - `export const dynamic = 'force-dynamic'`. 없으면 빌드 시점 결과가
@@ -174,7 +179,8 @@ src/components/
 │               #   Toast, Loading, EmptyState
 ├─ system/      # COM-003 §6 · AILoading, NetworkError, APIError,
 │               #   RetryAction, OfflineState
-├─ student/     # 2개 이상의 학생 화면이 쓰는 것만
+├─ student/     # 학생 관련 화면 2개 이상이 쓰는 것만. StudentForm 처럼
+│               #   부모 화면과 학생 화면이 같이 쓰는 것도 여기 둔다
 └─ parent/      # ParentBottomNav, StudentCard, SubscriptionBadge, ReportSection
 ```
 

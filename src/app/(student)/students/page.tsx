@@ -4,9 +4,8 @@
  * 한 계정에 학생이 여럿일 수 있다(COM-002 §4). 누구로 들어갈지 먼저 고른다.
  */
 
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { requireChild } from '@/lib/services/viewer';
 import { listStudents } from '@/lib/services/student';
 import { PARTNER_NAME } from '@/lib/constants/copy';
 import { PartnerFace } from '@/components/ui/PartnerFace';
@@ -15,9 +14,11 @@ import { selectStudent, leaveApp } from './_actions';
 export const metadata = { title: '누구로 시작할까 · 메티' };
 
 export default async function StudentsPage() {
+  // 아이만 들어온다. 부모는 학생을 고를 일이 없다 — 부모 화면에서
+  // 학생 영역으로 건너가지 않는다.
+  await requireChild();
+
   const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-  if (data.user === null) redirect('/login');
 
   const students = await listStudents(supabase);
 
@@ -26,19 +27,12 @@ export default async function StudentsPage() {
       <h1 className="text-xl font-extrabold text-meti-ink">누구로 시작할까?</h1>
 
       {students.length === 0 ? (
-        <div className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
-          <p className="text-[14px] leading-relaxed text-meti-sub">
-            아직 등록된 학생이 없어요.
-            <br />
-            아이를 먼저 등록해주세요.
-          </p>
-          <Link
-            href="/onboarding/student"
-            className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
-          >
-            학생 등록하기
-          </Link>
-        </div>
+        /* 아이 계정에는 자기 자신이 늘 있다. 여기가 비는 일은 없지만,
+           지우면 화면이 깨지므로 남겨 둔다. 등록하는 길은 두지 않는다 —
+           학생을 만드는 것은 부모의 일이다(COM-003 §4.2). */
+        <p className="rounded-2xl bg-white p-5 text-[14px] text-meti-sub shadow-sm">
+          들어갈 수 있는 학생이 없어요.
+        </p>
       ) : (
         <ul className="flex flex-col gap-3">
           {students.map((student) => (
@@ -67,27 +61,11 @@ export default async function StudentsPage() {
         </ul>
       )}
 
-      {students.length > 0 && (
-        <Link
-          href="/onboarding/student"
-          className="text-center text-[13px] font-semibold text-meti-sub underline"
-        >
-          학생 한 명 더 등록하기
-        </Link>
-      )}
-
       {/*
-        부모 영역으로 가는 길은 여기 하나뿐이다. 학생 화면(홈 · 미션)에는
-        두지 않는다 — 상세 평가점수가 있는 곳이라 아이가 볼 자리가 아니다.
-        보호자 PIN 은 두지 않기로 했다(2026-09-10).
+        **부모 영역으로 가는 길을 두지 않는다.** 학생 한 명 더 등록하기도
+        뺐다 — 추가 등록은 `MY-004` 다(DEV-002 §3). 아이 계정은 학생 화면만
+        본다. 부모 화면에는 상세 평가점수와 Logic Gap 이 있다(COM-003).
       */}
-      <Link
-        href="/parent"
-        className="text-center text-[13px] font-semibold text-meti-sub underline"
-      >
-        보호자 화면
-      </Link>
-
       {/*
         로그아웃은 「마이 → 계정 관리」 안에도 있지만 거기까지 세 번을 들어가야
         한다. 계정을 바꾸려는 사람은 대개 이 화면에 서 있다.

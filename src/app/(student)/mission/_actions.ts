@@ -209,7 +209,7 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
     latest: text,
   });
 
-  const result = await runStage('01 SESSION HOST', input, student.persona_type);
+  const result = await runStage('01 SESSION HOST', input, student.persona_type, [], { studentId: student.student_id, sessionId: session.session_id });
 
   if (!result.ok) {
     // **학생 잘못처럼 말하지 않는다**(CLAUDE.md UI). 무엇을 하면 되는지만
@@ -441,7 +441,7 @@ export async function startProblem(): Promise<ProblemReply> {
     latest: null,
   });
 
-  const result = await runStage('02 MODE A', input, student.persona_type);
+  const result = await runStage('02 MODE A', input, student.persona_type, [], { studentId: student.student_id, sessionId: session.session_id });
   if (!result.ok) {
     console.error(`[mission] 02 PREPARE 실패: ${result.error}`);
     return { ok: false, message: '문제를 고르다가 잠깐 멈췄어. 다시 해볼래?' };
@@ -580,6 +580,8 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
     isModeB ? '03 MODE B' : '02 MODE A',
     input,
     student.persona_type,
+    [],
+    { studentId: student.student_id, sessionId: session.session_id },
   );
   if (!result.ok) {
     console.error(`[mission] 02 INTERACT 실패: ${result.error}`);
@@ -645,6 +647,23 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
 
   // 검증 실패는 학생이 못 푼 게 아니다. 집계에 넣지 않는다(COM-001 §19).
   if (errored) {
+    /**
+     * **집계에서 빼는 대신 따로 센다.**
+     *
+     * 학생 잘못이 아니라 우리 쪽 품질 문제다. 정답률에서 빼는 것으로
+     * 끝내면 이런 일이 얼마나 자주 나는지 아무도 모른다 — 문제는 조용히
+     * 사라지고 학생만 "다음 걸로 갈까?" 를 자주 본다.
+     */
+    await record(
+      supabase,
+      EVENT.answerVerificationFailed,
+      { studentId: student.student_id, sessionId: session.session_id },
+      {
+        completion_status: status,
+        learning_mode: problem.learning_mode,
+      },
+    );
+
     return {
       ok: true,
       problemText: problem.problem_text,
@@ -822,7 +841,13 @@ async function evaluateProblem(
   // 않았으면 transfer_score 는 null 이고, 물었는데 못 했으면 0 이다.
   input = write(input, 'payload.problem_result.asked_questions', args.asked ?? []);
 
-  const result = await runStage('05 EVALUATOR', JSON.stringify(input, null, 2), args.student.persona_type);
+  const result = await runStage(
+    '05 EVALUATOR',
+    JSON.stringify(input, null, 2),
+    args.student.persona_type,
+    [],
+    { studentId: args.student.student_id, sessionId: args.session.session_id },
+  );
   if (!result.ok) {
     console.error(`[mission] 05 실패: ${result.error}`);
     return;
@@ -969,6 +994,8 @@ async function summarizeDay(
     '06 DAILY ANALYZER',
     JSON.stringify(input, null, 2),
     args.student.persona_type,
+    [],
+    { studentId: args.student.student_id },
   );
   if (!result.ok) {
     console.error(`[mission] 06 실패: ${result.error}`);
@@ -976,7 +1003,7 @@ async function summarizeDay(
   }
 
   try {
-    await saveDailyReport(supabase, {
+    await saveDailyReport({
       studentId: args.student.student_id,
       date,
       summary: result.output,
@@ -1168,7 +1195,7 @@ export async function offerSourceProblem(text: string): Promise<SourceStep> {
     latest: said,
   });
 
-  const result = await runStage('03 MODE B', input, student.persona_type);
+  const result = await runStage('03 MODE B', input, student.persona_type, [], { studentId: student.student_id, sessionId: session.session_id });
   if (!result.ok) {
     console.error(`[mission] 03 RECOGNIZE 실패: ${result.error}`);
     return { ok: false, message: '문제를 읽다가 잠깐 멈췄어. 다시 적어줄래?' };
@@ -1231,7 +1258,7 @@ export async function confirmSourceProblem(
     latest: reply,
   });
 
-  const result = await runStage('03 MODE B', input, student.persona_type);
+  const result = await runStage('03 MODE B', input, student.persona_type, [], { studentId: student.student_id, sessionId: session.session_id });
   if (!result.ok) {
     console.error(`[mission] 03 PREPARE 실패: ${result.error}`);
     return { ok: false, message: '문제를 풀어보다가 잠깐 멈췄어. 다시 해볼래?' };
@@ -1375,9 +1402,13 @@ export async function readPhotoProblem(formData: FormData): Promise<SourceStep> 
     imageReference: path,
   });
 
-  const result = await runStage('03 MODE B', input, student.persona_type, [
-    { mediaType: file.type, data: Buffer.from(bytes).toString('base64') },
-  ]);
+  const result = await runStage(
+    '03 MODE B',
+    input,
+    student.persona_type,
+    [{ mediaType: file.type, data: Buffer.from(bytes).toString('base64') }],
+    { studentId: student.student_id, sessionId: session.session_id },
+  );
 
   const drop = async () => {
     const { error } = await supabase.storage.from(PHOTO_BUCKET).remove([path]);
@@ -1483,7 +1514,13 @@ export async function askHint(): Promise<HintReply> {
   input = write(input, 'payload.interaction.hint_count', hints.length);
   input = write(input, 'payload.interaction.hint_history', hints);
 
-  const result = await runStage('04 HINT', JSON.stringify(input, null, 2), student.persona_type);
+  const result = await runStage(
+    '04 HINT',
+    JSON.stringify(input, null, 2),
+    student.persona_type,
+    [],
+    { studentId: student.student_id, sessionId: session.session_id },
+  );
   if (!result.ok) {
     console.error(`[mission] 04 실패: ${result.error}`);
     return { ok: false, message: '잠깐 멈췄어. 다시 눌러줄래?' };

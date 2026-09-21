@@ -3,8 +3,7 @@ import { notFound } from 'next/navigation';
 import { hasGeminiApiKey } from '@/lib/gemini/client';
 import { AIPM_PRESET } from '@/lib/ai/prompts/stages';
 import { VAR_SET_PRESET } from '@/lib/ai/prompts/variables';
-import { allowServerApiKey, isConfigured, isUnlocked } from './_access';
-import { Gate } from './_components/Gate';
+import { allowServerApiKey, isUnlocked } from './_access';
 import { PromptLab } from './_components/PromptLab';
 
 /**
@@ -15,8 +14,8 @@ import { PromptLab } from './_components/PromptLab';
  *
  * - COM-003의 Screen ID가 없다. DEV-002의 Route 표에도 넣지 않는다.
  * - 개발 서버에서는 그냥 열린다.
- * - 배포본에서는 `PROMPT_LAB_PASSCODE` 가 있어야 열린다. 없으면 404다.
- *   (`_access.ts`)
+ * - 배포본에서는 **운영자만** 열린다(`admin_user`). 아니면 404다.
+ *   어드민 왼쪽 메뉴의 「프롬프트랩」으로 들어온다 (`_access.ts`)
  * - 화면에서 고친 프롬프트는 서버에 저장되지 않는다. 확정된 문구는 사람이
  *   docs/prompts/logic-auditor.md 에 반영하고 PR을 올린다.
  */
@@ -29,15 +28,14 @@ export const metadata = {
 /**
  * 매 요청마다 렌더한다.
  *
- * 이게 없으면 빌드 시점에 결과가 구워진다. 빌드할 때 환경변수가 없으면
- * 404 페이지가 그대로 굳어서, 나중에 Vercel 에 PROMPT_LAB_PASSCODE 를
- * 넣어도 열리지 않는다. 잠금 판단과 쿠키 확인은 요청 시점에 해야 한다.
+ * 이게 없으면 빌드 시점에 결과가 구워진다. 누가 보고 있는지는 요청마다
+ * 다르므로 404 인지 아닌지를 빌드 때 정할 수 없다.
  */
 export const dynamic = 'force-dynamic';
 
 export default async function PromptLabPage() {
-  if (!isConfigured()) notFound();
-  if (!(await isUnlocked())) return <Gate />;
+  // 운영자가 아니면 없는 화면처럼 군다. 암호를 묻지 않는다.
+  if (!(await isUnlocked())) notFound();
 
   return (
     <PromptLab

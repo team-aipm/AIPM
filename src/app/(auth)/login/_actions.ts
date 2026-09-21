@@ -10,9 +10,16 @@
  * 들어간 뒤 가는 곳이 다르다.
  *
  * ```text
- *   부모   /students   누구로 시작할지 고른다
+ *   부모   /parent     학습 현황. 보호자 화면이다
  *   아이   /home       고를 것이 없다. 자기 자신이다
  * ```
+ *
+ * **부모는 보호자 화면으로 보낸다.** 전에는 `/students`(STU-002 학생 선택)
+ * 으로 보냈는데, 거기는 학생 어휘를 쓰는 학생 영역 화면이다. 부모가
+ * 로그인해서 처음 보는 것이 「누구로 시작할까?」 이면 학습 현황 · 리포트 ·
+ * 학생 관리로 가는 길을 매번 한 번 더 눌러 찾아야 한다.
+ *
+ * 아이에게 넘겨줄 때는 보호자 화면 아래의 「학생 화면으로」 로 간다.
  */
 
 import { cookies } from 'next/headers';
@@ -63,6 +70,17 @@ export async function signIn(
   const studentId = await studentIdOfViewer(supabase, me.user.id);
 
   if (studentId !== null) {
+    /**
+     * **아이가 처음 들어왔다.**
+     *
+     * 부모 계정이 학생 화면에 못 들어가게 되면서(COM-003 §4.2) 「등록은
+     * 했는데 아이가 한 번도 안 들어옴」 이라는 이탈 지점이 새로 생겼다.
+     * 그 순간은 어느 테이블에도 안 남는다 — 여기서 안 적으면 영영 없다.
+     *
+     * 학생마다 한 번이다. 한 계정에 아이가 여럿이면 각자 처음이 있다.
+     */
+    await recordOnce(supabase, EVENT.childLoginFirst, { studentId });
+
     // 아이다. 고를 것이 없으므로 자기 자신을 쿠키에 넣고 바로 홈으로
     // 보낸다. 홈과 미션 화면은 이 쿠키만 보므로 손댈 것이 없다.
     const jar = await cookies();
@@ -80,7 +98,7 @@ export async function signIn(
   await recordOnce(supabase, EVENT.signupCompleted, { accountId: me.user.id });
 
   // redirect 는 예외를 던져 흐름을 끊는다. try 안에 두면 안 된다.
-  redirect('/students');
+  redirect('/parent');
 }
 
 export async function signOut(): Promise<void> {

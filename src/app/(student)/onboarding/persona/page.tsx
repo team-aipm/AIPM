@@ -12,6 +12,7 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { requireChild } from '@/lib/services/viewer';
 import { getStudent } from '@/lib/services/student';
 import { PARTNER_NAME } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
@@ -34,10 +35,11 @@ const PARTNERS = [
 ];
 
 export default async function PersonaPage() {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (auth.user === null) redirect('/login');
+  // **파트너는 아이가 고른다.** 부모가 대신 고르지 않는다 — 함께 공부할
+  // 상대를 정하는 일이다(COM-003 §4.2 사용자 칸이 「학생」).
+  await requireChild();
 
+  const supabase = await createClient();
   const jar = await cookies();
   const studentId = jar.get(STUDENT_COOKIE)?.value ?? '';
   const student = studentId === '' ? null : await getStudent(supabase, studentId);

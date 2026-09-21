@@ -8,6 +8,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { studentIdOfViewer } from '@/lib/services/student-login';
 import { PartnerFace } from '@/components/ui/PartnerFace';
 import { LoginForm } from './_components/LoginForm';
 
@@ -18,7 +19,14 @@ export default async function LoginPage() {
   const { data } = await supabase.auth.getUser();
 
   // 이미 들어와 있으면 로그인 화면을 보여 줄 이유가 없다.
-  if (data.user !== null) redirect('/students');
+  //
+  // **누구인지 보고 보낸다.** 로그인 Action 과 같은 규칙이다 — 부모는
+  // 보호자 화면, 아이는 자기 홈. 한쪽으로 몰아 보내면 아이가 부모 화면에
+  // 닿는다. 거기엔 상세 평가점수가 있다(COM-003).
+  if (data.user !== null) {
+    const studentId = await studentIdOfViewer(supabase, data.user.id);
+    redirect(studentId === null ? '/parent' : '/home');
+  }
 
   return (
     <main className="flex flex-1 flex-col justify-center gap-7 px-6 py-10">

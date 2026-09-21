@@ -36,6 +36,7 @@
 | `DEV-002-routes.md` | Screen ID ↔ Route 매핑 | 확정 |
 | `DEV-003-infra-setup.md` | GitHub · Vercel · Supabase 설정과 연동 절차 | 확정 |
 | `DEV-004-onboarding.md` | 팀원 로컬 세팅, AI 도구별 준비, 첫 PR | 확정 |
+| `DEV-005-qa-checklist.md` | Screen ID별 QA 체크리스트 | **검토 대기 (본문 작성 완료)** |
 | `prompts/logic-auditor.md` | Logic Auditor 6개 AI 프롬프트 원문 | 확정 |
 
 ---
@@ -56,6 +57,7 @@
 | 환경변수 이름을 새로 만들어도 되나 | COM-005 §8 → 팀 합의 |
 | 이 파일을 어디에 둬야 하나 | **DEV-001** |
 | 이 화면의 URL이 뭔가 | **DEV-002** |
+| 배포 전에 뭘 눌러봐야 하나 | **DEV-005** |
 | AI가 뭘 어떻게 출력하나 | **prompts/logic-auditor.md** |
 | Supabase · Vercel을 어떻게 연결하나 | **DEV-003** |
 | 환경변수 값을 어디서 받나 | **DEV-004 §2** |

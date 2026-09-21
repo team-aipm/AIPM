@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { requireChild } from '@/lib/services/viewer';
 import { getStudent } from '@/lib/services/student';
 import { findTodaySession, today } from '@/lib/services/learning-session';
 import { listTodayProblems } from '@/lib/services/problem-list';
@@ -31,12 +32,18 @@ function endSummaryOf(summary: unknown): string | null {
 }
 
 export default async function TodayPage() {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (auth.user === null) redirect('/login');
+  const me = await requireChild();
 
+  const supabase = await createClient();
   const jar = await cookies();
-  const studentId = jar.get(STUDENT_COOKIE)?.value ?? '';
+  /**
+   * 쿠키가 없으면 **자기 자신으로 본다.**
+   *
+   * 「지금 공부하는 아이」 쿠키는 30일짜리다. 만료되거나 지워지면 로그인은
+   * 돼 있는데 홈에 못 들어가고 `/students` 로 튕겼다 — 아이 계정에는 고를
+   * 다른 학생이 없으므로 물어볼 이유가 없다.
+   */
+  const studentId = jar.get(STUDENT_COOKIE)?.value ?? me.studentId;
   if (studentId === '') redirect('/students');
 
   const student = await getStudent(supabase, studentId);

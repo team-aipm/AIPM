@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { runStage, stageOf } from '@/lib/ai/pipeline/run';
 import { getPath, parsePath, setPath } from '@/lib/ai/pipeline/paths';
+import { EVENT, record } from '@/lib/analytics/events';
 
 /**
  * 주간 성장 리포트 (07 WEEKLY REPORT · RPT-001)
@@ -160,7 +161,13 @@ export async function GET(request: NextRequest) {
       total_hint_count: 0,
     });
 
-    const result = await runStage('07 WEEKLY REPORT', JSON.stringify(input, null, 2));
+    const result = await runStage(
+      '07 WEEKLY REPORT',
+      JSON.stringify(input, null, 2),
+      'friend',
+      [],
+      { studentId: student.student_id },
+    );
     if (!result.ok) {
       console.error(`[weekly-report] ${student.student_id} 실패: ${result.error}`);
       continue;
@@ -179,11 +186,14 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    await supabase.from('event').insert({
-      event_name: 'weekly_report_generated',
-      student_id: student.student_id,
-      event_properties: { period_start: start, period_end: end } as never,
-    });
+    // **이름을 문자열로 적지 않는다.** 화면마다 적으면 `weekly_report_generated`
+    // 와 `weekly_report_created` 가 섞이고, 그건 집계할 때에야 드러난다.
+    await record(
+      supabase,
+      EVENT.weeklyReportGenerated,
+      { studentId: student.student_id },
+      { period_start: start, period_end: end },
+    );
 
     made += 1;
   }

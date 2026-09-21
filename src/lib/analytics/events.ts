@@ -4,9 +4,17 @@
  * 어드민의 퍼널 · 리텐션 · 대시보드가 전부 이 테이블 위에 선다. **안 남기면
  * 그 순간은 영영 없다** — 나중에 되돌아가 만들 수 없는 종류의 데이터다.
  *
- * 이벤트명은 COM-002 §14 가 확정한 16개뿐이다. 새 이름이 필요하면 문서를
+ * 이벤트명은 COM-002 §14 가 확정한 것뿐이다. 새 이름이 필요하면 문서를
  * 먼저 고친다(CLAUDE.md). 문자열을 화면마다 적으면 `problem_complete` 와
  * `problem_completed` 가 섞이고, 그건 집계할 때에야 드러난다.
+ *
+ * **이미 다른 테이블에 있는 사실은 여기 또 남기지 않는다**(COM-002 §17).
+ * 힌트 사용은 `message.is_hint`, Drill-down 과 스스로 고침은 `evaluation`,
+ * 모드 A/B 는 `problem.learning_mode` 가 들고 있다. 두 벌로 두면 반드시
+ * 어긋난다 — 아래 `record` 는 실패해도 조용히 넘어가므로 이벤트 쪽이
+ * 가끔 빠진다. 어긋난 뒤에는 어느 쪽이 맞는지 가릴 근거가 없다.
+ *
+ * **이벤트는 어느 테이블에도 안 남는 사실에만 쓴다.**
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -32,6 +40,10 @@ export const EVENT = {
   paymentFailed: 'payment_failed',
   subscriptionExpired: 'subscription_expired',
   weeklyReportGenerated: 'weekly_report_generated',
+  // 2026-09-17 추가 (COM-002 §14)
+  childLoginFirst: 'child_login_first',
+  aiCallFailed: 'ai_call_failed',
+  answerVerificationFailed: 'answer_verification_failed',
 } as const;
 
 export type EventName = (typeof EVENT)[keyof typeof EVENT];
@@ -87,6 +99,9 @@ export async function record(
  * 그래서 확인을 마치고 **처음 들어온 순간**에 남긴다. 시각은 몇 분 늦지만
  * "가입을 끝내고 실제로 들어온 사람" 을 세는 쪽이 퍼널에는 더 맞는 값이다.
  * 로그인할 때마다 부르므로 이미 있으면 넘어간다.
+ *
+ * `child_login_first` 도 같은 방식이다 — 아이가 로그인할 때마다 부르고,
+ * 이미 있으면 넘어간다.
  */
 export async function recordOnce(
   client: Client,
@@ -94,9 +109,22 @@ export async function recordOnce(
   who: Who,
   properties: Record<string, unknown> = {},
 ): Promise<void> {
-  const accountId = who.accountId;
-  if (accountId === undefined) {
-    console.error(`[event] ${name}: 한 번만 남기는 이벤트는 account_id 가 필요합니다`);
+  /**
+   * 무엇을 기준으로 「한 번」인가.
+   *
+   * `signup_completed` 는 계정마다 한 번이고, `child_login_first` 는
+   * **학생마다 한 번**이다 — 한 계정에 아이가 여럿이면 각자 처음이 있다.
+   * 계정으로만 세면 둘째 아이의 첫 로그인이 영영 안 남는다.
+   */
+  const key =
+    who.studentId !== undefined
+      ? ({ column: 'student_id', value: who.studentId } as const)
+      : who.accountId !== undefined
+        ? ({ column: 'account_id', value: who.accountId } as const)
+        : null;
+
+  if (key === null) {
+    console.error(`[event] ${name}: 한 번만 남기는 이벤트는 기준이 될 id 가 필요합니다`);
     return;
   }
 
@@ -104,7 +132,7 @@ export async function recordOnce(
     .from('event')
     .select('event_id')
     .eq('event_name', name)
-    .eq('account_id', accountId)
+    .eq(key.column, key.value)
     .limit(1)
     .maybeSingle();
 

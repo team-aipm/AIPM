@@ -186,6 +186,39 @@ export async function studentIdOfViewer(
 // 그래서 순서를 뒤집는다. 겹치는지는 Auth 만 알고 있으므로 **계정을 먼저
 // 잡아 본다.** 학생 만들기가 실패하면 잡아 둔 것을 놓아 준다.
 
+/**
+ * 이 아이디를 쓸 수 있나. **누르기 전에 알려 주려고 본다.**
+ *
+ * 겹치는지는 선점할 때(`reserveChildAuthUser`) 이미 걸린다. 다만 그때는
+ * 폼을 다 채우고 누른 뒤다 — 부모는 처음부터 다시 짓는다.
+ *
+ * **여기 답은 참고용이다.** 확정은 선점이 한다. 보는 곳이 다르기 때문이다 —
+ * 여기는 `student.login_id` 를 보고, 선점은 Auth 를 본다. 선점만 되고
+ * 학생에 못 붙은 계정이 남아 있으면 여기서는 안 보인다. 그 드문 경우는
+ * 누를 때 걸린다.
+ *
+ * service_role 로 읽는다. RLS 로는 **남의 계정 아이를 못 보므로** 겹치는지
+ * 알 수가 없다 — 그게 이 물음의 전부다. 부모 세션인지는 부르는 쪽
+ * (`_actions.ts`)이 먼저 본다.
+ */
+export type IdCheck = 'ok' | 'taken' | 'invalid';
+
+export async function checkLoginIdFree(loginId: string): Promise<IdCheck> {
+  const id = loginId.trim().toLowerCase();
+  if (!isValidLoginId(id)) return 'invalid';
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('student')
+    .select('student_id')
+    .eq('login_id', id)
+    .maybeSingle();
+
+  // 못 읽었으면 「쓸 수 있다」고 하지 않는다. 확정은 어차피 선점이 한다.
+  if (error !== null) return 'taken';
+  return data === null ? 'ok' : 'taken';
+}
+
 export type Reserved = { ok: true; userId: string } | { ok: false; error: string };
 
 /** 아이디를 선점한다. 겹치면 여기서 끝난다 — 아직 아무것도 안 만들었다 */

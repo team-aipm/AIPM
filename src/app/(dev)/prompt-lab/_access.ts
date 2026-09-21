@@ -1,8 +1,5 @@
 import 'server-only';
 
-import { createHash, timingSafeEqual } from 'node:crypto';
-import { cookies } from 'next/headers';
-
 /**
  * prompt-lab 접근 통제.
  *
@@ -10,75 +7,51 @@ import { cookies } from 'next/headers';
  * 잠금이 필요해졌다. 주소만 알면 누구나 들어오고, 서버의 Gemini 키가
  * 그대로 쓰이기 때문이다.
  *
- * 규칙
- *   개발 서버        항상 열림. 암호를 묻지 않는다
- *   배포본           PROMPT_LAB_PASSCODE 가 있어야 열린다
- *   암호 미설정      404. 열어두는 쪽이 아니라 닫는 쪽으로 실패한다
+ * ## 통과 암호를 없앴다 (2026-09-18)
  *
- * 학생·부모 데이터를 다루지 않는 도구이므로 Supabase Auth 를 끌어오지
- * 않는다. 팀 내부용 공용 암호 하나로 충분하다.
+ * 전에는 팀 공용 암호(`PROMPT_LAB_PASSCODE`)를 물었다. 그때는 어드민이
+ * 없어서 기댈 것이 그것뿐이었다. 지금은 `admin_user` 가 있다.
+ *
+ * ```text
+ * 예전   팀이 공유하는 문자열 하나. 나가는 사람이 생겨도 그대로 유효
+ * 지금   admin_user 에 행이 있는 사람만. 행은 SQL 로만 넣는다
+ * ```
+ *
+ * **암호를 없앤 것이 문을 연 것은 아니다.** 오히려 좁혔다 — 공용 문자열은
+ * 퍼지면 회수할 수 없지만, 운영자 행은 `is_active` 를 내리면 그 순간
+ * 막힌다. 어드민에서 프롬프트랩으로 가는 링크를 둔 것도 이 때문이다.
+ *
+ * ```text
+ * 개발 서버   항상 열림
+ * 배포본      운영자만. 아니면 404
+ * ```
+ *
+ * 404 인 이유는 어드민과 같다 — 「권한이 없습니다」는 여기 무엇이 있다는
+ * 것을 알려주는 답이다(COM-003 §4.8).
  */
 
-const COOKIE = 'prompt_lab_access';
+import { currentAdmin } from '@/lib/services/admin';
 
 export function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
-function passcode(): string {
-  return process.env.PROMPT_LAB_PASSCODE?.trim() ?? '';
-}
-
-/** 배포본에서 암호가 설정되어 있는가. 없으면 route 자체를 닫는다. */
-export function isConfigured(): boolean {
-  return !isProduction() || passcode().length > 0;
-}
-
-/** 쿠키에 넣는 값. 원문 암호를 브라우저에 저장하지 않는다. */
-function token(): string {
-  return createHash('sha256').update(`prompt-lab:${passcode()}`).digest('hex');
-}
-
-function sameToken(candidate: string): boolean {
-  const expected = Buffer.from(token(), 'utf8');
-  const actual = Buffer.from(candidate, 'utf8');
-  // 길이가 다르면 timingSafeEqual 이 throw 한다. 먼저 확인한다.
-  if (expected.length !== actual.length) return false;
-  return timingSafeEqual(expected, actual);
-}
-
+/**
+ * 들어와도 되는 사람인가.
+ *
+ * 개발 서버에서는 묻지 않는다. 학생·부모 데이터를 다루지 않는 도구이고,
+ * 로컬에서 쓰려고 매번 운영자 계정으로 로그인하게 하면 도구를 안 쓰게 된다.
+ */
 export async function isUnlocked(): Promise<boolean> {
   if (!isProduction()) return true;
-  if (passcode().length === 0) return false;
-
-  const value = (await cookies()).get(COOKIE)?.value;
-  return typeof value === 'string' && sameToken(value);
-}
-
-/** 암호가 맞으면 쿠키를 심는다. 맞으면 true. */
-export async function unlockWith(input: string): Promise<boolean> {
-  const expected = passcode();
-  if (expected.length === 0) return false;
-
-  const a = Buffer.from(input.trim(), 'utf8');
-  const b = Buffer.from(expected, 'utf8');
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
-
-  (await cookies()).set(COOKIE, token(), {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/prompt-lab',
-    maxAge: 60 * 60 * 12,
-  });
-  return true;
+  return (await currentAdmin()) !== null;
 }
 
 /**
  * 서버에서 키를 대신 써 줄지.
  *
- * 배포본에서는 쓰지 않는다. 잠금을 통과한 사람이라도 세팅 담당 개인의
- * Gemini 키로 무제한 호출하게 두지 않는다. 각자 화면에 자기 키를 넣는다.
+ * 배포본에서는 쓰지 않는다. 운영자라도 세팅 담당 개인의 Gemini 키로
+ * 무제한 호출하게 두지 않는다. 각자 화면에 자기 키를 넣는다.
  */
 export function allowServerApiKey(): boolean {
   return !isProduction();

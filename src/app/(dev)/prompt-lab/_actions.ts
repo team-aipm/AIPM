@@ -2,7 +2,7 @@
 
 import { notFound } from 'next/navigation';
 
-import { isConfigured, isUnlocked, unlockWith } from './_access';
+import { isUnlocked } from './_access';
 
 import { hasGeminiApiKey } from '@/lib/gemini/client';
 import {
@@ -75,12 +75,6 @@ export async function fetchModels(
 ): Promise<ModelListResult> {
   await assertAccess();
   return listModels(provider, apiKey);
-}
-
-/** 통과 암호 확인. 맞으면 쿠키를 심는다. */
-export async function unlock(input: string): Promise<boolean> {
-  if (!isConfigured()) notFound();
-  return unlockWith(input);
 }
 
 export async function checkApiKey(): Promise<boolean> {
@@ -170,6 +164,5 @@ export async function runStage(request: RunInput): Promise<RunResult> {
  * 잠겨 있어도 여기로 직접 요청이 들어올 수 있으므로 매번 다시 확인한다.
  */
 async function assertAccess() {
-  if (!isConfigured()) notFound();
   if (!(await isUnlocked())) notFound();
 }

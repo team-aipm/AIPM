@@ -1,6 +1,6 @@
 # DEV-002 · Screen ID ↔ Route 매핑
 
-> **Version:** 1.0 · **Updated:** 2026-08-28 · **Owner:** 운영 및 백오피스 PM\
+> **Version:** 1.1 · **Updated:** 2026-09-17 · **Owner:** 운영 및 백오피스 PM\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -52,7 +52,10 @@
 | `STU-005` | 오늘의 기록 | `/home/today` | `(student)/home/today/page.tsx` |
 
 - `STU-001`(첫 학생 등록)과 `MY-004`(학생 추가)는 **다른 Screen이므로 Route도
-  분리**한다. 내부 폼 컴포넌트는 공유할 수 있다.
+  분리**한다. 폼은 `components/student/StudentForm.tsx` 를 함께 쓴다.
+- **`/onboarding/student` 만 부모가 연다.** 폴더는 `(student)` 지만 아이를
+  만드는 화면이라 그렇다(COM-003 §4.2 사용자 칸이 「부모」). 나머지 `STU` ·
+  `MIS` 는 아이 계정만 연다.
 - `/home`은 COM-003 §5의 5개 State(최초 방문 / 오늘 시작 전 / 진행 중 / 오늘
   완료 / 구독 만료)를 한 Route에서 처리한다.
 
@@ -81,7 +84,11 @@ AI 생각 중 · 힌트 · 문제 완료 · 한 번 더 도전 · AI 오류 · �
 |---|---|---|---|
 | `PAR-002` | 부모 HOME | `/parent` | `(parent)/parent/page.tsx` |
 
-- 학생 영역 ↔ 부모 영역은 별도 확인 없이 오간다.
+- **학생 영역 ↔ 부모 영역은 서로 건너가지 않는다** (2026-09-17 · COM-003 §4.2).
+  부모 계정은 `PAR` · `RPT` · `BIL` · `MY` 와 `/onboarding/student` 만,
+  아이 계정은 `STU` · `MIS` 만 연다. 링크를 지우는 것으로는 모자라므로
+  화면마다 막는다 — `lib/services/viewer.ts` 의 `requireParent()` ·
+  `requireChild()` 다.
 - **괄호 폴더는 경로에 들어가지 않는다.** `(parent)/page.tsx` 는 `/parent`
   가 아니라 `/` 다. 실제 파일은 `(parent)/parent/page.tsx` 이며 아래 표의
   파일 경로도 그 기준이다.
@@ -245,5 +252,6 @@ ADM 화면이 없던 동안에는 Supabase Studio 조회로 버텼다. 이제 �
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.1 | 2026-09-17 | **학생 ↔ 부모 영역을 계정으로 가른다**(§3 · §5 · COM-003 §4.2). 전에는 "별도 확인 없이 오간다" 였다. `/onboarding/student` 만 학생 Area 에 있으면서 부모가 연다. Route 추가·삭제·개명 없음 | — |
 | — | 2026-09-10 | **보호자 PIN 삭제** (PAR-001 · PAR-003). 괄호 폴더가 경로에 들어가지 않는다는 점을 명시하고 PAR-002 파일 경로를 실제와 맞춤 | — |
 | 1.0 | 2026-08-28 | 최초 작성. COM-003 35개 Screen의 Route 매핑 확정 | — |
