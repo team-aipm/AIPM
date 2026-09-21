@@ -127,23 +127,46 @@ export default async function ParentHomePage() {
       </header>
 
       {summaries.length === 0 ? (
-        <p className="rounded-2xl bg-white p-5 text-[14px] leading-relaxed text-meti-sub shadow-sm">
-          등록된 학생이 없습니다.
-        </p>
+        /*
+          **막다른 곳으로 두지 않는다.** 로그인하면 바로 여기로 오므로,
+          아직 아이를 등록하지 않은 부모가 처음 보는 화면이 이것이다.
+          "없습니다" 만 적혀 있으면 어디서 등록하는지 알 수 없다.
+        */
+        <div className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
+          <p className="text-[14px] leading-relaxed text-meti-sub">
+            아직 등록된 학생이 없습니다.
+            <br />
+            아이를 등록하면 학습 현황이 여기에 쌓입니다.
+          </p>
+          <Link
+            href="/parent/my/students/new"
+            className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
+          >
+            학생 등록
+          </Link>
+        </div>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {summaries.map((summary) => (
-            <StudentCard key={summary.studentId} summary={summary} />
-          ))}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-3">
+            {summaries.map((summary) => (
+              <StudentCard key={summary.studentId} summary={summary} />
+            ))}
+          </ul>
+
+          {/*
+            **아이가 이미 있어도 등록할 자리를 둔다.** 로그인하면 바로 여기로
+            오는데, 둘째를 더하려면 마이 → 학생 관리 → 학생 추가로 세 번을
+            들어가야 했다. 현황을 보다가 "한 명 더" 는 흔한 일이다.
+          */}
+          <Link
+            href="/parent/my/students/new"
+            className="rounded-xl border border-meti bg-white py-3 text-center text-[14px] font-bold text-meti"
+          >
+            학생 추가
+          </Link>
+        </>
       )}
 
-      <Link
-        href="/students"
-        className="text-center text-[13px] font-semibold text-meti-sub underline"
-      >
-        학생 화면으로
-      </Link>
     </main>
   );
 }

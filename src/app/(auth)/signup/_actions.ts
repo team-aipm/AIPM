@@ -77,7 +77,11 @@ export async function signUp(
   }
 
   // 확인이 꺼진 환경이면 세션이 바로 생긴다. 그때는 곧장 들어간다.
-  if (data.session !== null) redirect('/students');
+  //
+  // **첫 학생 등록으로 보낸다.** DEV-002 §2 의 흐름이 그렇다
+  // (`… → /signup/verify → /onboarding/student`). 학생이 하나도 없는
+  // 부모를 학습 현황으로 보내면 빈 화면부터 본다.
+  if (data.session !== null) redirect('/onboarding/student');
 
   // **이미 가입된 이메일도 같은 화면을 보여준다.** Supabase 는 그 경우
   // identities 를 빈 배열로 돌려준다. "이미 가입됨" 이라고 알려주면 남의

@@ -4,16 +4,16 @@
  * 부모가 보는 화면이다. 학생 어휘를 쓰지 않는다.
  */
 
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { StudentForm } from './_components/StudentForm';
+import { requireParent } from '@/lib/services/viewer';
+import { StudentForm } from '@/components/student/StudentForm';
+import { addStudent, checkLoginId } from './_actions';
 
 export const metadata = { title: '학생 등록 · 메티' };
 
 export default async function NewStudentPage() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-  if (data.user === null) redirect('/login');
+  // **여기만 부모가 쓴다.** 폴더는 (student) 지만 COM-003 §4.2 의 사용자
+  // 칸이 「부모」다. 아이는 자기 홈으로 돌아간다.
+  await requireParent();
 
   return (
     <main className="flex flex-1 flex-col gap-6 px-6 py-10">
@@ -27,7 +27,7 @@ export default async function NewStudentPage() {
       </header>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm">
-        <StudentForm />
+        <StudentForm action={addStudent} checkId={checkLoginId} submitLabel="등록" />
       </section>
     </main>
   );

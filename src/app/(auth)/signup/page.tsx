@@ -12,6 +12,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { studentIdOfViewer } from '@/lib/services/student-login';
 import { SignupForm } from './_components/SignupForm';
 
 export const metadata = { title: '회원가입 · 메티' };
@@ -19,7 +20,12 @@ export const metadata = { title: '회원가입 · 메티' };
 export default async function SignupPage() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
-  if (data.user !== null) redirect('/students');
+  // 이미 들어와 있으면 가입 화면을 보여 줄 이유가 없다. 로그인 화면과
+  // 같은 규칙으로 보낸다.
+  if (data.user !== null) {
+    const studentId = await studentIdOfViewer(supabase, data.user.id);
+    redirect(studentId === null ? '/parent' : '/home');
+  }
 
   return (
     <main className="flex flex-1 flex-col gap-6 px-6 py-10">

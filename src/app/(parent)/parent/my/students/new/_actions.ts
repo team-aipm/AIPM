@@ -1,20 +1,17 @@
 'use server';
 
 /**
- * STU-001 첫 학생 등록.
+ * MY-004 학생 추가.
  *
- * 부모가 가입한 뒤 학생을 만든다. 학생은 부모 계정 안의 프로필이면서,
- * **아이가 직접 들어올 수 있는 계정이기도 하다**(COM-002 §4-1).
+ * 만드는 일은 STU-001 과 같은 것을 부른다(`student-registration`).
+ * **다른 것은 그 다음이다.**
  *
- * 만드는 일 자체는 `lib/services/student-registration` 이 한다. MY-004
- * 학생 추가도 같은 것을 부른다 — 학년 검사 같은 규칙이 한쪽만 바뀌면 안
- * 된다(DEV-002 §3).
+ * ```text
+ * STU-001  부모 홈으로      가입 직후라 볼 것이 거기 있다
+ * MY-004   학생 프로필로    방금 넣은 것이 맞는지 거기서 보인다
+ * ```
  *
- * **여기서만 하는 일은 그 다음이다.** 부모 홈으로 보낸다.
- *
- * 전에는 쿠키를 심고 `STU-003`(파트너 선택)으로 이어 갔다. 이제 파트너는
- * 아이가 자기 계정에서 고르고, 부모는 학생 화면에 들어가지 않는다. 심을
- * 쿠키도 갈 곳도 없다.
+ * 파트너는 받지 않는다. 아이가 자기 계정에서 고른다(COM-003 §4.2).
  */
 
 import { redirect } from 'next/navigation';
@@ -36,7 +33,7 @@ export async function checkLoginId(loginId: string): Promise<IdCheck> {
   return checkLoginIdFree(loginId);
 }
 
-export async function addStudent(
+export async function addStudentFromParent(
   _prev: NewStudentState,
   formData: FormData,
 ): Promise<NewStudentState> {
@@ -44,14 +41,10 @@ export async function addStudent(
   const { data: auth } = await supabase.auth.getUser();
   if (auth.user === null) redirect('/login');
 
-  const result = await registerStudent(
-    supabase,
-    auth.user.id,
-    readStudentForm(formData),
-  );
+  const result = await registerStudent(supabase, auth.user.id, readStudentForm(formData));
   if (!result.ok) return { error: result.error };
 
-  // 등록이 끝났다. 부모는 자기 화면으로 돌아간다. 아이는 방금 정해 준
-  // 아이디로 자기 기기에서 들어온다.
-  redirect('/parent');
+  // 등록한 아이의 프로필로 보낸다. 방금 넣은 것이 맞는지 거기서 보이고,
+  // 파트너 · 아이 로그인도 그 화면에서 고친다.
+  redirect(`/parent/my/students/${result.studentId}`);
 }

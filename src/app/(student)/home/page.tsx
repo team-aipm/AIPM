@@ -10,32 +10,37 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { requireChild } from '@/lib/services/viewer';
 import { getStudent } from '@/lib/services/student';
 import { findTodaySession } from '@/lib/services/learning-session';
 import { PARTNER_NAME, TERMS } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 import { PartnerFace } from '@/components/ui/PartnerFace';
-import { studentIdOfViewer } from '@/lib/services/student-login';
 import { startMission, leaveApp } from './_actions';
 
 export const metadata = { title: '오늘의 미션 · 메티' };
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-  if (data.user === null) redirect('/login');
+  // **아이만 들어온다.** 부모는 부모 홈으로 돌아간다(COM-003 §4.2 의
+  // 사용자 칸이 「학생」이다).
+  const me = await requireChild();
 
+  const supabase = await createClient();
   const jar = await cookies();
-  const studentId = jar.get(STUDENT_COOKIE)?.value ?? '';
+  /**
+   * 쿠키가 없으면 **자기 자신으로 본다.**
+   *
+   * 「지금 공부하는 아이」 쿠키는 30일짜리다. 만료되거나 지워지면 로그인은
+   * 돼 있는데 홈에 못 들어가고 `/students` 로 튕겼다 — 아이 계정에는 고를
+   * 다른 학생이 없으므로 물어볼 이유가 없다.
+   */
+  const studentId = jar.get(STUDENT_COOKIE)?.value ?? me.studentId;
   if (studentId === '') redirect('/students');
 
   // 쿠키에 남의 학생 id 가 들어 있어도 여기서 null 이 된다. 고르는 화면으로
   // 돌려보내는 것으로 충분하다 — 무엇이 잘못됐는지 알려 줄 필요가 없다.
   const student = await getStudent(supabase, studentId);
   if (student === null) redirect('/students');
-
-  // 아이 본인인가, 부모가 아이 화면을 보고 있는가. 나가는 문이 다르다.
-  const isChild = (await studentIdOfViewer(supabase, data.user.id)) !== null;
 
   const session = await findTodaySession(supabase, student.student_id);
   const done = session?.completed_problem_count ?? 0;
@@ -110,27 +115,30 @@ export default async function HomePage() {
       </Link>
 
       {/*
+        **파트너는 아이가 고른다**(COM-003 §4.2 「학생 HOME … Persona 변경」).
+        등록할 때 부모가 대신 고르지 않으므로, 아이가 처음 들어와서 바꿀 수
+        있는 자리가 여기여야 한다. 기본값은 메티다.
+      */}
+      <Link
+        href="/onboarding/persona"
+        className="rounded-2xl bg-white p-4 text-center text-[14px] font-bold text-meti-ink shadow-sm"
+      >
+        파트너 바꾸기
+      </Link>
+
+      {/*
         아이 계정에는 고를 다른 친구가 없다. 자기 자신뿐이다. 그 자리에
         **나가는 문**을 둔다 — 아이는 부모 영역의 「계정 관리」에 못 들어가서
         여기가 없으면 로그아웃할 길이 아예 없다.
       */}
-      {isChild ? (
-        <form action={leaveApp}>
-          <button
-            type="submit"
-            className="w-full text-center text-[13px] font-semibold text-meti-sub underline"
-          >
-            나가기
-          </button>
-        </form>
-      ) : (
-        <Link
-          href="/students"
-          className="text-center text-[13px] font-semibold text-meti-sub underline"
+      <form action={leaveApp}>
+        <button
+          type="submit"
+          className="w-full text-center text-[13px] font-semibold text-meti-sub underline"
         >
-          다른 친구로 바꾸기
-        </Link>
-      )}
+          나가기
+        </button>
+      </form>
     </main>
   );
 }
