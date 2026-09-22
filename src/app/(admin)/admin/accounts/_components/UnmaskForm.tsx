@@ -20,9 +20,10 @@ export function UnmaskForm({
   canUnmask,
 }: {
   accountId: string;
-  name: string;
+  /** 2026-09-22 부터 가입이 이름·휴대폰을 받지 않는다(COM-002 §3-1) */
+  name: string | null;
   email: string;
-  phone: string;
+  phone: string | null;
   canUnmask: boolean;
 }) {
   const [state, action, pending] = useActionState(unmaskAccount, IDLE);
@@ -34,9 +35,9 @@ export function UnmaskForm({
   if (state.unmaskedId === accountId) {
     return (
       <div className="flex flex-col gap-0.5 text-[12px]">
-        <span className="font-semibold">{name}</span>
+        <span className="font-semibold">{name ?? '이름 없음'}</span>
         <span>{email}</span>
-        <span>{phone}</span>
+        <span>{phone ?? '휴대폰 없음'}</span>
         <span className="text-[10px] text-neutral-400">기록됨 · 새로고침하면 다시 가려짐</span>
       </div>
     );

@@ -62,13 +62,16 @@ Account 1 : N Payment - Student 1 : N LearningReport - Account/Student 1
   -------------------------------- ------------- ----------------- -------------------- -------------
   `account_id`                     UUID                        YES uuid                 PK
 
-  `account_name`                   TEXT                        YES 김세희               부모 이름
+  `account_name`                   TEXT                         NO 김세희               부모 이름
+                                                                                        (가입 시 안 받음)
 
   `email`                          TEXT                        YES parent@example.com   이메일
 
-  `phone_number`                   TEXT                        YES 01012345678          부모 휴대폰
+  `phone_number`                   TEXT                         NO 01012345678          부모 휴대폰
+                                                                                        (가입 시 안 받음)
 
-  `birth_date`                     DATE                        YES 1978-05-20           부모 생년월일
+  `birth_date`                     DATE                         NO 1978-05-20           부모 생년월일
+                                                                                        (가입 시 안 받음)
 
   `account_status`                 ENUM/TEXT                   YES active               계정 상태
 
@@ -89,9 +92,31 @@ Account 1 : N Payment - Student 1 : N LearningReport - Account/Student 1
   `last_login_at`                  TIMESTAMPTZ                  NO timestamp            최근 로그인
   ---------------------------------------------------------------------------------------------------
 
-Account rules: - 부모 휴대폰 번호는 회원가입 필수. - 결제수단 및 결제
-이력은 Account 기준. - 학생별 학습데이터를 Account에 직접 저장하지
-않는다.
+Account rules: - **회원가입은 이메일 · 비밀번호 · 동의 4종만 받는다**
+(2026-09-22 변경). 이름 · 휴대폰 · 생년월일은 가입 시 받지 않으며 `null`
+이다. - 결제수단 및 결제 이력은 Account 기준. - 학생별 학습데이터를
+Account에 직접 저장하지 않는다.
+
+### 3-1. 이름 · 휴대폰 · 생년월일을 왜 안 받나 · **2026-09-22**
+
+Figma 「메티_서비스」의 `부모 / 회원가입` 프레임에 그 칸들이 없다. 받는
+것은 이메일 · 비밀번호 · 비밀번호 확인과 동의 4종뿐이다.
+
+전에는 `handle_new_account` 트리거가 셋을 요구해서, 없으면 **가입을 통째로
+되돌렸다.** 그래서 디자인대로 만들면 가입 자체가 되지 않았다. 같은 이유로
+소셜 로그인(구글 · 카카오)도 막혀 있었다 — 그쪽도 셋을 주지 않는다.
+
+컬럼은 지우지 않았다. 이미 가입한 사람들의 값이 들어 있고 `MY-002`(프로필)
+와 `ADM` 화면이 그것을 읽는다. `null` 을 허용할 뿐이다.
+
+**아직 답이 없는 것 둘**
+
+- `AUTH-004` 휴대폰 인증(DEV-002 `/signup/verify`)은 무엇으로 하나.
+  Figma 에 해당 프레임이 없다.
+- 법정대리인 동의를 받는데 보호자를 식별할 값이 이메일뿐이어도 되나.
+  COM-007 §2 의 판단이 필요하다.
+
+마이그레이션: `20260922120000_allow_null_account_profile_fields.sql`
 
 ## 4. Student
 
@@ -111,7 +136,8 @@ Account rules: - 부모 휴대폰 번호는 회원가입 필수. - 결제수단 
   `nickname_source`              ENUM/TEXT                   YES name_default   `name_default` /
                                                                                 `custom`
 
-  `birth_date`                   DATE                        YES 2015-08-27     생년월일
+  `birth_date`                   DATE                         NO 2015-08-27     생년월일
+                                                                               (등록 시 안 받음)
 
   `grade`                        SMALLINT                    YES 5              MVP: 4,5,6
 
@@ -140,9 +166,31 @@ Account rules: - 부모 휴대폰 번호는 회원가입 필수. - 결제수단 
   -------------------------------------------------------------------------------------------------
 
 Student rules: - Account당 Student 수 제한 없음. - `nickname`은 필수이며
-기본값은 `student_name`. - 각 Student의 학습데이터는 서로 독립. - 학생
-삭제 후 학습기록은 1년 유지. - 직접 식별정보의 세부 보관/삭제 정책은
-COM-007에서 최종 확정.
+기본값은 `student_name`. - **`birth_date`는 등록할 때 받지 않는다**
+(2026-09-22 개정). - 각 Student의 학습데이터는 서로 독립. - 학생 삭제 후
+학습기록은 1년 유지. - 직접 식별정보의 세부 보관/삭제 정책은 COM-007에서
+최종 확정.
+
+### 4-2. 생년월일을 왜 안 받나 · **2026-09-22**
+
+Figma 「메티_서비스」의 `자녀 계정 생성` 프레임이 다섯 칸만 받는다.
+
+```text
+자녀 정보    이름 또는 별명 · 학년
+로그인 정보  아이디 · 비밀번호 · 비밀번호 확인
+```
+
+생년월일 칸이 없다. **쓰는 곳도 없다** — 난이도와 문제 범위를 정하는 것은
+`grade`이고(DB CHECK 4~6), `birth_date`로 하는 일이 없다.
+
+아이의 생년월일은 COM-007이 말하는 아동 개인정보다. 쓰지 않을 값을 받아
+두면 지켜야 할 것만 늘어난다. 받지 않는 것이 가장 확실한 보호다.
+
+**화면은 이름 칸이 하나인데 DB는 둘이다.** `student_name`과 `nickname`이
+모두 `not null`이라, 한 값을 양쪽에 넣고 `nickname_source`를
+`name_default`로 남긴다. 스키마는 그대로 둔다.
+
+마이그레이션: `20260922130000_allow_null_student_birth_date.sql`
 
 ### 4-1. 학생 로그인 (2026-09-10 추가)
 
@@ -701,6 +749,8 @@ COM-007 §13 이 요청한 세 가지다. 없으면 ADM 영역을 만들 수 없
 | 1.5 | 2026-09-17 | §14 이벤트명 3개 추가: `child_login_first`(계정 분리로 새로 생긴 이탈 지점) · `ai_call_failed` · `answer_verification_failed`(둘 다 어느 테이블에도 안 남는 AI 품질 신호). **`event_properties` 에 원문·이름을 넣지 않는다**는 규칙과, **다른 테이블에 있는 사실은 이벤트로 중복 저장하지 않는다**(§17)는 규칙을 §14 본문에 명시. 필드·타입·관계 변경 없음 | — |
 | 1.4 | 2026-09-17 | §4-1 `login_id`·`auth_user_id` **선택 → 등록 시 필수**. 부모 계정이 학생 화면에 들어가지 않게 되어(COM-003 §4.2 함께 개정), 아이디가 없으면 그 아이가 학습을 시작할 길이 없다. **DB 는 nullable 그대로** — 이전에 아이디 없이 등록된 행이 있어 `NOT NULL` 로 조이지 않는다. 막는 자리는 등록 화면과 서버다. 필드·타입·관계 변경 없음 | — |
 | — | 2026-09-10 | §20-B 추가: `AdminUser` · `AuditLog` · `ConsentLog` (COM-007 §13). ADM 영역의 선행 조건 | — |
+| — | 2026-09-22 | §4 `birth_date` Required `YES` → **`NO`**. Figma `자녀 계정 생성` 이 이름·학년·아이디·비밀번호·비밀번호 확인만 받는다. 난이도는 `grade` 가 정하고 `birth_date` 로 하는 일이 없다 — 쓰지 않을 아동 정보는 받지 않는다(COM-007). 컬럼은 지우지 않았다 | — |
+| — | 2026-09-22 | §3 `account_name` · `phone_number` · `birth_date` Required `YES` → **`NO`**. Figma 「메티_서비스」 `부모 / 회원가입` 이 이메일·비밀번호·동의 4종만 받는다. `handle_new_account` 가 셋을 요구해 가입을 롤백하던 것을 풀고, 동의 4종을 같은 트랜잭션에서 `ConsentLog` 에 남기도록 했다. 컬럼은 지우지 않았다 — `MY-002`·`ADM` 이 읽는다. **`AUTH-004` 휴대폰 인증과 COM-007 §2 보호자 식별은 미정** | — |
 | — | 2026-09-10 | §20-A **변경 제안** 추가: MODE B 의 의도적 오답을 담을 칸 3개(`ai_wrong_answer` · `ai_wrong_reasoning` · `target_misconception`). 승인 전이므로 본문 §6 은 그대로 | — |
 | 1.3 | 2026-09-09 | §17 `verified_answer` 노출 금지를 **"문제가 진행 중인 동안"** 으로 한정. 종료 시점에는 정답·해설로 보여준다(COM-001 §8 종료 안내). Answer Lock 데이터는 시점과 무관하게 계속 비노출 — 검증 상태는 내부 값이다. §8 Rules에도 같은 단서 추가 | — |
 | 1.0 | 2026-08-28 | `docs/` 이관 및 문서 헤더 도입. **본문 변경 없음** | — |

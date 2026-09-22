@@ -5,6 +5,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  // 개발 서버에만 해당한다. `localhost` 말고 `127.0.0.1` 이나 같은 와이파이의
+  // 휴대폰(192.168.x.x)으로 열면 Next 가 HMR 요청을 cross-origin 으로 보고
+  // 막는다. 화면은 뜨는데 고친 것이 반영되지 않고, 입력이 먹지 않는 것처럼
+  // 보인다 — 실제 앱 문제로 착각하기 쉽다. 빌드 결과에는 영향이 없다.
+  allowedDevOrigins: ['127.0.0.1'],
   experimental: {
     // 기본값은 1MB다. 휴대폰으로 찍은 문제 사진은 2~4MB가 흔하고
     // base64로 보내면 약 1.33배가 되므로 그대로 두면 사진 입력을

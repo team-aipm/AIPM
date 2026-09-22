@@ -90,9 +90,17 @@ export async function logAudit(
 // 마스킹 (COM-007 §7-1)
 // ============================================================
 
-/** 김은재 → 김** · 은재 → 은* */
-export function maskName(name: string): string {
+/**
+ * 김은재 → 김** · 은재 → 은*
+ *
+ * **`null` 이 온다.** 2026-09-22 부터 회원가입이 이름을 받지 않는다
+ * (COM-002 §3-1). 그날 이후 가입한 계정은 이름이 비어 있다. 없는 것을
+ * 가린 척하지 않고 `—` 로 둔다.
+ */
+export function maskName(name: string | null): string {
+  if (name === null) return '—';
   const trimmed = name.trim();
+  if (trimmed.length === 0) return '—';
   if (trimmed.length <= 1) return trimmed;
   return trimmed[0] + '*'.repeat(trimmed.length - 1);
 }
@@ -106,8 +114,9 @@ export function maskEmail(email: string): string {
   return `${kept}${'*'.repeat(Math.max(1, head.length - kept.length))}${email.slice(at)}`;
 }
 
-/** 010-1234-5678 → 010-****-**78 */
-export function maskPhone(phone: string): string {
+/** 010-1234-5678 → 010-****-**78 · 없으면 `—` (COM-002 §3-1) */
+export function maskPhone(phone: string | null): string {
+  if (phone === null) return '—';
   const digits = phone.replace(/\D/g, '');
   if (digits.length < 4) return '***';
   return `${digits.slice(0, 3)}-****-**${digits.slice(-2)}`;
