@@ -1,134 +1,190 @@
 'use client';
 
 /**
- * 입력 오류 · 가입 완료는 **State 다**(COM-003). 별도 Route 로 만들지
- * 않는다(CLAUDE.md UI). 그래서 한 컴포넌트가 세 모습을 갖는다.
+ * AUTH-002 회원가입 · Figma `부모 / 회원가입`
+ *
+ * 입력 오류 · 가입 완료는 **State 다**(COM-003 §13-3). 별도 Route 로 만들지
+ * 않는다.
+ *
+ * 생김새는 `/login` 의 카드와 같은 규격을 쓴다 — 흰 카드(radius 24,
+ * border `meti-line`), 칸 52px(radius 12, bg `meti-page`), 버튼 52px
+ * (radius 8). Figma 의 `Login Card` 와 같은 컴포넌트다.
  */
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { signUp, type SignUpState } from '../_actions';
+import { TERMS, TERMS_ORDER, type TermsKey } from '@/lib/constants/terms';
+import { fieldClass } from '@/components/ui/Field';
+import { BrandButton } from '@/components/ui/BrandButton';
+import { TermsSheet } from './TermsSheet';
+import { DoneNotice } from './DoneNotice';
 
-const IDLE: SignUpState = { status: 'idle' };
+const EMPTY: SignUpState = { status: 'idle' };
 
-const field =
-  'rounded-xl border border-black/10 bg-white px-3.5 py-3 text-[15px] outline-none focus:border-meti';
+const FIELD = fieldClass('card');
 
-function Row({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-meti-sub">
-        {label}
-        {hint !== undefined && <span className="ml-1.5 font-normal">{hint}</span>}
-      </span>
-      {children}
-    </label>
-  );
-}
+const LABEL = 'text-[14px] font-semibold leading-5 text-meti-ink';
 
 export function SignupForm() {
-  const [state, action, pending] = useActionState<SignUpState, FormData>(
-    signUp,
-    IDLE,
-  );
+  const [state, action, pending] = useActionState(signUp, EMPTY);
 
-  if (state.status === 'sent') {
-    return (
-      <div className="flex flex-col gap-4 text-center">
-        <p className="text-[15px] font-bold text-meti-ink">
-          {state.email} 으로
-          <br />
-          확인 메일을 보냈어요
-        </p>
-        <p className="text-[13px] leading-relaxed text-meti-sub">
-          메일의 링크를 한 번 눌러야 로그인할 수 있어요.
-          <br />
-          메일이 안 보이면 스팸함도 확인해주세요.
-        </p>
-        <Link
-          href="/login"
-          className="rounded-xl bg-meti py-3.5 text-[15px] font-bold text-white"
-        >
-          로그인하러 가기
-        </Link>
-      </div>
-    );
+  const [email, setEmail] = useState('');
+  const [agreed, setAgreed] = useState<Record<TermsKey, boolean>>({
+    terms: false,
+    privacy: false,
+    guardian: false,
+    marketing: false,
+  });
+  const [sheet, setSheet] = useState<TermsKey | null>(null);
+
+  /**
+   * **React 19 는 Action 이 끝나면 폼을 비운다.** 체크박스는 특히 조용히
+   * 돌아간다 — React 가 자기 값이 안 바뀌었다고 보고 다시 그리지 않는다.
+   * 동의를 넷 다 눌러 뒀는데 이메일 오타 하나로 전부 풀리면 다시 넷을
+   * 눌러야 한다. Action 이 끝날 때마다 고른 값을 다시 씌운다.
+   * (`login/_components/LoginForm.tsx` 와 같은 이유)
+   */
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    const form = formRef.current;
+    if (form === null) return;
+    for (const key of TERMS_ORDER) {
+      const box = form.elements.namedItem(`agree_${key}`);
+      if (box instanceof HTMLInputElement) box.checked = agreed[key];
+    }
+  }, [state, agreed]);
+
+  if (state.status === 'done' || state.status === 'sent') {
+    return <DoneNotice email={state.status === 'sent' ? state.email : null} />;
   }
 
+  const all = TERMS_ORDER.every((key) => agreed[key]);
+
+  const toggleAll = (on: boolean) =>
+    setAgreed({ terms: on, privacy: on, guardian: on, marketing: on });
+
   return (
-    <form action={action} className="flex flex-col gap-4">
-      <Row label="이메일">
-        <input name="email" type="email" autoComplete="email" required className={field} />
-      </Row>
-
-      <Row label="비밀번호" hint="8자 이상">
-        <input
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          minLength={8}
-          required
-          className={field}
-        />
-      </Row>
-
-      <Row label="보호자 이름">
-        <input name="account_name" type="text" autoComplete="name" required className={field} />
-      </Row>
-
-      <Row label="휴대폰 번호">
-        <input
-          name="phone_number"
-          type="tel"
-          inputMode="numeric"
-          autoComplete="tel"
-          placeholder="010-0000-0000"
-          required
-          className={field}
-        />
-      </Row>
-
-      <Row label="보호자 생년월일">
-        <input name="birth_date" type="date" required className={field} />
-      </Row>
-
-      <fieldset className="flex flex-col gap-2 rounded-xl bg-meti-bg/60 p-3.5">
-        <legend className="px-1 text-xs font-semibold text-meti-sub">
-          소식 받기 (선택)
-        </legend>
-        {[
-          ['marketing_email_opt_in', '이메일'],
-          ['marketing_sms_opt_in', '문자'],
-          ['marketing_alimtalk_opt_in', '알림톡'],
-        ].map(([name, label]) => (
-          <label key={name} className="flex items-center gap-2 text-[13px] text-meti-ink">
-            <input type="checkbox" name={name} className="h-4 w-4 accent-meti" />
-            {label}
+    <>
+      <div className="flex flex-col gap-3 rounded-3xl border border-meti-line bg-white p-4">
+        <form ref={formRef} action={action} className="flex flex-col gap-3">
+          <label className="flex flex-col gap-2">
+            <span className={LABEL}>이메일</span>
+            {/*
+              type 은 text 다. email 로 두면 브라우저 말풍선이 우리 문구보다
+              먼저 뜬다. 확인은 Action 이 한다.
+            */}
+            <input
+              name="email"
+              type="text"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="가입에 사용하실 이메일 주소를 입력해 주세요."
+              className={FIELD}
+            />
           </label>
-        ))}
-      </fieldset>
 
-      {state.status === 'error' && (
-        <p role="alert" className="text-[13px] font-semibold text-red-600">
-          {state.message}
-        </p>
-      )}
+          <label className="flex flex-col gap-2">
+            <span className={LABEL}>비밀번호</span>
+            <input
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="비밀번호 입력"
+              className={FIELD}
+            />
+            {/*
+              **권장이지 규칙이 아니다.** Action 이 막는 것은 8자 미만뿐이다.
+              영문+숫자를 강제하면 쓸 수 있는 비밀번호가 갑자기 줄어든다.
+            */}
+            <span className="text-[14px] leading-5 text-meti-ink">
+              8자 이상, 영문+숫자 조합을 권장해요.
+            </span>
+          </label>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-xl bg-meti py-3.5 text-[15px] font-bold text-white disabled:opacity-60"
-      >
-        {pending ? '만드는 중…' : '회원가입'}
-      </button>
-    </form>
+          <label className="flex flex-col gap-2">
+            <span className={LABEL}>비밀번호 확인</span>
+            <input
+              name="password_confirm"
+              type="password"
+              autoComplete="new-password"
+              placeholder="비밀번호를 다시 입력하세요"
+              className={FIELD}
+            />
+          </label>
+
+          {/* Figma 동의 블록 — 모두 동의 + 4줄 */}
+          <div className="flex flex-col">
+            <label className="flex min-h-[44px] cursor-pointer items-center gap-3 border-b border-meti-line px-1">
+              <input
+                type="checkbox"
+                checked={all}
+                onChange={(e) => toggleAll(e.target.checked)}
+                className="size-6 rounded-md accent-meti"
+              />
+              <span className="text-[16px] font-semibold leading-6 text-meti-ink">
+                모두 동의합니다
+              </span>
+            </label>
+
+            {TERMS_ORDER.map((key) => (
+              <div key={key} className="flex min-h-[44px] items-center gap-3 px-1">
+                <label className="flex flex-1 cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    name={`agree_${key}`}
+                    checked={agreed[key]}
+                    onChange={(e) =>
+                      setAgreed((prev) => ({ ...prev, [key]: e.target.checked }))
+                    }
+                    className="size-6 rounded-md accent-meti"
+                  />
+                  <span className="text-[14px] leading-5 text-meti-ink">
+                    ({TERMS[key].required ? '필수' : '선택'}) {TERMS[key].label}
+                  </span>
+                </label>
+
+                {/*
+                  **버튼이지 링크가 아니다.** 다른 곳으로 가는 것이 아니라
+                  이 화면 위에 시트를 연다(COM-003 §13-3).
+                */}
+                <button
+                  type="button"
+                  onClick={() => setSheet(key)}
+                  aria-label={`${TERMS[key].title} 보기`}
+                  className="px-2 text-[14px] leading-5 text-meti-sub underline"
+                >
+                  보기
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {state.status === 'error' && (
+            <p role="alert" className="text-[14px] leading-5 text-red-500">
+              {state.message}
+            </p>
+          )}
+
+          {state.status === 'taken' && (
+            <p role="alert" className="text-[14px] leading-5 text-red-500">
+              이미 가입된 이메일이에요.{' '}
+              <Link href="/login" className="font-semibold underline">
+                로그인하기
+              </Link>
+            </p>
+          )}
+
+          <BrandButton pending={pending}>{pending ? '가입하는 중' : '회원가입'}</BrandButton>
+        </form>
+      </div>
+
+      <TermsSheet open={sheet} onClose={() => setSheet(null)} />
+    </>
   );
 }

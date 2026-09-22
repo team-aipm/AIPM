@@ -28,6 +28,11 @@ import { createClient } from '@/lib/supabase/server';
 import { endSession } from '@/lib/supabase/sign-out';
 import { EVENT, recordOnce } from '@/lib/analytics/events';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import {
+  REMEMBER_COOKIE,
+  REMEMBER_OFF,
+  untilBrowserCloses,
+} from '@/lib/constants/session-persistence';
 import { emailForLoginId, isValidLoginId, looksLikeEmail } from '@/lib/constants/student-login';
 import { studentIdOfViewer } from '@/lib/services/student-login';
 
@@ -54,7 +59,26 @@ export async function signIn(
 
   const email = looksLikeEmail(typed) ? typed : emailForLoginId(typed);
 
-  const supabase = await createClient();
+  /**
+   * **「로그인 유지」 를 세션이 생기기 전에 정해 둔다.**
+   *
+   * 로그인하면 그 자리에서 쿠키가 써진다. 뒤늦게 표시를 남기면 첫 쿠키만
+   * 만료시각을 달고 나가고, 갱신이 한 번 돌기 전까지 브라우저를 닫아도
+   * 남아 있다. 체크를 푼 사람이 기대한 것과 다르다.
+   *
+   * 체크박스는 안 보내면 값이 없다(꺼짐). 기본은 켜짐이다.
+   */
+  const remember = formData.get('remember') !== null;
+
+  const jar = await cookies();
+  if (remember) {
+    jar.delete(REMEMBER_COOKIE);
+  } else {
+    // 만료시각을 주지 않는다 — 이 표시도 브라우저와 함께 사라져야 한다.
+    jar.set(REMEMBER_COOKIE, REMEMBER_OFF, { httpOnly: true, sameSite: 'lax', path: '/' });
+  }
+
+  const supabase = await createClient({ remember });
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error !== null) {
@@ -83,13 +107,11 @@ export async function signIn(
 
     // 아이다. 고를 것이 없으므로 자기 자신을 쿠키에 넣고 바로 홈으로
     // 보낸다. 홈과 미션 화면은 이 쿠키만 보므로 손댈 것이 없다.
-    const jar = await cookies();
-    jar.set(STUDENT_COOKIE, studentId, {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30,
-    });
+    //
+    // **「로그인 유지」 를 껐으면 이 쿠키도 같이 사라져야 한다.** 세션은
+    // 끊겼는데 「지금 보고 있는 학생」 만 30일 남아 있으면 앞뒤가 안 맞는다.
+    const stay = { httpOnly: true, sameSite: 'lax' as const, path: '/', maxAge: 60 * 60 * 24 * 30 };
+    jar.set(STUDENT_COOKIE, studentId, remember ? stay : untilBrowserCloses(stay));
     redirect('/home');
   }
 
@@ -104,4 +126,48 @@ export async function signIn(
 export async function signOut(): Promise<void> {
   await endSession();
   redirect('/login');
+}
+
+// ============================================================
+// 간편 로그인 (Figma `간편 로그인` · 구글 · 카카오 · 네이버)
+// ============================================================
+
+export type SocialState = { error: string | null };
+
+/**
+ * **아직 실제로 들어가지지 않는다.** 누르면 이유를 알려준다.
+ *
+ * `signInWithOAuth` 를 부르지 않는 것은 게을러서가 아니다. 부르면 사람을
+ * 구글까지 보냈다가 **에러를 들고 돌아오게** 된다. 막는 것이 셋이다.
+ *
+ * ```text
+ *   1. 자격증명    Supabase 대시보드에 Client ID/Secret 이 없다.
+ *                  Secret 이라 코드나 문서에 넣지 않는다(CLAUDE.md).
+ *
+ *   2. 네이버      Supabase 가 제공하는 Provider 목록에 없다.
+ *                  카카오는 있다(auth-kakao). 네이버는 문서 자체가 없다.
+ *
+ *   3. account     `handle_new_account` 트리거가 account_name ·
+ *                  phone_number · birth_date 를 요구한다. 구글·카카오는
+ *                  그 셋을 주지 않으므로 신규 가입이 통째로 롤백된다.
+ *                  (20260901023250_create_account_on_auth_signup.sql)
+ * ```
+ *
+ * 3번이 제일 깊다. 자격증명을 다 넣어도 **새 사람은 가입이 안 된다.**
+ * COM-002 §3 을 고쳐야 하는 일이라 코드에서 정할 것이 아니다.
+ *
+ * 셋이 풀리면 이 함수의 몸통만 `signInWithOAuth` 로 바꾸면 된다. 화면은
+ * 이미 다 그려져 있다.
+ */
+export async function signInWithSocial(
+  _prev: SocialState,
+  formData: FormData,
+): Promise<SocialState> {
+  const provider = String(formData.get('provider') ?? '');
+
+  const name =
+    provider === 'google' ? '구글' : provider === 'kakao' ? '카카오' : '네이버';
+
+  // **잘못한 것처럼 적지 않는다.** 아직 우리가 안 만든 것이다.
+  return { error: `${name} 로그인은 아직 준비 중이에요. 아이디로 들어와 주세요.` };
 }
