@@ -1,0 +1,39 @@
+-- 기록만 맞추는 파일이다. **하는 일이 없다.**
+--
+-- ## 왜 있나
+--
+-- 원격 `supabase_migrations.schema_migrations` 에 `20260909024635` 가 적용된
+-- 것으로 남아 있는데, **이 저장소에는 그 파일이 없었다.** git 전체 이력을
+-- 뒤져도 만들어진 적도 지워진 적도 없다.
+--
+--   git log --all --diff-filter=D -- supabase/migrations/   → 없음
+--
+-- 다른 자리에서 원격에 직접 올린 것으로 보인다(다른 PC 의 로컬 파일,
+-- Studio, 또는 `db diff` 결과).
+--
+-- ## 왜 지우지 않았나
+--
+-- `supabase migration repair --status reverted 20260909024635` 로 그 줄을
+-- 지우면 `db push` 는 통과한다. 하지만 **2026-09-09 에 무언가 올렸다는
+-- 사실 자체가 사라진다.** 나중에 스키마가 어긋났을 때 짚을 자리가 없어진다.
+--
+-- 파일을 더하면 기록은 남고 push 도 통과한다. 원격은 이미 적용된 것으로
+-- 알고 있으므로 이 파일은 **다시 실행되지 않는다.**
+--
+-- ## 스키마가 비어 있는 것은 확인했다 · 2026-09-22
+--
+-- 이 파일이 무엇을 했는지는 모르지만, 저장소의 다른 마이그레이션이 만드는
+-- 스키마와 원격이 일치하는 것은 확인했다.
+--
+--   account · student · consent_log · admin_user · audit_log · message   있음
+--   problem.ai_wrong_answer · ai_wrong_reasoning · target_misconception   있음
+--   student.login_id · auth_user_id · message.is_hint                     있음
+--   evaluation.initial_accuracy                                           nullable
+--   storage bucket `problem-photos`                                       있음
+--
+-- 그래서 빠진 것을 메우려 들지 않는다. 메울 것이 보이지 않는다.
+--
+-- **새로 받은 사람에게도 문제가 없다.** `supabase db reset` 을 하면 이 파일은
+-- 아무 일도 하지 않고 넘어가고, 스키마는 나머지 마이그레이션이 만든다.
+
+-- 의도적으로 비어 있다.
