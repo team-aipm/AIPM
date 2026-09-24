@@ -5,6 +5,7 @@
  */
 
 import { requireParent } from '@/lib/services/viewer';
+import { BackBar } from '@/components/ui/BackBar';
 import { StudentForm } from '@/components/student/StudentForm';
 import { addStudent, checkLoginId } from './_actions';
 
@@ -15,20 +16,21 @@ export default async function NewStudentPage() {
   // 칸이 「부모」다. 아이는 자기 홈으로 돌아간다.
   await requireParent();
 
+  /*
+    Figma `자녀 계정 생성` 의 뼈대다 — 상단 바, 24/32 제목, 그 아래 폼.
+    카드로 감싸지 않는다. 칸이 흰색이라 흰 카드 위에 올리면 경계가 사라진다.
+  */
   return (
-    <main className="flex flex-1 flex-col gap-6 px-6 py-10">
-      <header className="flex flex-col gap-1.5">
-        <h1 className="text-2xl font-extrabold text-meti">학생 등록</h1>
-        <p className="text-[13px] leading-relaxed text-meti-sub">
-          아이의 정보를 알려주세요.
-          <br />
-          학년에 맞는 문제와 말투로 시작합니다.
-        </p>
-      </header>
+    <main className="flex flex-1 flex-col pb-5">
+      <BackBar href="/parent" label="학습 현황으로" />
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
-        <StudentForm action={addStudent} checkId={checkLoginId} submitLabel="등록" />
-      </section>
+      <div className="flex flex-col gap-4 px-5 pt-3">
+        <h1 className="text-[24px] font-bold leading-8 text-meti-ink">
+          나의 생각이 자라는 시간
+        </h1>
+
+        <StudentForm action={addStudent} checkId={checkLoginId} submitLabel="계정 만들기" />
+      </div>
     </main>
   );
 }

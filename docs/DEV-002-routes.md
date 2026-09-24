@@ -1,6 +1,6 @@
 # DEV-002 · Screen ID ↔ Route 매핑
 
-> **Version:** 1.1 · **Updated:** 2026-09-17 · **Owner:** 운영 및 백오피스 PM\
+> **Version:** 1.2 · **Updated:** 2026-09-22 · **Owner:** 운영 및 백오피스 PM\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -31,13 +31,42 @@
 |---|---|---|---|
 | `AUTH-001` | 로그인 | `/login` | `(auth)/login/page.tsx` |
 | `AUTH-002` | 회원가입 | `/signup` | `(auth)/signup/page.tsx` |
-| `AUTH-003` | 약관·개인정보 동의 | `/signup/terms` | `(auth)/signup/terms/page.tsx` |
-| `AUTH-004` | 휴대폰 인증 | `/signup/verify` | `(auth)/signup/verify/page.tsx` |
+| `AUTH-003` | 약관·개인정보 동의 | **없음** · `/signup` 안의 바텀시트 | `(auth)/signup/_components/TermsSheet.tsx` |
+| `AUTH-004` | 휴대폰 인증 | **미정** | — |
 | `AUTH-005` | 비밀번호 찾기/재설정 | `/password` | `(auth)/password/page.tsx` |
 
-흐름: `/login → /signup → /signup/terms → /signup/verify → /onboarding/student`
+흐름: `/login → /signup → /onboarding/student`
 
-가입 완료는 별도 Route가 아니라 `/signup/verify`의 완료 State다. (COM-003 §4.1)
+가입 완료는 별도 Route가 아니라 `/signup`의 완료 State다. (COM-003 §4.1)
+
+### 2-1. AUTH-003 과 AUTH-004 · **2026-09-22**
+
+Figma 「메티_서비스」를 화면으로 옮기면서 둘의 Route 가 없어졌다.
+**Screen ID 는 그대로 둔다** — 화면이 사라진 것이 아니라 놓이는 자리가
+바뀐 것이고, Screen ID 를 바꾸는 것은 COM-003 의 일이다(§13-1).
+
+**`AUTH-003` 약관·개인정보 동의 → `/signup` 안의 바텀시트**
+
+Figma 가 동의 4줄(이용약관 · 개인정보 · 법정대리인 · 마케팅)을 가입 폼
+안에 두고, 「보기」를 누르면 본문만 바텀시트로 띄운다. 다른 화면으로
+가지 않는다.
+
+COM-003 §13-3 과 맞다 — State/Modal 은 Route 가 아니다. §1 의 원칙 2 는
+그런 것이 이 문서에 나타나지 않는다고 했지만, **행을 지우면 Screen ID
+매핑에 구멍이 생긴다.** 이 문서는 Screen ID ↔ Route 대응표이므로 「없음」
+이라고 적는 편이 읽는 사람에게 낫다.
+
+본문은 번들에 있다(`lib/constants/terms.ts`). 약관을 담을 테이블이
+COM-002 에 없어서 가져올 곳이 없다. **법무 검토 전 초안이다.**
+
+**`AUTH-004` 휴대폰 인증 → 미정**
+
+Figma 에 해당 프레임이 아예 없다. 같은 개정에서 회원가입이 휴대폰을 받지
+않게 되었으므로(COM-002 §3-1) **인증할 번호 자체가 없다.**
+
+Route 를 지우지 않고 「미정」으로 둔다. 무엇으로 본인을 확인할지, 애초에
+확인이 필요한지가 정해지지 않았다. 법정대리인 동의를 받는데 보호자를
+식별할 값이 이메일뿐이어도 되는지는 COM-007 §2 의 판단이다.
 
 ---
 
@@ -166,7 +195,7 @@ Next.js 라우팅 특성상 `students/new`가 `students/[studentId]`보다 먼�
 
 | Area | COM-003 §12 | 본 문서 Route |
 |---|---|---|
-| AUTH | 5 | 5 |
+| AUTH | 5 | 3 |
 | STU | 5 | 5 |
 | MIS | 3 | 3 |
 | PAR | 3 | 3 |
@@ -174,10 +203,13 @@ Next.js 라우팅 특성상 `students/new`가 `students/[studentId]`보다 먼�
 | BIL | 6 | 6 |
 | MY | 10 | 10 |
 | ADM | 4 | 5 |
-| **합계** | **39** | **40** |
+| **합계** | **39** | **38** |
 
 > ADM 이 하나 더 많다. `ADM-005` 가 목록과 상세 두 Route 를 쓴다 —
 > 서로 다른 Screen 이며 State/Modal 을 Route 로 만든 것이 아니다.
+>
+> AUTH 는 둘 적다. `AUTH-003` 은 `/signup` 안의 바텀시트가 되었고
+> `AUTH-004` 는 미정이다(§2-1). Screen 은 그대로 5개다.
 
 ---
 
@@ -244,7 +276,10 @@ ADM 화면이 없던 동안에는 Supabase Studio 조회로 버텼다. 이제 �
 
 1. `ADM-008`(CS 문의 · 대화 열람)을 만들 것인가 → COM-002 에 문의 테이블 필요
 2. 결제·정산 화면 → COM-005 §13 에서 PG 확정 뒤
-3. `consent_log` 를 쌓는 지점 → 가입 시점이 맞는지 COM-007 과 대조
+3. `consent_log` 를 쌓는 지점 → **가입 시점으로 구현했다**(2026-09-22).
+   `handle_new_account` 트리거가 `account` 와 같은 트랜잭션에서 남긴다 —
+   앱에서 나눠 넣으면 동의 없이 가입된 계정이 생길 수 있다. 그 지점이
+   맞는지는 COM-007 과 아직 대조하지 않았다
 
 ---
 
@@ -252,6 +287,7 @@ ADM 화면이 없던 동안에는 Supabase Studio 조회로 버텼다. 이제 �
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.2 | 2026-09-22 | **§2 `AUTH-003` · `AUTH-004` 의 Route 를 걷어냈다**(§2-1 추가). Figma 가 약관 동의를 가입 폼 안에 두고 본문만 바텀시트로 띄운다 — `/signup/terms` 는 COM-003 §13-3 과 어긋났다. 휴대폰 인증은 회원가입이 휴대폰을 받지 않게 되면서(COM-002 §3-1) 인증할 번호가 없어져 **미정**으로 둔다. Screen ID 는 그대로다. 흐름 줄과 §10 합계(AUTH 5 → 3)를 함께 맞췄다 | — |
 | 1.1 | 2026-09-17 | **학생 ↔ 부모 영역을 계정으로 가른다**(§3 · §5 · COM-003 §4.2). 전에는 "별도 확인 없이 오간다" 였다. `/onboarding/student` 만 학생 Area 에 있으면서 부모가 연다. Route 추가·삭제·개명 없음 | — |
 | — | 2026-09-10 | **보호자 PIN 삭제** (PAR-001 · PAR-003). 괄호 폴더가 경로에 들어가지 않는다는 점을 명시하고 PAR-002 파일 경로를 실제와 맞춤 | — |
 | 1.0 | 2026-08-28 | 최초 작성. COM-003 35개 Screen의 Route 매핑 확정 | — |

@@ -17,9 +17,9 @@ export type Database = {
       account: {
         Row: {
           account_id: string
-          account_name: string
+          account_name: string | null
           account_status: string
-          birth_date: string
+          birth_date: string | null
           created_at: string
           email: string
           last_login_at: string | null
@@ -27,13 +27,13 @@ export type Database = {
           marketing_consent_updated_at: string
           marketing_email_opt_in: boolean
           marketing_sms_opt_in: boolean
-          phone_number: string
+          phone_number: string | null
         }
         Insert: {
           account_id: string
-          account_name: string
+          account_name?: string | null
           account_status?: string
-          birth_date: string
+          birth_date?: string | null
           created_at?: string
           email: string
           last_login_at?: string | null
@@ -41,13 +41,13 @@ export type Database = {
           marketing_consent_updated_at?: string
           marketing_email_opt_in?: boolean
           marketing_sms_opt_in?: boolean
-          phone_number: string
+          phone_number?: string | null
         }
         Update: {
           account_id?: string
-          account_name?: string
+          account_name?: string | null
           account_status?: string
-          birth_date?: string
+          birth_date?: string | null
           created_at?: string
           email?: string
           last_login_at?: string | null
@@ -55,7 +55,7 @@ export type Database = {
           marketing_consent_updated_at?: string
           marketing_email_opt_in?: boolean
           marketing_sms_opt_in?: boolean
-          phone_number?: string
+          phone_number?: string | null
         }
         Relationships: []
       }
@@ -600,7 +600,7 @@ export type Database = {
         Row: {
           account_id: string
           auth_user_id: string | null
-          birth_date: string
+          birth_date: string | null
           created_at: string
           current_difficulty: number
           deleted_at: string | null
@@ -617,7 +617,7 @@ export type Database = {
         Insert: {
           account_id: string
           auth_user_id?: string | null
-          birth_date: string
+          birth_date: string | null
           created_at?: string
           current_difficulty: number
           deleted_at?: string | null
@@ -634,7 +634,7 @@ export type Database = {
         Update: {
           account_id?: string
           auth_user_id?: string | null
-          birth_date?: string
+          birth_date?: string | null
           created_at?: string
           current_difficulty?: number
           deleted_at?: string | null

@@ -1,16 +1,69 @@
 @import "tailwindcss";
 
 /**
- * 메티 색. 프로토타입(METI)에서 가져왔다.
+ * Pretendard — Figma 「메티_서비스」 가 쓰는 폰트.
+ *
+ * **동적 서브셋을 쓴다.** 한글 폰트는 통짜로 받으면 2MB 다. 이 CSS 는
+ * `unicode-range` 로 잘라 둔 조각을 선언만 해 두고, 브라우저가 화면에 실제로
+ * 나온 글자가 든 조각만 내려받는다. 초등학생이 집 와이파이로 여는 화면이라
+ * 첫 바이트가 중요하다.
+ *
+ * 패키지(`pretendard`)는 CDN 을 부르지 않는다. woff2 는 우리 빌드에 담겨
+ * 우리 도메인에서 나간다 — 외부 서비스를 새로 들이지 않는다(COM-005 §14).
+ */
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+
+/**
+ * 메티 색.
+ *
+ * **Figma 의 Semantic Colors 가 기준이다** (파일 「메티_서비스」).
+ * 프로토타입에서 눈대중으로 옮겼던 값을 2026-09-22 에 Figma 값으로 맞췄다.
+ *
+ * ```text
+ *   meti          action-primary        #206b7c
+ *   meti-bg       surface-brand         #ddf4f6
+ *   meti-ink      text-primary          #24333a
+ *   meti-sub      text-secondary        #5b6a72
+ * ```
+ *
+ * 이름을 안 바꾼 이유는 하나다 — 이 넷은 이미 화면 곳곳에서 쓰고 있다.
+ * 이름까지 갈면 색을 맞추는 일과 이름을 바꾸는 일이 한 커밋에 섞여, 화면이
+ * 이상해졌을 때 둘 중 무엇 때문인지 알 수 없다.
  *
  * 화면마다 #ddf4f6 을 적으면 색을 바꿀 때 전부 찾아다녀야 한다.
  * `bg-meti-bg` · `text-meti-sub` 처럼 이름으로 쓴다.
  */
 @theme {
-  --color-meti: #1f6f78;
+  /* 브랜드 */
+  --color-meti: #206b7c;
+  --color-meti-hover: #267587;
   --color-meti-bg: #ddf4f6;
-  --color-meti-ink: #12343b;
-  --color-meti-sub: #718087;
+
+  /* 글자 */
+  --color-meti-ink: #24333a;
+  --color-meti-sub: #5b6a72;
+  /** 아직 안 친 글자 · 도움말. Figma `text/placeholder` · `text-tertiary` */
+  --color-meti-hint: #66747b;
+  /** 못 누르는 버튼의 글자. Figma `text-disabled` */
+  --color-meti-off: #b5bdc2;
+
+  /* 바탕 */
+  /** 화면 바탕. Figma `background-primary`. 흰색이 아니다 */
+  --color-meti-page: #f7fafb;
+
+  /* 선 */
+  /** 카드 · 보조 버튼 테두리. Figma `border-default` */
+  --color-meti-line: #e2e8eb;
+  /**
+   * 입력 칸 테두리. Figma `border/input`.
+   *
+   * `meti-line` 보다 진하다. 칸은 「여기 쳐라」 라고 말해야 하므로 더
+   * 또렷해야 한다 — 같은 회색으로 두면 칸인지 구역인지 구분이 안 된다.
+   */
+  --color-meti-field: #89939a;
+
+  /** 못 누르는 브랜드 버튼의 바탕. Figma `action-primary-disabled` */
+  --color-meti-off-bg: #c8dadd;
 }
 
 :root {
@@ -21,7 +74,13 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  /**
+   * `Pretendard Variable` 은 위 서브셋 CSS 가 만든 이름이다. 그 뒤는 폰트가
+   * 아직 안 왔을 때 잠깐 쓰일 것들 — 한글이 깨지지 않게 OS 기본 한글 폰트를
+   * 먼저 세운다.
+   */
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+    'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
   --font-mono: var(--font-geist-mono);
 }
 
@@ -35,5 +94,6 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* 전에는 Arial 이 박혀 있었다. `--font-sans` 를 정의해 두고 안 쓰고 있었다 */
+  font-family: var(--font-sans);
 }

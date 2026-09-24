@@ -1,8 +1,18 @@
 /**
  * AUTH-001 로그인 · `/login` (DEV-002)
  *
- * 프로토타입(METI)의 로그인 화면을 옮긴 것이다. 캐릭터 그림은 아직
- * 파일이 없어서 자리만 잡아 뒀다.
+ * 생김새는 Figma `통합 로그인 / 부모님` 프레임을 옮긴 것이다.
+ *
+ * ```text
+ *   Welcome / 메티의 인사   180px   캐릭터 + 로고
+ *   Content / 335                   로그인 카드 + 가입 안내
+ *   (아래 34px 은 홈 인디케이터 자리)
+ * ```
+ *
+ * **소셜 로그인은 빼 두었다.** 프레임에는 「또는 간편하게 로그인」 아래
+ * 구글 · 카카오 · 네이버 동그라미가 있지만, 그건 외부 서비스를 새로
+ * 들이는 일이다(COM-005 §14). 같은 페이지 스티키도 「소셜 버튼은 추후
+ * 각 소셜에 맞춰 변경예정」 이라고 적어 뒀다 — 아직 정해진 것이 없다.
  */
 
 import Link from 'next/link';
@@ -29,30 +39,35 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="flex flex-1 flex-col justify-center gap-7 px-6 py-10">
-      <header className="flex flex-col items-center gap-2">
-        <h1 className="text-3xl font-extrabold tracking-tight text-meti">Meti</h1>
-        <p className="text-[13px] font-semibold text-meti-sub">
-          생각하는 힘을 키우는 학습 친구
-        </p>
-        <PartnerFace persona="friend" size={128} className="mt-1" />
+    <main className="flex flex-1 flex-col pb-[34px]">
+      {/*
+        Figma `Welcome / 메티의 인사` — 180px 에 캐릭터(97) 와 로고(121×55).
+
+        **둘 다 진짜 그림이 아직 없다.** 캐릭터는 프레임이 `METTY_02_Wave`
+        인데 우리에겐 `meti.png` 한 장뿐이라 그걸 쓴다. 로고 `meti-logo2.png`
+        는 받은 적이 없어 글자로 대신한다. 파일이 오면 여기만 바꾸면 된다.
+      */}
+      <header className="flex h-[180px] flex-col items-center justify-center px-5 py-3">
+        <PartnerFace persona="friend" size={97} />
+        <h1 className="flex h-[55px] items-center text-[34px] font-extrabold tracking-tight text-meti">
+          Meti
+        </h1>
       </header>
 
-      <p className="rounded-2xl bg-white px-4 py-3 text-center text-[14px] font-bold text-meti-ink shadow-sm">
-        다시 만나서 반가워! 로그인하고 시작하자
-      </p>
-
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      {/* Figma `Content / 335` */}
+      <div className="flex flex-col gap-3 px-5 pt-3">
         <LoginForm />
-      </section>
 
-      <p className="text-center text-[13px] text-meti-sub">
-        계정이 없으면 부모님과 함께{' '}
-        <Link href="/signup" className="font-semibold underline">
-          회원가입
-        </Link>
-        해줘
-      </p>
+        {/* Figma `처음 온 부모님 안내` */}
+        <div className="flex flex-col gap-1 pt-1 text-center">
+          <Link href="/signup" className="text-[14px] font-semibold leading-5 text-meti">
+            처음 오셨나요? 회원가입
+          </Link>
+          <p className="text-[12px] leading-[18px] text-meti-sub">
+            아이와 함께할 첫걸음, 메티가 도와드려요.
+          </p>
+        </div>
+      </div>
     </main>
   );
 }
