@@ -96,6 +96,16 @@ export function decide(recent: Row[], current: number): DifficultyDecision {
 /**
  * 최근 평가를 읽어 정하고, 바뀌었으면 학생에게 남긴다.
  *
+ * **현재 수준에서 푼 문제만 본다** (COM-001 §9 판정 시점).
+ *
+ * 수준을 옮기면 그 전 평가는 다른 수준에서 푼 것이다. 그것을 계속 세면
+ * 같은 기록으로 연달아 움직인다. 하루 10문제에 창이 3문제라 하루에도
+ * 레벨이 여러 번 바뀌고, 그러면 아이의 수준이 아니라 **그날의 운**을
+ * 따라간다.
+ *
+ * 창을 비우는 데 별도 칸이 필요하지 않다. `problem.difficulty` 에 문제를
+ * 낼 때의 수준이 이미 남아 있으므로, 지금 수준과 같은 문제만 고르면 된다.
+ *
  * **던지지 않는다.** 난이도를 못 옮겼다고 학습을 멈출 이유가 없다.
  * 다음 문제가 같은 수준으로 나갈 뿐이다.
  */
@@ -106,8 +116,9 @@ export async function updateDifficulty(
 ): Promise<DifficultyDecision> {
   const { data, error } = await client
     .from('evaluation')
-    .select('initial_accuracy, final_accuracy, self_correction, support_level')
+    .select('initial_accuracy, final_accuracy, self_correction, support_level, problem!inner(difficulty)')
     .eq('student_id', studentId)
+    .eq('problem.difficulty', current)
     .order('evaluated_at', { ascending: false })
     .limit(WINDOW);
 

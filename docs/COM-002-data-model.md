@@ -1,6 +1,6 @@
 # COM-002 · 공통 데이터 구조 정의서 --- 개발용
 
-> **Version:** 1.5 · **Updated:** 2026-09-17 · **Owner:** (미지정)\
+> **Version:** 1.6 · **Updated:** 2026-09-26 · **Owner:** (미지정)\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -345,6 +345,14 @@ Rules: - 시스템 오류 문제에는 정상 Evaluation을 만들지 않는다.
 
 `current_level` · `reasoning_level` · `transfer_level`: 1\~5.
 `current_level` 3 = 학년 중간 수준.
+
+`current_level` 은 **하루를 마칠 때 서버가 계산한다.** 그날 낸 문제들의
+`Problem.difficulty` 중앙값이다. AI(06 DAILY ANALYZER)의 출력에서 받지
+않는다 — 같은 기록이면 언제나 같은 결과여야 한다(COM-001 §9 · §10).
+
+`Student.current_difficulty`(§4)와 헷갈리지 않는다. 그쪽은 문제를 마칠
+때마다 움직이는 **지금 내보낼 문제의 수준**이고, 이쪽은 하루에 한 번
+정하는 **요즘 어디쯤인가**다. 역할이 다르므로 합치지 않는다.
 
 3개 JSONB의 내부 schema와 갱신 규칙은 `prompts/logic-auditor.md` Prompt 05에서
 정의한다.
@@ -698,6 +706,7 @@ COM-007 §13 이 요청한 세 가지다. 없으면 ADM 영역을 만들 수 없
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.6 | 2026-09-26 | §10 `current_level` 을 **누가 채우는지** 명시. 하루를 마칠 때 **서버가** 그날 `Problem.difficulty` 중앙값으로 정한다. 전에는 06 DAILY ANALYZER 의 `memory_update.current_level` 을 읽게 돼 있었으나 **06 의 출력 스펙에 그 필드가 없어** 아무도 채우지 않았다 — 운영 중 학생 5명 전원이 시작값 3 에 머물러 있었다. `Student.current_difficulty`(§4)와의 역할 구분도 함께 적었다. 필드·타입·관계 변경 없음. COM-001 §9 와 함께 변경 | — |
 | 1.5 | 2026-09-17 | §14 이벤트명 3개 추가: `child_login_first`(계정 분리로 새로 생긴 이탈 지점) · `ai_call_failed` · `answer_verification_failed`(둘 다 어느 테이블에도 안 남는 AI 품질 신호). **`event_properties` 에 원문·이름을 넣지 않는다**는 규칙과, **다른 테이블에 있는 사실은 이벤트로 중복 저장하지 않는다**(§17)는 규칙을 §14 본문에 명시. 필드·타입·관계 변경 없음 | — |
 | 1.4 | 2026-09-17 | §4-1 `login_id`·`auth_user_id` **선택 → 등록 시 필수**. 부모 계정이 학생 화면에 들어가지 않게 되어(COM-003 §4.2 함께 개정), 아이디가 없으면 그 아이가 학습을 시작할 길이 없다. **DB 는 nullable 그대로** — 이전에 아이디 없이 등록된 행이 있어 `NOT NULL` 로 조이지 않는다. 막는 자리는 등록 화면과 서버다. 필드·타입·관계 변경 없음 | — |
 | — | 2026-09-10 | §20-B 추가: `AdminUser` · `AuditLog` · `ConsentLog` (COM-007 §13). ADM 영역의 선행 조건 | — |

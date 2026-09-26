@@ -185,8 +185,48 @@ export async function refreshMemory(client: Client, studentId: string): Promise<
 }
 
 /**
- * 하루를 마치며 06 의 판단을 반영한다 (COM-002 §10 「첫날 학습 결과로 초기
+ * 그날 낸 문제들의 수준 하나. 문제가 없으면 `null`.
+ *
+ * **중앙값이다.** 마지막 값을 쓰면 그날 마지막 한 문제의 운에 좌우되고,
+ * 최빈값은 동점일 때 무엇을 고를지 또 정해야 한다. 중앙값은 낮에 몇 번
+ * 출렁여도 가운데를 집는다. (COM-001 §9)
+ */
+async function todayLevel(client: Client, sessionId: string): Promise<number | null> {
+  const { data, error } = await client
+    .from('problem')
+    .select('difficulty')
+    .eq('session_id', sessionId);
+
+  if (error !== null) {
+    console.error(`[memory] 오늘 문제 수준을 읽지 못했습니다: ${error.message}`);
+    return null;
+  }
+
+  const levels = (data ?? []).map((p) => p.difficulty).sort((a, b) => a - b);
+  if (levels.length === 0) return null;
+
+  const mid = Math.floor(levels.length / 2);
+  // 짝수 개면 가운데 둘의 평균이 3.5 같은 값이 된다. 수준은 정수 칸이므로
+  // 내림한다 — 올림하면 실제로 푼 적 없는 수준으로 올라갈 수 있다.
+  const median =
+    levels.length % 2 === 1 ? levels[mid] : Math.floor((levels[mid - 1] + levels[mid]) / 2);
+
+  return Math.min(5, Math.max(1, median));
+}
+
+/**
+ * 하루를 마치며 총평을 반영한다 (COM-002 §10 「첫날 학습 결과로 초기
  * 생성한다」).
+ *
+ * ## `current_level` 은 서버가 정한다 (COM-001 §9 · COM-002 §10)
+ *
+ * 전에는 06 의 `memory_update.current_level` 을 읽었다. **그런데 06 의
+ * 출력 스펙에 그 필드가 없었다.** 모델이 낼 이유가 없는 값을 기다리다
+ * 매번 빈손으로 돌아왔고, 학생 전원이 시작값 3 에 머물렀다.
+ *
+ * AI 에 다시 맡기지 않는다. 05 가 문제마다 내놓는 난이도 의견을 쓰지
+ * 않는 것, Support Level 최종값을 서버가 계산하는 것과 같은 이유다 —
+ * 같은 기록이면 언제나 같은 결과여야 이상할 때 재현해 볼 수 있다.
  *
  * 06 은 `memory_update` 로 `logic_gaps` · `priority_concepts` ·
  * `next_session_focus` 를 낸다. **세는 것은 이미 `refreshMemory` 가 했다.**
@@ -195,7 +235,7 @@ export async function refreshMemory(client: Client, studentId: string): Promise<
 export async function applyDailySummary(
   client: Client,
   studentId: string,
-  input: { level: number | null; priorityConcepts: unknown; nextFocus: unknown },
+  input: { sessionId: string; priorityConcepts: unknown; nextFocus: unknown },
 ): Promise<void> {
   const existing = await getMemory(client, studentId);
   if (existing === null) {
@@ -203,8 +243,7 @@ export async function applyDailySummary(
     return;
   }
 
-  const level =
-    input.level === null ? existing.current_level : Math.min(5, Math.max(1, input.level));
+  const level = (await todayLevel(client, input.sessionId)) ?? existing.current_level;
 
   const review = Array.isArray(input.priorityConcepts) && input.priorityConcepts.length > 0
     ? (input.priorityConcepts as unknown as Json)
