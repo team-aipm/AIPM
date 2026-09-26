@@ -1014,11 +1014,12 @@ async function summarizeDay(
     //
     // `current_level` 은 하루에 한 번 여기서만 움직인다. 문제마다 흔들리는
     // 값은 `student.current_difficulty` 쪽이다.
+    //
+    // **06 에게 묻지 않는다.** 전에는 `memory_update.current_level` 을
+    // 읽었는데 06 의 출력 스펙에 그 필드가 없어서 늘 비어 있었다. 이제
+    // 서버가 오늘 낸 문제들의 수준으로 정한다 (COM-001 §9).
     await applyDailySummary(supabase, args.student.student_id, {
-      level: (() => {
-        const value = read(result.output, 'memory_update.current_level');
-        return typeof value === 'number' ? value : null;
-      })(),
+      sessionId: args.session.session_id,
       priorityConcepts: read(result.output, 'memory_update.priority_concepts'),
       nextFocus: read(result.output, 'memory_update.next_session_focus'),
     });

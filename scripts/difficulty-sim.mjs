@@ -39,11 +39,9 @@
  *
  * ## 여기서 다루지 않는 것
  *
- * `student_memory.current_level` 은 시뮬레이션하지 않는다. 그 값은 06
- * DAILY ANALYZER 가 하루를 마치며 정하는데, **06 의 출력 스펙에
- * `current_level` 이 없다.** 코드는 `memory_update.current_level` 을 읽지만
- * 모델이 낼 이유가 없는 필드다. 고치기 전까지 흉내낼 대상이 없다.
- * (COM-001 §9 · COM-002 §10 변경이 필요한 사안이라 여기서 손대지 않는다)
+ * `student_memory.current_level` 은 시뮬레이션하지 않는다. 그 값은 하루를
+ * 마칠 때 그날 문제 난이도의 중앙값으로 정해지므로(COM-001 §9),
+ * `current_difficulty` 가 어떻게 움직이는지 보면 따라 읽을 수 있다.
  *
  * 여기서 보는 것은 `student.current_difficulty` 하나다.
  */
@@ -176,10 +174,13 @@ function simulate(profile, options) {
         moves++;
         level = decision.level;
 
-        // 레벨이 바뀌면 앞 기록은 **다른 수준에서 푼 것**이다. 지금
-        // 서비스는 창을 비우지 않아서, 한 번 움직인 직후 같은 기록으로
-        // 또 움직인다. 'cooldown' 은 그것만 바꿔 본다.
-        if (variant === 'cooldown') recent.length = 0;
+        // 레벨이 바뀌면 앞 기록은 **다른 수준에서 푼 것**이다. 서비스는
+        // `problem.difficulty` 로 현재 수준의 평가만 골라 읽으므로, 여기서
+        // 창을 비우는 것과 같다 (COM-001 §9).
+        //
+        // 'keep' 은 그 규칙이 없던 때를 재현한다. 무엇이 나아졌는지
+        // 보려면 비교 대상이 있어야 한다.
+        if (variant !== 'keep') recent.length = 0;
       }
     }
 
@@ -224,8 +225,8 @@ function parseArgs(argv) {
  * 셋 다 부르는 쪽만 다르므로, COM-001 §9 를 고치지 않고도 비교할 수 있다.
  */
 const VARIANTS = {
-  current: '지금 그대로 · 문제마다 판정, 창 유지',
-  cooldown: '움직인 직후 창 비우기 · 문제마다 판정',
+  current: '지금 서비스 · 문제마다 판정, 현재 수준 평가만',
+  keep: '옛 방식 · 수준을 옮겨도 앞 평가를 계속 봄',
   daily: '하루에 한 번만 판정',
 };
 
@@ -412,8 +413,8 @@ function report(results, options) {
     console.log('  ' + c.dim(`하루 ${options.problemsPerDay}문제인데 판단 창이 ${RECENT_WINDOW}문제다. 하루에도 여러 번 움직인다.`));
   }
   console.log('');
-  console.log(c.dim('  student_memory.current_level 은 여기서 다루지 않는다. 06 이 그 값을'));
-  console.log(c.dim('  내지 않아 실제로도 움직이지 않는다 — 파일 맨 위 주석 참고.'));
+  console.log(c.dim('  여기서 보는 것은 student.current_difficulty 다. student_memory.current_level 은'));
+  console.log(c.dim('  하루를 마칠 때 그날 문제 난이도의 중앙값으로 정해진다 (COM-001 §9).'));
   console.log('');
 }
 
