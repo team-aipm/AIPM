@@ -31,7 +31,7 @@ export default async function ParentLayout({ children }: { children: React.React
   if ((await studentIdOfViewer(supabase, auth.user.id)) !== null) redirect('/home');
 
   return (
-    <div className="flex min-h-dvh justify-center bg-meti-bg">
+    <div className="flex min-h-dvh justify-center bg-meti-page">
       <div className="flex w-full max-w-[480px] flex-col pb-20">
         {children}
 

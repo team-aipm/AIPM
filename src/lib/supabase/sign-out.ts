@@ -13,6 +13,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import { REMEMBER_COOKIE } from '@/lib/constants/session-persistence';
 
 /**
  * 세션과 「지금 보고 있는 학생」을 함께 지운다.
@@ -29,4 +30,7 @@ export async function endSession(): Promise<void> {
 
   const jar = await cookies();
   jar.delete(STUDENT_COOKIE);
+
+  // 「로그인 유지」 표시도 지운다. 다음 사람은 자기가 고른다.
+  jar.delete(REMEMBER_COOKIE);
 }
