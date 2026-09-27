@@ -12,14 +12,39 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       account: {
         Row: {
           account_id: string
-          account_name: string
+          account_name: string | null
           account_status: string
-          birth_date: string
+          birth_date: string | null
           created_at: string
           email: string
           last_login_at: string | null
@@ -27,13 +52,13 @@ export type Database = {
           marketing_consent_updated_at: string
           marketing_email_opt_in: boolean
           marketing_sms_opt_in: boolean
-          phone_number: string
+          phone_number: string | null
         }
         Insert: {
           account_id: string
-          account_name: string
+          account_name?: string | null
           account_status?: string
-          birth_date: string
+          birth_date?: string | null
           created_at?: string
           email: string
           last_login_at?: string | null
@@ -41,13 +66,13 @@ export type Database = {
           marketing_consent_updated_at?: string
           marketing_email_opt_in?: boolean
           marketing_sms_opt_in?: boolean
-          phone_number: string
+          phone_number?: string | null
         }
         Update: {
           account_id?: string
-          account_name?: string
+          account_name?: string | null
           account_status?: string
-          birth_date?: string
+          birth_date?: string | null
           created_at?: string
           email?: string
           last_login_at?: string | null
@@ -55,7 +80,7 @@ export type Database = {
           marketing_consent_updated_at?: string
           marketing_email_opt_in?: boolean
           marketing_sms_opt_in?: boolean
-          phone_number?: string
+          phone_number?: string | null
         }
         Relationships: []
       }
@@ -117,7 +142,15 @@ export type Database = {
           target_id?: string
           target_type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_admin_fk"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "admin_user"
+            referencedColumns: ["admin_id"]
+          },
+        ]
       }
       consent_log: {
         Row: {
@@ -144,7 +177,15 @@ export type Database = {
           consent_type?: string
           document_version?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "consent_log_account_fk"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "account"
+            referencedColumns: ["account_id"]
+          },
+        ]
       }
       evaluation: {
         Row: {
@@ -533,7 +574,6 @@ export type Database = {
           ai_wrong_reasoning: string | null
           answer_lock_status: Database["public"]["Enums"]["answer_lock_status"]
           concept: string
-          target_misconception: string | null
           created_at: string
           difficulty: number
           learning_mode: Database["public"]["Enums"]["learning_mode"]
@@ -543,6 +583,7 @@ export type Database = {
           problem_text: string
           session_id: string
           student_id: string
+          target_misconception: string | null
           verified_answer: Json | null
         }
         Insert: {
@@ -550,7 +591,6 @@ export type Database = {
           ai_wrong_reasoning?: string | null
           answer_lock_status: Database["public"]["Enums"]["answer_lock_status"]
           concept: string
-          target_misconception?: string | null
           created_at?: string
           difficulty: number
           learning_mode: Database["public"]["Enums"]["learning_mode"]
@@ -560,6 +600,7 @@ export type Database = {
           problem_text: string
           session_id: string
           student_id: string
+          target_misconception?: string | null
           verified_answer?: Json | null
         }
         Update: {
@@ -567,7 +608,6 @@ export type Database = {
           ai_wrong_reasoning?: string | null
           answer_lock_status?: Database["public"]["Enums"]["answer_lock_status"]
           concept?: string
-          target_misconception?: string | null
           created_at?: string
           difficulty?: number
           learning_mode?: Database["public"]["Enums"]["learning_mode"]
@@ -577,6 +617,7 @@ export type Database = {
           problem_text?: string
           session_id?: string
           student_id?: string
+          target_misconception?: string | null
           verified_answer?: Json | null
         }
         Relationships: [
@@ -600,7 +641,7 @@ export type Database = {
         Row: {
           account_id: string
           auth_user_id: string | null
-          birth_date: string
+          birth_date: string | null
           created_at: string
           current_difficulty: number
           deleted_at: string | null
@@ -611,13 +652,15 @@ export type Database = {
           nickname_source: Database["public"]["Enums"]["nickname_source"]
           persona_type: Database["public"]["Enums"]["persona_type"]
           student_id: string
+          student_login_id: string | null
           student_name: string
+          student_password_hash: string | null
           student_status: Database["public"]["Enums"]["student_status"]
         }
         Insert: {
           account_id: string
           auth_user_id?: string | null
-          birth_date: string
+          birth_date?: string | null
           created_at?: string
           current_difficulty: number
           deleted_at?: string | null
@@ -628,13 +671,15 @@ export type Database = {
           nickname_source?: Database["public"]["Enums"]["nickname_source"]
           persona_type: Database["public"]["Enums"]["persona_type"]
           student_id?: string
+          student_login_id?: string | null
           student_name: string
+          student_password_hash?: string | null
           student_status?: Database["public"]["Enums"]["student_status"]
         }
         Update: {
           account_id?: string
           auth_user_id?: string | null
-          birth_date?: string
+          birth_date?: string | null
           created_at?: string
           current_difficulty?: number
           deleted_at?: string | null
@@ -645,7 +690,9 @@ export type Database = {
           nickname_source?: Database["public"]["Enums"]["nickname_source"]
           persona_type?: Database["public"]["Enums"]["persona_type"]
           student_id?: string
+          student_login_id?: string | null
           student_name?: string
+          student_password_hash?: string | null
           student_status?: Database["public"]["Enums"]["student_status"]
         }
         Relationships: [
@@ -767,7 +814,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      is_admin: { Args: never; Returns: boolean }
       owns_student: { Args: { p_student_id: string }; Returns: boolean }
+      parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
     }
     Enums: {
       admin_role: "full" | "cs" | "readonly"
@@ -805,7 +854,7 @@ export type Database = {
       report_type: "daily_student" | "weekly_parent"
       session_status: "active" | "completed" | "incomplete"
       speaker: "student" | "ai" | "system"
-      student_status: "active" | "deleted_pending"
+      student_status: "active" | "deleted_pending" | "test"
       subscription_status:
         | "trial"
         | "active"
@@ -828,12 +877,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -857,11 +906,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -882,11 +931,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -907,11 +956,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -924,11 +973,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -938,6 +987,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       admin_role: ["full", "cs", "readonly"],
@@ -979,7 +1031,7 @@ export const Constants = {
       report_type: ["daily_student", "weekly_parent"],
       session_status: ["active", "completed", "incomplete"],
       speaker: ["student", "ai", "system"],
-      student_status: ["active", "deleted_pending"],
+      student_status: ["active", "deleted_pending", "test"],
       subscription_status: [
         "trial",
         "active",

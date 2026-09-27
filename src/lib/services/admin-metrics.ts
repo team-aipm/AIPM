@@ -25,6 +25,12 @@ import 'server-only';
  * 안 남기 때문이다(COM-002 §14). 그래서 **2026-09-17 이전에 이미 들어온
  * 아이는 안 세어진다** — 화면에 그렇게 적는다. 없는 값을 0 으로 보여주면
  * 아무도 안 들어온 것으로 읽힌다.
+ *
+ * ## 테스트 데이터는 안 센다
+ *
+ * 프롬프트 랩이 만든 학생과 계정은 상태가 `test` 다(COM-002 §3 · §4).
+ * 여기 있는 집계는 전부 그것을 뺀다. **새 집계를 더할 때도 빼야 한다** —
+ * 빠뜨려도 오류가 나지 않고 숫자만 조용히 커진다.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -48,16 +54,48 @@ function distinct(rows: { student_id: string | null }[] | null): number {
   return new Set((rows ?? []).map((row) => row.student_id).filter((id) => id !== null)).size;
 }
 
+// ============================================================
+// 테스트 데이터를 세지 않는다 (COM-002 §3 · §4)
+// ============================================================
+//
+// 프롬프트 랩이 만든 학생은 `student_status = 'test'`, 그 학생을 매단
+// 계정은 `account_status = 'test'` 다. **진짜 지표에 섞이면 안 된다.**
+//
+// `.eq('student_status','active')` 를 쓰는 곳은 자동으로 빠지지만, 퍼널은
+// 상태를 안 보고 세므로 여기서 직접 거른다.
+//
+// **다른 테이블에서 셀 때는 `student!inner(...)` 로 붙여서 거른다.**
+// 학생 id 목록을 먼저 읽어 `in()` 으로 넘기는 방법도 있지만, 학생이 늘면
+// URL 이 길어져 어느 순간 조용히 깨진다.
+//
+// 앞으로 집계를 새로 짤 때 이 상수를 쓰면 빠뜨릴 일이 줄어든다.
+export const TEST_STATUS = 'test';
+
 export async function funnel(db: Db): Promise<FunnelStep[]> {
   const head = { count: 'exact' as const, head: true };
 
   const [accounts, students, withLogin, loggedIn, sessions, completed] = await Promise.all([
-    db.from('account').select('*', head),
-    db.from('student').select('*', head),
-    db.from('student').select('*', head).not('login_id', 'is', null),
-    db.from('event').select('student_id').eq('event_name', EVENT.childLoginFirst),
-    db.from('learning_session').select('student_id'),
-    db.from('problem').select('student_id').eq('problem_status', 'completed'),
+    db.from('account').select('*', head).neq('account_status', TEST_STATUS),
+    db.from('student').select('*', head).neq('student_status', TEST_STATUS),
+    db
+      .from('student')
+      .select('*', head)
+      .not('login_id', 'is', null)
+      .neq('student_status', TEST_STATUS),
+    db
+      .from('event')
+      .select('student_id, student!inner(student_status)')
+      .eq('event_name', EVENT.childLoginFirst)
+      .neq('student.student_status', TEST_STATUS),
+    db
+      .from('learning_session')
+      .select('student_id, student!inner(student_status)')
+      .neq('student.student_status', TEST_STATUS),
+    db
+      .from('problem')
+      .select('student_id, student!inner(student_status)')
+      .eq('problem_status', 'completed')
+      .neq('student.student_status', TEST_STATUS),
   ]);
 
   return [
@@ -76,6 +114,8 @@ export async function funnel(db: Db): Promise<FunnelStep[]> {
  * 아이디 없이 등록된 학생이다. 부모 계정이 학생 화면에 못 들어가게 되면서
  * (COM-003 §4.2) **이 아이들은 학습을 시작할 방법이 없다.** 퍼널의 한 칸이
  * 아니라 지금 손을 써야 하는 숫자라 따로 센다.
+ *
+ * `active` 만 세므로 테스트 학생(`test`)은 자동으로 빠진다.
  */
 export async function blockedStudents(db: Db): Promise<number> {
   const { count } = await db

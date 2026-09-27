@@ -5,6 +5,7 @@ import { AIPM_PRESET } from '@/lib/ai/prompts/stages';
 import { VAR_SET_PRESET } from '@/lib/ai/prompts/variables';
 import { allowServerApiKey, isUnlocked } from './_access';
 import { PromptLab } from './_components/PromptLab';
+import { LabSeat } from './_components/LabSeat';
 
 /**
  * 프롬프트 실험실. **개발 도구다. 제품 화면이 아니다.**
@@ -38,10 +39,17 @@ export default async function PromptLabPage() {
   if (!(await isUnlocked())) notFound();
 
   return (
-    <PromptLab
-      preset={AIPM_PRESET}
-      varPreset={VAR_SET_PRESET}
-      hasEnvApiKey={allowServerApiKey() && hasGeminiApiKey()}
-    />
+    <>
+      {/*
+        프롬프트 판보다 위에 둔다. **앉았는지 모르고 돌리면 안 된다** —
+        앉아 있으면 제품 액션이 실제 행을 만든다.
+      */}
+      <LabSeat />
+      <PromptLab
+        preset={AIPM_PRESET}
+        varPreset={VAR_SET_PRESET}
+        hasEnvApiKey={allowServerApiKey() && hasGeminiApiKey()}
+      />
+    </>
   );
 }
