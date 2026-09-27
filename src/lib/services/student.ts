@@ -85,7 +85,8 @@ export async function createStudent(
     studentName: string;
     nickname: string;
     nicknameSource: Database['public']['Enums']['nickname_source'];
-    birthDate: string;
+    /** 등록 화면에서 받지 않는다. COM-002 §4-2 */
+    birthDate: string | null;
     grade: number;
   },
 ): Promise<Student> {

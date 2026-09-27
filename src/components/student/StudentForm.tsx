@@ -1,7 +1,9 @@
 'use client';
 
 /**
- * 학생 등록 폼. **두 화면이 같이 쓴다**(DEV-002 §3).
+ * 자녀 계정 생성 폼 · Figma `자녀 계정 생성`
+ *
+ * **두 화면이 같이 쓴다**(DEV-002 §3).
  *
  * ```text
  * STU-001  첫 학생 등록   /onboarding/student        부모가 쓴다
@@ -11,12 +13,30 @@
  * 폼을 두 벌 두면 학년 검사 같은 규칙이 한쪽만 바뀐다. 달라지는 것은
  * **보낼 곳(`action`)** 뿐이라 그것만 밖에서 받는다.
  *
+ * ## Figma 대로 바꾼 것 (2026-09-22)
+ *
+ * ```text
+ *   자녀 정보    이름 또는 별명 · 학년
+ *   로그인 정보  아이디 · 비밀번호 · 비밀번호 확인
+ * ```
+ *
+ * - **생년월일 칸을 없앴다.** 디자인에 없고 쓰는 곳도 없다. 난이도는
+ *   `grade` 가 정한다(COM-002 §4-2).
+ * - **이름과 별명이 한 칸이 됐다.** DB 는 둘 다 `not null` 이라 같은 값을
+ *   양쪽에 넣는다(`student-registration.ts`).
+ * - **비밀번호 확인이 생겼다.** 부모가 아이 비밀번호를 대신 정하는 자리라
+ *   오타를 그 자리에서 잡지 못하면 아이가 못 들어간다.
+ * - 학년은 라디오 셋에서 **고르는 칸** 으로 바꿨다. Figma 가 펼치는 칸이다.
+ *
  * **파트너는 여기서 안 고른다.** 함께 공부할 상대를 정하는 일이라 아이가
  * 한다(COM-003 §4.2 · `STU-003`). 부모가 대신 고르면 아이는 자기가 고르지
  * 않은 상대와 시작한다.
  */
 
 import { useActionState, useState } from 'react';
+import { Field, fieldClass } from '@/components/ui/Field';
+import { FormSection } from '@/components/ui/FormSection';
+import { BrandButton } from '@/components/ui/BrandButton';
 import { LOGIN_ID_PATTERN, isValidLoginId } from '@/lib/constants/student-login';
 import type { IdCheck } from '@/lib/services/student-login';
 
@@ -24,8 +44,8 @@ export type NewStudentState = { error: string | null };
 
 const IDLE: NewStudentState = { error: null };
 
-const field =
-  'rounded-xl border border-black/10 bg-white px-3.5 py-3 text-[15px] outline-none focus:border-meti';
+/** 칸이 옅은 화면 바탕 위에 바로 놓인다 — 카드가 없다 */
+const FIELD = fieldClass('page');
 
 export function StudentForm({
   action,
@@ -38,7 +58,6 @@ export function StudentForm({
   submitLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, IDLE);
-  const [name, setName] = useState('');
 
   /**
    * 아이디가 겹치는가. **누르면 본다.**
@@ -82,148 +101,115 @@ export function StudentForm({
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold text-meti-sub">학생 이름</span>
-        <input
-          name="student_name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          required
-          className={field}
-        />
-      </label>
+    <form action={formAction} className="flex flex-col gap-7">
+      <FormSection title="자녀 정보">
+        <Field label="이름 또는 별명">
+          {/*
+            **한 칸이 DB 두 칸으로 간다.** `student_name` 과 `nickname` 이
+            둘 다 `not null` 이라 같은 값을 넣고, 무엇을 기본으로 썼는지
+            `nickname_source` 에 남긴다(COM-002 §4-2).
+          */}
+          <input name="student_name" required placeholder="은재" className={FIELD} />
+        </Field>
 
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold text-meti-sub">
-          뭐라고 부를까요 <span className="font-normal">비우면 이름으로 불러요</span>
-        </span>
-        <input name="nickname" placeholder={name || '은재'} className={field} />
-      </label>
+        <Field label="학년" htmlFor="grade" hint="지금은 4~6학년만 시작할 수 있어요.">
+          {/*
+            **고르는 칸을 쓴다.** Figma 가 펼치는 칸이고, 기기가 제 방식대로
+            열어 준다 — 화살표도 기기 것이라 아이콘 파일이 필요 없다.
+          */}
+          <select id="grade" name="grade" defaultValue="4" className={FIELD}>
+            {[4, 5, 6].map((grade) => (
+              <option key={grade} value={grade}>
+                {grade}학년
+              </option>
+            ))}
+          </select>
+        </Field>
+      </FormSection>
 
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold text-meti-sub">생년월일</span>
-        <input name="birth_date" type="date" required className={field} />
-      </label>
-
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-xs font-semibold text-meti-sub">학년</legend>
-        <div className="flex gap-2">
-          {[4, 5, 6].map((grade) => (
-            <label
-              key={grade}
-              className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white py-3 text-[14px] font-semibold text-meti-ink has-checked:border-meti has-checked:bg-meti-bg"
-            >
-              <input
-                type="radio"
-                name="grade"
-                value={grade}
-                defaultChecked={grade === 4}
-                className="sr-only"
-              />
-              {grade}학년
-            </label>
-          ))}
-        </div>
-        <p className="text-[11px] text-meti-sub">지금은 4~6학년만 시작할 수 있어요.</p>
-      </fieldset>
-
-      {/*
-        **아이 로그인은 필수다.** 접어 두었던 것을 펼쳤다.
-        부모 계정은 학생 화면에 들어가지 않으므로, 이것이 없으면 아이가
-        학습을 시작할 길이 아예 없다. 접어 두면 안 채우고 지나간다.
-      */}
-      <fieldset className="flex flex-col gap-3 rounded-xl border border-black/10 bg-white px-3.5 py-3">
-        <legend className="px-1 text-xs font-semibold text-meti-sub">
-          아이가 쓸 아이디와 비밀번호
-        </legend>
-
-        <div className="flex flex-col gap-3">
-          <p className="text-[12px] leading-relaxed text-meti-sub">
-            아이는 이것으로 자기 기기에서 들어옵니다. 아이에게 알려주세요.
-            비밀번호는 나중에 마이페이지에서 바꿀 수 있습니다.
-          </p>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-meti-sub">아이 아이디</span>
-            <div className="flex gap-2">
-              <input
-                name="login_id"
-                type="text"
-                value={loginId}
-                onChange={(event) => setLoginId(event.target.value)}
-                autoCapitalize="none"
-                spellCheck={false}
-                pattern={LOGIN_ID_PATTERN.source}
-                placeholder="jaeun2016"
-                required
-                aria-describedby="login-id-note"
-                className={`${field} min-w-0 flex-1 ${
-                  status === 'taken' ? 'border-red-400' : ''
-                }`}
-              />
-              {/* **폼을 보내는 버튼이 아니다.** type 을 안 적으면 submit 이
-                  되어, 중복을 확인하려고 누른 것이 등록이 된다 */}
-              <button
-                type="button"
-                onClick={askId}
-                disabled={id === '' || asking}
-                className="shrink-0 rounded-xl border border-meti px-3 text-[13px] font-bold text-meti disabled:opacity-40"
-              >
-                {asking ? '확인 중…' : '중복확인'}
-              </button>
-            </div>
-            <span id="login-id-note" className="text-[11px]">
-              {status === 'taken' ? (
-                <b className="text-red-600">
-                  이미 쓰고 있는 아이디예요. 다른 아이디로 지어주세요.
-                </b>
-              ) : status === 'ok' ? (
-                <b className="text-emerald-700">쓸 수 있는 아이디예요.</b>
-              ) : status === 'invalid' ? (
-                <b className="text-red-600">
-                  영문 소문자 · 숫자 · 밑줄 4~20자로 지어주세요.
-                </b>
-              ) : (
-                <span className="text-meti-sub">
-                  영문 소문자 · 숫자 · 밑줄 4~20자. 한글은 쓸 수 없어요.
-                </span>
-              )}
-            </span>
-          </label>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-meti-sub">아이 비밀번호</span>
+      <FormSection title="로그인 정보">
+        <Field
+          label="아이디"
+          error={
+            status === 'taken'
+              ? '이미 쓰고 있는 아이디예요. 다른 아이디로 지어주세요.'
+              : status === 'invalid'
+                ? '영문 소문자 · 숫자 · 밑줄 4~20자로 지어주세요.'
+                : null
+          }
+          hint={
+            status === 'ok' ? (
+              <b className="text-meti">쓸 수 있는 아이디예요.</b>
+            ) : (
+              '영문 소문자 · 숫자 · 밑줄 4~20자. 한글은 쓸 수 없어요.'
+            )
+          }
+        >
+          <div className="flex gap-2">
             <input
-              name="login_password"
-              type="password"
-              minLength={6}
-              autoComplete="new-password"
+              name="login_id"
+              type="text"
+              value={loginId}
+              onChange={(event) => setLoginId(event.target.value)}
+              autoCapitalize="none"
+              spellCheck={false}
+              pattern={LOGIN_ID_PATTERN.source}
+              placeholder="jaeun2016"
               required
-              className={field}
+              className={`${fieldClass('page', status === 'taken' || status === 'invalid')} min-w-0 flex-1`}
             />
-            <span className="text-[11px] text-meti-sub">
-              6자 이상. 아이가 잊으면 마이페이지에서 바꿔주세요.
-            </span>
-          </label>
-        </div>
-      </fieldset>
+            {/* **폼을 보내는 버튼이 아니다.** type 을 안 적으면 submit 이
+                되어, 중복을 확인하려고 누른 것이 등록이 된다 */}
+            <button
+              type="button"
+              onClick={askId}
+              disabled={id === '' || asking}
+              className="h-[52px] shrink-0 rounded-lg border border-meti px-4 text-[14px] font-semibold text-meti disabled:border-meti-line disabled:text-meti-off"
+            >
+              {asking ? '확인 중' : '중복확인'}
+            </button>
+          </div>
+        </Field>
+
+        <Field label="비밀번호" hint="6자 이상. 아이가 잊으면 마이페이지에서 바꿔주세요.">
+          <input
+            name="login_password"
+            type="password"
+            minLength={6}
+            autoComplete="new-password"
+            required
+            placeholder="비밀번호 입력"
+            className={FIELD}
+          />
+        </Field>
+
+        <Field label="비밀번호 확인">
+          <input
+            name="login_password_confirm"
+            type="password"
+            autoComplete="new-password"
+            required
+            placeholder="비밀번호를 다시 입력하세요"
+            className={FIELD}
+          />
+        </Field>
+      </FormSection>
+
+      <p className="text-[14px] leading-5 text-meti-sub">
+        아이는 이 아이디와 비밀번호로 자기 기기에서 들어옵니다. 아이에게 알려주세요.
+      </p>
 
       {state.error !== null && (
-        <p role="alert" className="text-[13px] font-semibold text-red-600">
+        <p role="alert" className="text-[14px] leading-5 text-red-500">
           {state.error}
         </p>
       )}
 
       {/* 겹치는 것을 알면서 누르게 두지 않는다. 확인 중일 때는 막지
           않는다 — 못 물어본 경우에도 막히면 등록할 길이 없어진다 */}
-      <button
-        type="submit"
-        disabled={pending || status === 'taken'}
-        className="rounded-xl bg-meti py-3.5 text-[15px] font-bold text-white disabled:opacity-60"
-      >
-        {pending ? '등록하는 중…' : submitLabel}
-      </button>
+      <BrandButton pending={pending} disabled={status === 'taken'}>
+        {pending ? '계정 만드는 중' : submitLabel}
+      </BrandButton>
     </form>
   );
 }

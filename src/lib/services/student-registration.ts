@@ -41,12 +41,19 @@ export function readStudentForm(formData: FormData) {
   const text = (key: string) => String(formData.get(key) ?? '').trim();
   return {
     studentName: text('student_name'),
+    /**
+     * **화면에 별명 칸이 없다**(Figma `자녀 계정 생성`). 이름 하나를 받아
+     * 별명으로도 쓴다. `student_name` 과 `nickname` 이 둘 다 `not null`
+     * 이라 DB 는 여전히 둘을 요구한다(COM-002 §4-2).
+     */
     nickname: text('nickname'),
+    /** 2026-09-22 부터 등록 화면에서 받지 않는다(COM-002 §4-2) */
     birthDate: text('birth_date'),
     grade: Number(formData.get('grade') ?? 0),
     // 아이디는 대소문자를 가리지 않는다. 아이가 대문자로 치면 못 들어온다.
     loginId: text('login_id').toLowerCase(),
     loginPassword: String(formData.get('login_password') ?? ''),
+    loginPasswordConfirm: String(formData.get('login_password_confirm') ?? ''),
   };
 }
 
@@ -57,8 +64,10 @@ export async function registerStudent(
 ): Promise<RegisterResult> {
   const { studentName, birthDate, grade } = input;
 
-  if (studentName === '' || birthDate === '') {
-    return { ok: false, error: '이름과 생년월일을 채워주세요.' };
+  // **생년월일을 더 이상 요구하지 않는다**(COM-002 §4-2). 화면에 칸이 없고
+  // 쓰는 곳도 없다 — 난이도와 문제 범위는 `grade` 가 정한다.
+  if (studentName === '') {
+    return { ok: false, error: '아이 이름을 채워주세요.' };
   }
 
   // MVP 는 4~6학년이다(COM-002 §4 · DB CHECK 제약). 화면에서 막고, DB 도
@@ -86,6 +95,10 @@ export async function registerStudent(
    */
   const { loginId, loginPassword } = input;
 
+  if (loginPassword !== input.loginPasswordConfirm) {
+    return { ok: false, error: '비밀번호가 일치하지 않아요. 다시 입력해 주세요.' };
+  }
+
   if (loginId === '' || loginPassword === '') {
     return {
       ok: false,
@@ -106,7 +119,8 @@ export async function registerStudent(
       studentName,
       nickname,
       nicknameSource: usedDefault ? 'name_default' : 'custom',
-      birthDate,
+      // 빈 값이면 `null` 이다. 빈 문자열을 date 로 넣으면 터진다
+      birthDate: birthDate === '' ? null : birthDate,
       grade,
     });
     studentId = student.student_id;

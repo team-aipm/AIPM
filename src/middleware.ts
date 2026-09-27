@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import {
+  REMEMBER_COOKIE,
+  REMEMBER_OFF,
+  untilBrowserCloses,
+} from '@/lib/constants/session-persistence';
 
 /**
  * Supabase 세션 쿠키를 갱신한다. (DEV-001 §6 · 운영 및 백오피스 PM 소유)
@@ -13,6 +18,14 @@ import { createServerClient } from '@supabase/ssr';
  */
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+
+  /**
+   * **여기가 「로그인 유지」 가 실제로 지켜지는 자리다.**
+   *
+   * 토큰 갱신은 쿠키를 다시 쓴다. 그때 Supabase 가 준 만료시각을 그대로
+   * 넣으면, 로그인할 때 체크를 푼 것이 갱신 한 번에 없던 일이 된다.
+   */
+  const keep = request.cookies.get(REMEMBER_COOKIE)?.value !== REMEMBER_OFF;
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,7 +41,7 @@ export async function middleware(request: NextRequest) {
           });
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
+            response.cookies.set(name, value, keep ? options : untilBrowserCloses(options));
           });
         },
       },

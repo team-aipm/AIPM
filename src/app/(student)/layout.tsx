@@ -8,7 +8,7 @@
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh justify-center bg-meti-bg">
+    <div className="flex min-h-dvh justify-center bg-meti-page">
       <div className="flex w-full max-w-[420px] flex-col">{children}</div>
     </div>
   );

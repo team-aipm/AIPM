@@ -46,13 +46,15 @@ export default async function AddStudentPage() {
         </p>
       </header>
 
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
-        <StudentForm
-          action={addStudentFromParent}
-          checkId={checkLoginId}
-          submitLabel="등록"
-        />
-      </section>
+      {/*
+        카드로 감싸지 않는다. Figma 의 칸이 흰색이라 흰 카드 위에 올리면
+        칸과 카드의 경계가 사라진다(`components/ui/Field.tsx`).
+      */}
+      <StudentForm
+        action={addStudentFromParent}
+        checkId={checkLoginId}
+        submitLabel="계정 만들기"
+      />
     </main>
   );
 }
