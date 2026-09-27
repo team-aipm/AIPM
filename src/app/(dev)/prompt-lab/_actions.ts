@@ -57,7 +57,13 @@ export type RunResult = {
   error: string | null;
   checks: Check[];
   elapsed_ms: number;
-  tokens: { prompt: number | null; output: number | null; total: number | null };
+  tokens: {
+    prompt: number | null;
+    output: number | null;
+    total: number | null;
+    /** 입력 중 캐시에서 온 것. `prompt` 안에 포함된 수다 */
+    cached: number | null;
+  };
   /**
    * **서버가 실제로 받은 systemInstruction 전문.**
    *
@@ -86,7 +92,7 @@ export async function runStage(request: RunInput): Promise<RunResult> {
   await assertAccess();
 
   const empty = {
-    tokens: { prompt: null, output: null, total: null },
+    tokens: { prompt: null, output: null, total: null, cached: null },
     checks: [] as Check[],
     raw: '',
     // 실패해도 무엇을 보냈는지는 보여준다. 프롬프트가 원인일 수 있다.
@@ -155,6 +161,7 @@ export async function runStage(request: RunInput): Promise<RunResult> {
       prompt: result.usage.prompt_tokens,
       output: result.usage.output_tokens,
       total: result.usage.total_tokens,
+      cached: result.usage.cached_tokens,
     },
   };
 }

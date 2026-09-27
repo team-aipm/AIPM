@@ -1,6 +1,6 @@
 # COM-002 · 공통 데이터 구조 정의서 --- 개발용
 
-> **Version:** 1.5 · **Updated:** 2026-09-17 · **Owner:** (미지정)\
+> **Version:** 1.7 · **Updated:** 2026-09-26 · **Owner:** (미지정)\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -73,7 +73,8 @@ Account 1 : N Payment - Student 1 : N LearningReport - Account/Student 1
   `birth_date`                     DATE                         NO 1978-05-20           부모 생년월일
                                                                                         (가입 시 안 받음)
 
-  `account_status`                 ENUM/TEXT                   YES active               계정 상태
+  `account_status`                 ENUM/TEXT                   YES active               계정 상태.
+                                                                                        `active` / `test`
 
   `marketing_email_opt_in`         BOOLEAN                     YES true                 이메일 마케팅
                                                                                         동의
@@ -118,6 +119,10 @@ Figma 「메티_서비스」의 `부모 / 회원가입` 프레임에 그 칸들�
 
 마이그레이션: `20260922120000_allow_null_account_profile_fields.sql`
 
+`account_status` 는 `active` 와 `test` 다. `test` 는 **프롬프트 랩 전용
+계정**이며 테스트 학생을 매다는 자리다(§4). 집계는 이 계정을 세지 않는다.
+탈퇴 관련 값은 COM-007 확정 후 enum 으로 전환한다.
+
 ## 4. Student
 
 실제 학습자 프로필.
@@ -147,7 +152,8 @@ Figma 「메티_서비스」의 `부모 / 회원가입` 프레임에 그 칸들�
   `current_difficulty`           SMALLINT                    YES 3              현재 난이도
 
   `student_status`               ENUM/TEXT                   YES active         `active` /
-                                                                                `deleted_pending`
+                                                                                `deleted_pending` /
+                                                                                `test`
 
   `created_at`                   TIMESTAMPTZ                 YES timestamp      프로필 생성
 
@@ -191,6 +197,25 @@ Figma 「메티_서비스」의 `자녀 계정 생성` 프레임이 다섯 칸�
 `name_default`로 남긴다. 스키마는 그대로 둔다.
 
 마이그레이션: `20260922130000_allow_null_student_birth_date.sql`
+
+`student_status = 'test'` 는 **프롬프트 랩이 만든 학생**이다. 진짜 아이가
+아니다.
+
+랩에서 돌린 결과를 실제 학습 데이터(`learning_session` · `problem` ·
+`evaluation`)로 남기려면 학생 행이 필요한데, 그것을 진짜 아이와 구별할
+방법이 없으면 집계와 배치가 테스트를 진짜로 센다. 주간 리포트 배치는
+학생마다 AI 를 부르므로 **실제 비용이 나간다.**
+
+- **집계와 배치는 `test` 를 제외한다.** `.eq('student_status','active')` 를
+  쓰는 곳은 자동으로 빠진다. 상태를 안 보고 세는 집계
+  (`admin-metrics.funnel()`)는 명시적으로 거른다
+- **새 집계를 더할 때도 빼야 한다.** 빠뜨려도 오류가 나지 않고 숫자만
+  조용히 커진다
+- 운영자 목록(`ADM-005`)에는 **그대로 보인다.** 상태 칸이 있어 구별되고,
+  운영자는 DB 에 있는 것을 다 볼 수 있어야 한다
+- 테스트 학생은 **랩 전용 Account 하나**(`account_status = 'test'`)에 매단다.
+  그 Account 를 지우면 `on delete cascade` 로 학습 데이터가 함께 사라진다.
+  단 `Event` 는 `on delete set null` 이라 행이 남는다
 
 ### 4-1. 학생 로그인 (2026-09-10 추가)
 
@@ -393,6 +418,14 @@ Rules: - 시스템 오류 문제에는 정상 Evaluation을 만들지 않는다.
 
 `current_level` · `reasoning_level` · `transfer_level`: 1\~5.
 `current_level` 3 = 학년 중간 수준.
+
+`current_level` 은 **하루를 마칠 때 서버가 계산한다.** 그날 낸 문제들의
+`Problem.difficulty` 중앙값이다. AI(06 DAILY ANALYZER)의 출력에서 받지
+않는다 — 같은 기록이면 언제나 같은 결과여야 한다(COM-001 §9 · §10).
+
+`Student.current_difficulty`(§4)와 헷갈리지 않는다. 그쪽은 문제를 마칠
+때마다 움직이는 **지금 내보낼 문제의 수준**이고, 이쪽은 하루에 한 번
+정하는 **요즘 어디쯤인가**다. 역할이 다르므로 합치지 않는다.
 
 3개 JSONB의 내부 schema와 갱신 규칙은 `prompts/logic-auditor.md` Prompt 05에서
 정의한다.
@@ -746,6 +779,8 @@ COM-007 §13 이 요청한 세 가지다. 없으면 ADM 영역을 만들 수 없
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.7 | 2026-09-26 | §4 `student_status` 에 **`test`** 추가(enum 마이그레이션), §3 `account_status` 에 **`test`** 명시(TEXT 라 마이그레이션 없음). 프롬프트 랩이 만든 학생·계정을 진짜와 가른다 — 없으면 집계가 부풀려지고 주간 리포트 배치가 테스트 학생마다 AI 를 불러 **실제 비용이 나간다**. `.eq('student_status','active')` 를 쓰는 곳은 자동 제외되고, 상태를 안 보던 `admin-metrics.funnel()` 6개 집계는 명시적으로 걸렀다. 운영자 목록에는 그대로 보인다. 되돌리기는 랩 전용 Account 삭제(cascade) — 단 `Event` 는 `on delete set null` 이라 남는다. 필드·관계 변경 없음 | — |
+| 1.6 | 2026-09-26 | §10 `current_level` 을 **누가 채우는지** 명시. 하루를 마칠 때 **서버가** 그날 `Problem.difficulty` 중앙값으로 정한다. 전에는 06 DAILY ANALYZER 의 `memory_update.current_level` 을 읽게 돼 있었으나 **06 의 출력 스펙에 그 필드가 없어** 아무도 채우지 않았다 — 운영 중 학생 5명 전원이 시작값 3 에 머물러 있었다. `Student.current_difficulty`(§4)와의 역할 구분도 함께 적었다. 필드·타입·관계 변경 없음. COM-001 §9 와 함께 변경 | — |
 | 1.5 | 2026-09-17 | §14 이벤트명 3개 추가: `child_login_first`(계정 분리로 새로 생긴 이탈 지점) · `ai_call_failed` · `answer_verification_failed`(둘 다 어느 테이블에도 안 남는 AI 품질 신호). **`event_properties` 에 원문·이름을 넣지 않는다**는 규칙과, **다른 테이블에 있는 사실은 이벤트로 중복 저장하지 않는다**(§17)는 규칙을 §14 본문에 명시. 필드·타입·관계 변경 없음 | — |
 | 1.4 | 2026-09-17 | §4-1 `login_id`·`auth_user_id` **선택 → 등록 시 필수**. 부모 계정이 학생 화면에 들어가지 않게 되어(COM-003 §4.2 함께 개정), 아이디가 없으면 그 아이가 학습을 시작할 길이 없다. **DB 는 nullable 그대로** — 이전에 아이디 없이 등록된 행이 있어 `NOT NULL` 로 조이지 않는다. 막는 자리는 등록 화면과 서버다. 필드·타입·관계 변경 없음 | — |
 | — | 2026-09-10 | §20-B 추가: `AdminUser` · `AuditLog` · `ConsentLog` (COM-007 §13). ADM 영역의 선행 조건 | — |

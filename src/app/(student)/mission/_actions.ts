@@ -37,6 +37,7 @@ import { pickConcept } from '@/lib/services/concept';
 import { EVENT, record } from '@/lib/analytics/events';
 import { saveEvaluation, saveLogicGaps } from '@/lib/services/evaluation';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import { labSeat } from '@/lib/lab/seat';
 import { runStage, stageOf } from '@/lib/ai/pipeline/run';
 import { getPath, parsePath, setPath } from '@/lib/ai/pipeline/paths';
 
@@ -182,16 +183,25 @@ function buildHostInput(args: {
  * 01 은 학생이 고르기 전까지 `next_module = "SESSION_HOST"` 로 두고 기다린다.
  */
 export async function talkToHost(text: string | null, turns: Turn[]): Promise<HostReply> {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (auth.user === null) return { ok: false, message: '다시 로그인해줘.' };
+  // 랩 자리를 먼저 본다. `context()` 와 같은 이유다.
+  //
+  // **여기는 `context()` 를 쓰지 않는다.** 아래 세 갈래가 학생에게 각각
+  // 다른 말을 해야 하기 때문이다 — "다시 로그인해줘" 와 "오늘 미션을 먼저
+  // 시작해줘" 는 아이가 할 일이 다르다. 합치면 그 안내가 사라진다.
+  const seat = await labSeat();
+
+  const supabase = seat?.supabase ?? (await createClient());
+  if (seat === null) {
+    const { data: auth } = await supabase.auth.getUser();
+    if (auth.user === null) return { ok: false, message: '다시 로그인해줘.' };
+  }
 
   const jar = await cookies();
-  const studentId = jar.get(STUDENT_COOKIE)?.value ?? '';
-  const student = studentId === '' ? null : await getStudent(supabase, studentId);
+  const studentId = seat?.student.student_id ?? jar.get(STUDENT_COOKIE)?.value ?? '';
+  const student = seat?.student ?? (studentId === '' ? null : await getStudent(supabase, studentId));
   if (student === null) return { ok: false, message: '누구로 할지 먼저 골라줘.' };
 
-  const session = await findTodaySession(supabase, student.student_id);
+  const session = seat?.session ?? (await findTodaySession(supabase, student.student_id));
   if (session === null) return { ok: false, message: '오늘 미션을 먼저 시작해줘.' };
 
   const memory = await getMemory(supabase, student.student_id);
@@ -368,6 +378,14 @@ function readChoices(output: unknown): Choice[] {
 
 /** 화면 · 서버가 함께 쓰는 준비물. 매 동작마다 같은 것을 확인한다 */
 async function context() {
+  // **프롬프트 랩이 테스트 학생 자리에 앉아 있으면 그 자리로 본다.**
+  //
+  // 운영자이고 학생이 `test` 상태일 때만 자리가 잡힌다(`lib/lab/seat.ts`).
+  // 진짜 아이 자리에는 앉을 수 없다. 아래 액션들은 이 함수가 돌려주는
+  // 것만 보므로, 랩이 제품 흐름을 한 줄도 안 고치고 그대로 탄다.
+  const seat = await labSeat();
+  if (seat !== null) return seat;
+
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (auth.user === null) return null;
@@ -1014,11 +1032,12 @@ async function summarizeDay(
     //
     // `current_level` 은 하루에 한 번 여기서만 움직인다. 문제마다 흔들리는
     // 값은 `student.current_difficulty` 쪽이다.
+    //
+    // **06 에게 묻지 않는다.** 전에는 `memory_update.current_level` 을
+    // 읽었는데 06 의 출력 스펙에 그 필드가 없어서 늘 비어 있었다. 이제
+    // 서버가 오늘 낸 문제들의 수준으로 정한다 (COM-001 §9).
     await applyDailySummary(supabase, args.student.student_id, {
-      level: (() => {
-        const value = read(result.output, 'memory_update.current_level');
-        return typeof value === 'number' ? value : null;
-      })(),
+      sessionId: args.session.session_id,
       priorityConcepts: read(result.output, 'memory_update.priority_concepts'),
       nextFocus: read(result.output, 'memory_update.next_session_focus'),
     });

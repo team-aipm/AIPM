@@ -159,6 +159,14 @@ async function callOpenAi(req: ProviderRequest): Promise<ProviderResult> {
       prompt_tokens: num(usage?.prompt_tokens),
       output_tokens: num(usage?.completion_tokens),
       total_tokens: num(usage?.total_tokens),
+      /*
+        `prompt_tokens` 안에 포함된 수다. OpenAI 는 자동으로 캐싱하며
+        1024 토큰 미만 요청에도 이 칸을 채워 보낸다(대개 0).
+      */
+      cached_tokens: num(
+        (usage as { prompt_tokens_details?: { cached_tokens?: unknown } } | undefined)
+          ?.prompt_tokens_details?.cached_tokens,
+      ),
     },
   };
 }
@@ -264,14 +272,33 @@ async function callAnthropic(req: ProviderRequest): Promise<ProviderResult> {
   const input = num(message.usage?.input_tokens);
   const output = num(message.usage?.output_tokens);
 
+  /*
+    **Anthropic 은 셈법이 다르다.** 캐시에서 읽은 토큰이 `input_tokens` 에
+    들어가지 않고 `cache_read_input_tokens` 로 따로 나온다. 그래서 입력
+    합계를 낼 때 더해 줘야 한다 — 안 그러면 캐시가 걸릴수록 입력이 줄어든
+    것처럼 보인다.
+
+    Gemini · OpenAI 는 반대로 입력 안에 포함된 수다. 우리 타입은 「입력 중
+    캐시에서 온 것」 으로 통일하므로 여기서 맞춰 넣는다.
+  */
+  const cacheRead = num(
+    (message.usage as { cache_read_input_tokens?: unknown } | undefined)
+      ?.cache_read_input_tokens,
+  );
+
+  const promptTotal =
+    input === null && cacheRead === null ? null : (input ?? 0) + (cacheRead ?? 0);
+
   return {
     ok: true,
     text,
     elapsed_ms: elapsed(),
     usage: {
-      prompt_tokens: input,
+      prompt_tokens: promptTotal,
       output_tokens: output,
-      total_tokens: input !== null && output !== null ? input + output : null,
+      total_tokens:
+        promptTotal !== null && output !== null ? promptTotal + output : null,
+      cached_tokens: cacheRead,
     },
   };
 }

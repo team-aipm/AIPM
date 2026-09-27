@@ -14,6 +14,16 @@ export type Price = {
   input: number;
   /** 출력 100만 토큰당 USD */
   output: number;
+  /**
+   * 캐시에서 읽은 입력 100만 토큰당 USD.
+   *
+   * **할인율이 회사마다 다르다.** 하나로 뭉뚱그리면 틀린 금액을 그럴듯하게
+   * 보여주게 된다 — 이 파일이 피하려는 바로 그것이다.
+   *
+   * 값이 없으면 캐시 토큰도 제값으로 친다. 실제보다 많이 나오지만,
+   * 모르는 할인을 지어내는 것보다 낫다. 화면에서 채워 넣을 수 있다.
+   */
+  cachedInput?: number;
 };
 
 /**
@@ -35,22 +45,24 @@ export type Price = {
  *   · 긴 문맥(200k 초과)에 다른 단가를 매기는 모델이 있다. 낮은 쪽을
  *     넣었으므로 긴 입력에서는 실제보다 적게 나온다.
  *   · Batch·Flex 는 할인 요금이라 해당하면 직접 고쳐야 한다.
- *   · OpenAI 의 cached input 은 반영하지 않는다. usage 에서 캐시 토큰을
- *     따로 읽지 않으므로, 캐시가 걸리면 실제보다 많게 나온다.
+ *   · 캐시 단가(`cachedInput`)는 Gemini 만 채워 두었다. OpenAI · Anthropic
+ *     은 할인율이 모델 계열마다 달라 확인 없이 적지 않았다 — 필요하면
+ *     화면에서 넣는다. 비어 있으면 캐시 토큰도 제값으로 쳐서 실제보다
+ *     많게 나온다.
  */
 export const SEED_PRICES: Record<string, Price> = {
   // Gemini · 텍스트 기준
-  'gemini-3.6-flash': { input: 1.5, output: 7.5 },
-  'gemini-3.5-flash': { input: 1.5, output: 9 },
-  'gemini-3.5-flash-lite': { input: 0.3, output: 2.5 },
-  'gemini-3.1-flash-lite': { input: 0.25, output: 1.5 },
+  'gemini-3.6-flash': { input: 1.5, output: 7.5, cachedInput: 0.375 },
+  'gemini-3.5-flash': { input: 1.5, output: 9, cachedInput: 0.375 },
+  'gemini-3.5-flash-lite': { input: 0.3, output: 2.5, cachedInput: 0.075 },
+  'gemini-3.1-flash-lite': { input: 0.25, output: 1.5, cachedInput: 0.0625 },
   // 200k 이하 기준. 초과하면 입력 $4 / 출력 $18
-  'gemini-3.1-pro-preview': { input: 2, output: 12 },
-  'gemini-3-flash-preview': { input: 0.5, output: 3 },
+  'gemini-3.1-pro-preview': { input: 2, output: 12, cachedInput: 0.5 },
+  'gemini-3-flash-preview': { input: 0.5, output: 3, cachedInput: 0.125 },
   // 200k 이하 기준. 초과하면 입력 $2.5 / 출력 $15
-  'gemini-2.5-pro': { input: 1.25, output: 10 },
-  'gemini-2.5-flash': { input: 0.3, output: 2.5 },
-  'gemini-2.5-flash-lite': { input: 0.1, output: 0.4 },
+  'gemini-2.5-pro': { input: 1.25, output: 10, cachedInput: 0.3125 },
+  'gemini-2.5-flash': { input: 0.3, output: 2.5, cachedInput: 0.075 },
+  'gemini-2.5-flash-lite': { input: 0.1, output: 0.4, cachedInput: 0.025 },
 
   // OpenAI · Standard 요금. Batch·Flex·Fast 는 단가가 달라 직접 고쳐 쓴다
   'gpt-5.6-sol': { input: 4, output: 20 },
@@ -123,17 +135,33 @@ export function findPrice(
   return best;
 }
 
-/** 토큰 수와 가격으로 USD 비용을 낸다. 토큰이나 가격이 없으면 null. */
+/**
+ * 토큰 수와 가격으로 USD 비용을 낸다. 토큰이나 가격이 없으면 null.
+ *
+ * **캐시 토큰은 입력에 포함된 수다**(`_providers.ts` 에서 셋을 그 뜻으로
+ * 맞춰 둔다). 그래서 더하지 않고 **빼서 따로 곱한다.**
+ *
+ *   제값 입력 = prompt - cached
+ *   캐시 입력 = cached × cachedInput
+ *
+ * `cachedInput` 이 없으면 전부 제값으로 친다.
+ */
 export function costOf(
   price: Price | null,
-  tokens: { prompt: number | null; output: number | null },
+  tokens: { prompt: number | null; output: number | null; cached?: number | null },
 ): number | null {
   if (price === null) return null;
   if (tokens.prompt === null && tokens.output === null) return null;
 
-  const inCost = ((tokens.prompt ?? 0) / 1_000_000) * price.input;
+  const prompt = tokens.prompt ?? 0;
+  // 캐시가 입력보다 많을 수는 없다. 이상한 값이 와도 음수로 새지 않게 막는다.
+  const cached =
+    price.cachedInput === undefined ? 0 : Math.min(Math.max(tokens.cached ?? 0, 0), prompt);
+
+  const inCost = ((prompt - cached) / 1_000_000) * price.input;
+  const cacheCost = (cached / 1_000_000) * (price.cachedInput ?? 0);
   const outCost = ((tokens.output ?? 0) / 1_000_000) * price.output;
-  return inCost + outCost;
+  return inCost + cacheCost + outCost;
 }
 
 /** 아주 작은 금액도 0 으로 보이지 않게 자릿수를 늘린다. */

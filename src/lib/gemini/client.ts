@@ -16,6 +16,22 @@ export type GeminiUsage = {
   prompt_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
+  /**
+   * 그중 **캐시에서 온 것**. `prompt_tokens` 안에 포함된 수다 — 더하면 안 된다.
+   *
+   * Gemini 2.5 부터 implicit caching 이 기본으로 켜져 있다. 프롬프트 앞부분이
+   * 직전 호출과 같고 일정 길이를 넘으면 그만큼 싸게 친다(75% 할인, 저장 비용
+   * 없음). 우리가 부르는 방식(`systemInstruction` 에 큰 고정 덩어리, 변하는
+   * 것은 `contents`)은 이미 그 모양이다.
+   *
+   * **`null` 과 `0` 은 다르다.**
+   *   null  응답에 그 칸이 없었다 — 모델이 캐싱을 아예 안 하거나 옛 모델이다
+   *   0     칸은 있는데 못 맞혔다 — 프롬프트가 바뀌었거나 길이가 모자라다
+   *
+   * 이 값을 읽기 전에는 캐싱이 걸리는지조차 알 수 없었다. 쓰는 모델
+   * (`gemini-3.1-flash-lite`)이 캐싱 최소 길이 표에 없어서 더 그렇다.
+   */
+  cached_tokens: number | null;
 };
 
 export type GeminiResult =
@@ -219,5 +235,6 @@ function extractUsage(body: unknown): GeminiUsage {
     prompt_tokens: num(meta?.promptTokenCount),
     output_tokens: num(meta?.candidatesTokenCount),
     total_tokens: num(meta?.totalTokenCount),
+    cached_tokens: num(meta?.cachedContentTokenCount),
   };
 }

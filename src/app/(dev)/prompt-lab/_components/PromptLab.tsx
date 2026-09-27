@@ -5810,6 +5810,18 @@ function Meta({
       {result.tokens.prompt !== null &&
         result.tokens.output !== null &&
         ` (in ${result.tokens.prompt} / out ${result.tokens.output})`}
+      {/*
+        **캐시가 걸렸는지 눈으로 본다.**
+
+        `null` 과 `0` 을 구분해 보여준다. null 은 응답에 그 칸이 아예 없었다는
+        뜻이라 「이 모델은 캐싱을 안 한다」 이고, 0 은 칸은 있는데 못 맞혔다는
+        뜻이라 「프롬프트가 바뀌었거나 길이가 모자라다」 이다. 둘을 같이 묶어
+        버리면 무엇을 고쳐야 할지 알 수 없다.
+
+        쓰는 모델(`gemini-3.1-flash-lite`)이 캐싱 최소 길이 표에 없어서,
+        걸리는지 아닌지는 재 보는 수밖에 없다.
+      */}
+      <CacheBadge cached={result.tokens.cached} prompt={result.tokens.prompt} />
       {cost !== null ? (
         <>
           {' · '}
@@ -6155,5 +6167,41 @@ function Toggle({
       />
       <span>{label}</span>
     </label>
+  );
+}
+
+/**
+ * 입력 토큰 중 캐시에서 온 비율.
+ *
+ * 값이 `null` 이면 아무것도 그리지 않는다 — 캐싱을 안 하는 모델까지 매번
+ * 「캐시 0%」 를 달아 두면 눈에 익어 버려서 정작 떨어졌을 때 못 알아챈다.
+ */
+function CacheBadge({
+  cached,
+  prompt,
+}: {
+  cached: number | null;
+  prompt: number | null;
+}) {
+  if (cached === null) return null;
+
+  const ratio = prompt !== null && prompt > 0 ? Math.round((cached / prompt) * 100) : 0;
+  const hit = cached > 0;
+
+  return (
+    <span
+      title={
+        hit
+          ? `입력 ${prompt ?? '?'} 중 ${cached} 토큰을 캐시에서 읽었습니다`
+          : '캐시를 못 맞혔습니다. 프롬프트 앞부분이 바뀌었거나 최소 길이에 못 미칩니다'
+      }
+      className={
+        hit
+          ? 'text-emerald-700 dark:text-emerald-400'
+          : 'text-neutral-400 dark:text-neutral-500'
+      }
+    >
+      {` · 캐시 ${cached} tok (${ratio}%)`}
+    </span>
   );
 }

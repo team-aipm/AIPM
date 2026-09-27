@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "setup": "node scripts/setup.mjs"
+    "setup": "node scripts/setup.mjs",
+    "sim:difficulty": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/difficulty-sim.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
