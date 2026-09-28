@@ -129,7 +129,7 @@ export async function signOut(): Promise<void> {
 }
 
 // ============================================================
-// 간편 로그인 (Figma `간편 로그인` · 구글 · 카카오 · 네이버)
+// 간편 로그인 (Figma `간편 로그인` · 구글 · 카카오)
 // ============================================================
 
 export type SocialState = { error: string | null };
@@ -140,33 +140,38 @@ export type SocialState = { error: string | null };
  * `signInWithOAuth` 를 부르지 않는 것은 게을러서가 아니다. 부르면 사람을
  * 구글까지 보냈다가 **에러를 들고 돌아오게** 된다. 막는 것이 셋이다.
  *
+ * 막는 것이 셋이었다. **둘이 풀렸다.**
+ *
  * ```text
  *   1. 자격증명    Supabase 대시보드에 Client ID/Secret 이 없다.
  *                  Secret 이라 코드나 문서에 넣지 않는다(CLAUDE.md).
+ *                  → 남아 있다. 구글·카카오에서 앱을 만들어 넣어야 한다.
  *
  *   2. 네이버      Supabase 가 제공하는 Provider 목록에 없다.
- *                  카카오는 있다(auth-kakao). 네이버는 문서 자체가 없다.
+ *                  → 화면에서 뺐다(2026-09-28). 붙이려면 OAuth 를 직접
+ *                    구현해야 하고, 그건 별도 작업이다.
  *
- *   3. account     `handle_new_account` 트리거가 account_name ·
- *                  phone_number · birth_date 를 요구한다. 구글·카카오는
- *                  그 셋을 주지 않으므로 신규 가입이 통째로 롤백된다.
- *                  (20260901023250_create_account_on_auth_signup.sql)
+ *   3. account     트리거가 account_name · phone_number · birth_date 를
+ *                  요구해 신규 가입이 롤백됐다.
+ *                  → **풀렸다.** 가입 폼이 그 셋을 안 받게 되면서 트리거도
+ *                    필수 검사를 버렸다(20260922120000).
  * ```
  *
- * 3번이 제일 깊다. 자격증명을 다 넣어도 **새 사람은 가입이 안 된다.**
- * COM-002 §3 을 고쳐야 하는 일이라 코드에서 정할 것이 아니다.
+ * 남은 것은 1번과 **돌아오는 길**이다. OAuth 는 `?code=` 를 달고 돌아오는데
+ * 그것을 세션으로 바꿀 자리가 아직 없다. `/password` 는 사람이 새 비밀번호를
+ * 치는 순간에 바꾸지만, 로그인은 누를 것이 없어 같은 수를 못 쓴다.
+ * DEV-002 §9 에 외부 콜백용 Route Handler 한 줄을 더하는 것이 가장 곧다 —
+ * `/api/webhooks/payment` 가 이미 같은 부류로 들어 있다.
  *
- * 셋이 풀리면 이 함수의 몸통만 `signInWithOAuth` 로 바꾸면 된다. 화면은
- * 이미 다 그려져 있다.
+ * 그때까지는 누르면 이유를 알려준다. 자격증명 없이 `signInWithOAuth` 를
+ * 부르면 사람을 구글까지 보냈다가 **에러를 들고 돌아오게** 된다.
  */
 export async function signInWithSocial(
   _prev: SocialState,
   formData: FormData,
 ): Promise<SocialState> {
   const provider = String(formData.get('provider') ?? '');
-
-  const name =
-    provider === 'google' ? '구글' : provider === 'kakao' ? '카카오' : '네이버';
+  const name = provider === 'google' ? '구글' : '카카오';
 
   // **잘못한 것처럼 적지 않는다.** 아직 우리가 안 만든 것이다.
   return { error: `${name} 로그인은 아직 준비 중이에요. 아이디로 들어와 주세요.` };
