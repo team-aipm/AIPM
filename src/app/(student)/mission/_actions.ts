@@ -437,7 +437,11 @@ export async function startProblem(): Promise<ProblemReply> {
     lastProblemLevel(supabase, student.student_id),
   ]);
   // 지난 문제와 견준다. 05 가 올리거나 내린 결과가 여기서 처음 쓰인다.
-  const difficulty = moveFrom(lastLevel, student.current_difficulty);
+  //
+  // **학년까지 견준다.** 레벨만 보면 4학년 레벨 5 → 5학년 레벨 1 이
+  // `DOWN` 으로 읽힌다 (COM-001 §9).
+  const standing = { grade: student.learning_grade, level: student.current_difficulty };
+  const difficulty = moveFrom(lastLevel, standing);
   if (picked.concept !== null) {
     console.log(`[mission] 개념 선정: ${picked.concept} (${picked.reason})`);
   }
@@ -483,6 +487,7 @@ export async function startProblem(): Promise<ProblemReply> {
     // 고른 개념을 그대로 남긴다. 못 골랐으면(첫날) 05 가 이 문제에서
     // 개념을 정해 주므로, 그때까지는 '미지정' 이다.
     concept: picked.concept ?? '미지정',
+    learningGrade: student.learning_grade,
     difficulty: student.current_difficulty,
     learningMode: 'mode_a',
     verifiedAnswer: verified ?? null,
@@ -699,6 +704,7 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
       student_id: student.student_id,
       grade: student.grade,
       persona_type: student.persona_type,
+      learning_grade: student.learning_grade,
       current_difficulty: student.current_difficulty,
     },
     session: {
@@ -794,7 +800,8 @@ async function evaluateProblem(
       student_id: string;
       grade: number;
       persona_type: 'friend' | 'villain';
-      /** 난이도를 옮길 기준점 (COM-001 §9) */
+      /** 난이도를 옮길 기준점 (COM-001 §9). 학년과 레벨이 함께 움직인다 */
+      learning_grade: number;
       current_difficulty: number;
     };
     session: { session_id: string; completed_problem_count: number; target_problem_count: number };
@@ -925,13 +932,13 @@ async function evaluateProblem(
     // 상관없지만, 실패해도 서로 막지 않게 따로 둔다.
     await refreshMemory(supabase, args.student.student_id);
 
-    const moved = await updateDifficulty(
-      supabase,
-      args.student.student_id,
-      args.student.current_difficulty,
-    );
+    const moved = await updateDifficulty(supabase, args.student.student_id, {
+      grade: args.student.learning_grade,
+      level: args.student.current_difficulty,
+    });
     if (moved.move !== 'SAME') {
-      console.log(`[mission] 난이도 ${moved.move} → ${moved.level} (${moved.reason})`);
+      const where = moved.gradeMoved ? `${moved.grade}학년 레벨 ${moved.level}` : `레벨 ${moved.level}`;
+      console.log(`[mission] 난이도 ${moved.move} → ${where} (${moved.reason})`);
     }
   } catch (error) {
     console.error(`[mission] 평가 저장 실패: ${String(error)}`);
@@ -1307,6 +1314,7 @@ export async function confirmSourceProblem(
     // 학생이 가져온 문제라 개념을 우리가 정하지 않는다. 05 가 이름을
     // 붙여 주면 그때 채운다.
     concept: picked.concept ?? '미지정',
+    learningGrade: student.learning_grade,
     difficulty: student.current_difficulty,
     learningMode: 'mode_b',
     verifiedAnswer: verified,
