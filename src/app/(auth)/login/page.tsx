@@ -10,12 +10,13 @@
  * ```
  *
  * **소셜 로그인 버튼은 있고, 아직 들어가지지는 않는다.**
- * `_components/SocialSignIn.tsx` 가 구글 · 카카오 동그라미를 그린다.
- * 누르면 「아직 준비 중」 이라고 알려준다 — 자격증명과 돌아오는 길이
- * 아직 없어서다. 이유는 `_actions.ts` 의 `signInWithSocial` 에 적어 뒀다.
+ * `_components/SocialSignIn.tsx` 가 구글 · 카카오 · 네이버 동그라미를
+ * 그린다. 누르면 셋 다 「아직 준비 중」 이라고 알려준다 — 자격증명과
+ * 돌아오는 길이 아직 없어서다. 이유는 `_actions.ts` 의
+ * `signInWithSocial` 에 적어 뒀다.
  *
- * 네이버는 Figma 에 있었지만 뺐다(2026-09-28). Supabase 가 Provider 로
- * 제공하지 않아 버튼만 두면 영영 안 되는 길을 보여주게 된다.
+ * 네이버는 Supabase 가 Provider 로 제공하지 않아 나중에도 직접 구현이
+ * 필요하다. 그래도 Figma 대로 버튼은 둔다.
  */
 
 import Link from 'next/link';
