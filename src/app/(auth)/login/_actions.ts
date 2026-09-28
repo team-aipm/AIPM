@@ -129,7 +129,7 @@ export async function signOut(): Promise<void> {
 }
 
 // ============================================================
-// 간편 로그인 (Figma `간편 로그인` · 구글 · 카카오)
+// 간편 로그인 (Figma `간편 로그인` · 구글 · 카카오 · 네이버)
 // ============================================================
 
 export type SocialState = { error: string | null };
@@ -148,8 +148,9 @@ export type SocialState = { error: string | null };
  *                  → 남아 있다. 구글·카카오에서 앱을 만들어 넣어야 한다.
  *
  *   2. 네이버      Supabase 가 제공하는 Provider 목록에 없다.
- *                  → 화면에서 뺐다(2026-09-28). 붙이려면 OAuth 를 직접
- *                    구현해야 하고, 그건 별도 작업이다.
+ *                  → **버튼만 둔다.** 붙이려면 OAuth 를 직접 구현해야
+ *                    하고, 그건 별도 작업이다. 셋 다 「준비 중」 이라고
+ *                    답하므로 네이버만 빼면 오히려 어긋나 보인다.
  *
  *   3. account     트리거가 account_name · phone_number · birth_date 를
  *                  요구해 신규 가입이 롤백됐다.
@@ -171,7 +172,8 @@ export async function signInWithSocial(
   formData: FormData,
 ): Promise<SocialState> {
   const provider = String(formData.get('provider') ?? '');
-  const name = provider === 'google' ? '구글' : '카카오';
+  const name =
+    provider === 'google' ? '구글' : provider === 'kakao' ? '카카오' : '네이버';
 
   // **잘못한 것처럼 적지 않는다.** 아직 우리가 안 만든 것이다.
   return { error: `${name} 로그인은 아직 준비 중이에요. 아이디로 들어와 주세요.` };
