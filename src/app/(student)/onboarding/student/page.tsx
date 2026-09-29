@@ -29,7 +29,7 @@ export default async function NewStudentPage() {
           나의 생각이 자라는 시간
         </h1>
 
-        <StudentForm action={addStudent} checkId={checkLoginId} submitLabel="계정 만들기" />
+        <StudentForm action={addStudent} checkEmail={checkLoginId} submitLabel="계정 만들기" />
       </div>
     </main>
   );

@@ -52,7 +52,7 @@ export default async function AddStudentPage() {
       */}
       <StudentForm
         action={addStudentFromParent}
-        checkId={checkLoginId}
+        checkEmail={checkLoginId}
         submitLabel="계정 만들기"
       />
     </main>

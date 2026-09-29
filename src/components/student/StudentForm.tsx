@@ -17,7 +17,7 @@
  *
  * ```text
  *   자녀 정보    이름 또는 별명 · 학년
- *   로그인 정보  아이디 · 비밀번호 · 비밀번호 확인
+ *   로그인 정보  로그인 이메일 · 비밀번호 · 비밀번호 확인
  * ```
  *
  * - **생년월일 칸을 없앴다.** 디자인에 없고 쓰는 곳도 없다. 난이도는
@@ -37,7 +37,7 @@ import { useActionState, useState } from 'react';
 import { Field, fieldClass } from '@/components/ui/Field';
 import { FormSection } from '@/components/ui/FormSection';
 import { BrandButton } from '@/components/ui/BrandButton';
-import { LOGIN_ID_PATTERN, isValidLoginId } from '@/lib/constants/student-login';
+import { looksLikeEmail } from '@/lib/constants/student-login';
 import type { IdCheck } from '@/lib/services/student-login';
 
 export type NewStudentState = { error: string | null };
@@ -49,12 +49,12 @@ const FIELD = fieldClass('page');
 
 export function StudentForm({
   action,
-  checkId,
+  checkEmail,
   submitLabel,
 }: {
   action: (prev: NewStudentState, formData: FormData) => Promise<NewStudentState>;
-  /** 아이디를 쓸 수 있는지 묻는다. 부모 세션인지는 저쪽에서 본다 */
-  checkId: (loginId: string) => Promise<IdCheck>;
+  /** 이 이메일을 쓸 수 있는지 묻는다. 부모 세션인지는 저쪽에서 본다 */
+  checkEmail: (loginEmail: string) => Promise<IdCheck>;
   submitLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, IDLE);
@@ -65,12 +65,12 @@ export function StudentForm({
    * 치는 동안 자동으로 묻게 했다가 되돌렸다. 「중복확인」 버튼이 우리가
    * 아는 방식이고, 부모가 누르기 전까지 서버를 부르지 않는다.
    */
-  const [loginId, setLoginId] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
   /** 확인한 결과. **어느 아이디에 대한 답인지 함께 들고 있는다** */
   const [answer, setAnswer] = useState<{ id: string; got: IdCheck } | null>(null);
   const [asking, setAsking] = useState(false);
 
-  const id = loginId.trim().toLowerCase();
+  const id = loginEmail.trim().toLowerCase();
 
   /**
    * 지금 칸에 적힌 아이디의 답. **렌더에서 셈한다.**
@@ -84,15 +84,15 @@ export function StudentForm({
   async function askId() {
     if (id === '' || asking) return;
 
-    // 글자 수가 안 맞는 것은 서버까지 안 간다. 물어볼 것도 없다.
-    if (!isValidLoginId(id)) {
+    // 이메일 모양이 아닌 것은 서버까지 안 간다. 물어볼 것도 없다.
+    if (!looksLikeEmail(id)) {
       setAnswer({ id, got: 'invalid' });
       return;
     }
 
     setAsking(true);
     try {
-      setAnswer({ id, got: await checkId(id) });
+      setAnswer({ id, got: await checkEmail(id) });
     } catch {
       // 못 물어봤으면 아무 말도 안 한다. 누를 때 어차피 걸린다.
     } finally {
@@ -129,32 +129,31 @@ export function StudentForm({
 
       <FormSection title="로그인 정보">
         <Field
-          label="아이디"
+          label="로그인 이메일"
           error={
             status === 'taken'
-              ? '이미 쓰고 있는 아이디예요. 다른 아이디로 지어주세요.'
+              ? '이미 쓰고 있는 이메일이에요. 다른 이메일을 넣어주세요.'
               : status === 'invalid'
-                ? '영문 소문자 · 숫자 · 밑줄 4~20자로 지어주세요.'
+                ? '이메일 형식이 올바르지 않아요. 다시 확인해 주세요.'
                 : null
           }
           hint={
             status === 'ok' ? (
-              <b className="text-meti">쓸 수 있는 아이디예요.</b>
+              <b className="text-meti">쓸 수 있는 이메일이에요.</b>
             ) : (
-              '영문 소문자 · 숫자 · 밑줄 4~20자. 한글은 쓸 수 없어요.'
+              '아이가 이미 쓰는 이메일을 넣어주세요. 아이는 이 주소로 들어옵니다.'
             )
           }
         >
           <div className="flex gap-2">
             <input
-              name="login_id"
-              type="text"
-              value={loginId}
-              onChange={(event) => setLoginId(event.target.value)}
+              name="login_email"
+              type="email"
+              value={loginEmail}
+              onChange={(event) => setLoginEmail(event.target.value)}
               autoCapitalize="none"
               spellCheck={false}
-              pattern={LOGIN_ID_PATTERN.source}
-              placeholder="jaeun2016"
+              placeholder="jaeun@example.com"
               required
               className={`${fieldClass('page', status === 'taken' || status === 'invalid')} min-w-0 flex-1`}
             />
@@ -196,7 +195,7 @@ export function StudentForm({
       </FormSection>
 
       <p className="text-[14px] leading-5 text-meti-sub">
-        아이는 이 아이디와 비밀번호로 자기 기기에서 들어옵니다. 아이에게 알려주세요.
+        아이는 이 이메일과 비밀번호로 자기 기기에서 들어옵니다. 아이에게 알려주세요.
       </p>
 
       {state.error !== null && (
