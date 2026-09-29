@@ -23,7 +23,34 @@
 
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { endSession } from '@/lib/supabase/sign-out';
+import { isValidPassword, PASSWORD_RULE_TEXT } from '@/lib/constants/student-login';
+
+/**
+ * 이 이메일이 아이 계정인가.
+ *
+ * `student.login_email` 을 본다. `service_role` 로 읽는 이유는, 여기 부르는
+ * 사람은 **로그인하지 않은 상태**라 RLS 로는 아무 학생도 보이지 않기
+ * 때문이다.
+ *
+ * 못 읽었으면 `false` 를 돌려준다. 읽기 실패로 부모의 재설정을 막으면,
+ * 정작 필요한 사람이 못 쓰게 된다. 아이가 스스로 바꾸는 것보다 그쪽이
+ * 나쁘다.
+ */
+async function belongsToChild(email: string): Promise<boolean> {
+  const { data, error } = await createAdminClient()
+    .from('student')
+    .select('student_id')
+    .eq('login_email', email)
+    .maybeSingle();
+
+  if (error !== null) {
+    console.error(`[password] 아이 계정인지 확인하지 못했습니다: ${error.message}`);
+    return false;
+  }
+  return data !== null;
+}
 
 // ============================================================
 // 1. 메일 보내기
@@ -69,6 +96,21 @@ export async function requestReset(
       status: 'error',
       message: '이메일 형식이 올바르지 않아요. 다시 확인해 주세요.',
     };
+  }
+
+  /**
+   * **아이 계정에는 보내지 않는다** (정책 v0.1 §8).
+   *
+   * 아이도 실제 이메일을 쓰게 되면서(2026-09-29) 아이가 이 화면으로 직접
+   * 재설정할 수 있게 됐다. 정책이 금지한다 — 재설정은 부모가 마이페이지
+   * 에서 한다(MY-003).
+   *
+   * **화면은 그대로 「보냈어요」 를 보여 준다.** 여기서만 답을 바꾸면
+   * 「아이 계정인가」를 묻는 창구가 된다. 아래 결과를 보지 않는 것과 같은
+   * 이유다.
+   */
+  if (await belongsToChild(email)) {
+    return { status: 'sent', email, sentAt: Date.now() };
   }
 
   const supabase = await createClient();
@@ -133,8 +175,9 @@ export async function setNewPassword(
     return { status: 'error', message: '새 비밀번호를 두 칸 모두 입력해 주세요.' };
   }
 
-  if (password.length < 8) {
-    return { status: 'error', message: '비밀번호는 8자 이상으로 해주세요.' };
+  // 정책 v0.1 §3.2 — 영문과 숫자를 섞은 8자 이상. 전에는 8자만 봤다.
+  if (!isValidPassword(password)) {
+    return { status: 'error', message: `비밀번호는 ${PASSWORD_RULE_TEXT}` };
   }
 
   if (password !== confirm) {

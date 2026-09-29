@@ -91,7 +91,7 @@ export async function makeChildLogin(
   const studentId = String(formData.get('student_id') ?? '');
   const result = await createChildLogin(supabase, auth.user.id, {
     studentId,
-    loginId: String(formData.get('login_id') ?? ''),
+    loginEmail: String(formData.get('login_email') ?? ''),
     password: String(formData.get('password') ?? ''),
   });
 

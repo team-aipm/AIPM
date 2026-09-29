@@ -20,6 +20,7 @@
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { isValidPassword, PASSWORD_RULE_TEXT } from '@/lib/constants/student-login';
 import { REQUIRED_TERMS, TERMS, TERMS_ORDER, type TermsKey } from '@/lib/constants/terms';
 
 /**
@@ -59,8 +60,9 @@ export async function signUp(
     return { status: 'error', message: '비밀번호를 두 칸 모두 입력해 주세요.' };
   }
 
-  if (password.length < 8) {
-    return { status: 'error', message: '비밀번호는 8자 이상으로 해주세요.' };
+  // 정책 v0.1 §3.2 — 영문과 숫자를 섞은 8자 이상. 전에는 8자만 봤다.
+  if (!isValidPassword(password)) {
+    return { status: 'error', message: `비밀번호는 ${PASSWORD_RULE_TEXT}` };
   }
 
   if (password !== confirm) {

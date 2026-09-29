@@ -28,7 +28,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { emailForLoginId, isValidLoginId } from '@/lib/constants/student-login';
+import { isValidPassword, looksLikeEmail, PASSWORD_RULE_TEXT } from '@/lib/constants/student-login';
 import type { Database } from '@/types/database';
 
 type Client = SupabaseClient<Database>;
@@ -76,15 +76,15 @@ export type LoginResult = { ok: true } | { ok: false; error: string };
 export async function createChildLogin(
   client: Client,
   accountId: string,
-  input: { studentId: string; loginId: string; password: string },
+  input: { studentId: string; loginEmail: string; password: string },
 ): Promise<LoginResult> {
-  const loginId = input.loginId.trim().toLowerCase();
+  const loginEmail = input.loginEmail.trim().toLowerCase();
 
-  if (!isValidLoginId(loginId)) {
-    return { ok: false, error: '아이디는 영문 소문자·숫자·밑줄 4~20자로 지어주세요.' };
+  if (!looksLikeEmail(loginEmail)) {
+    return { ok: false, error: '아이가 쓰는 이메일을 정확히 입력해주세요.' };
   }
-  if (input.password.length < 6) {
-    return { ok: false, error: '비밀번호는 6자 이상으로 정해주세요.' };
+  if (!isValidPassword(input.password)) {
+    return { ok: false, error: `비밀번호는 ${PASSWORD_RULE_TEXT}` };
   }
 
   const student = await ownStudent(client, accountId, input.studentId);
@@ -95,11 +95,17 @@ export async function createChildLogin(
 
   const admin = createAdminClient();
   const { data: created, error: authError } = await admin.auth.admin.createUser({
-    email: emailForLoginId(loginId),
+    email: loginEmail,
     password: input.password,
-    // 받을 수 없는 주소다. 확인 메일을 보내면 영원히 못 들어온다.
+    // **확인 메일을 보내지 않는다.** 부모가 입력한 주소를 그대로 믿는다.
+    // 아이가 메일함을 열어 확인하게 하면 흐름이 길어지고, 아이 계정에는
+    // 애초에 메일로 할 일이 없다(정책 §8 — 스스로 재설정하지 못한다).
     email_confirm: true,
-    user_metadata: { role: 'student', student_id: student.student_id },
+    // **app_metadata 는 service_role 만 쓴다.** 트리거가 이것으로 아이를
+    // 가려내 부모 프로필을 만들지 않는다. `user_metadata` 는 누구나
+    // signUp 에 실을 수 있어 표식으로 쓸 수 없다.
+    app_metadata: { role: 'student' },
+    user_metadata: { student_id: student.student_id },
   });
 
   if (authError !== null || created.user === null) {
@@ -109,11 +115,11 @@ export async function createChildLogin(
 
   const { error: linkError } = await client
     .from('student')
-    .update({ login_id: loginId, auth_user_id: created.user.id })
+    .update({ login_email: loginEmail, auth_user_id: created.user.id })
     .eq('student_id', student.student_id);
 
   if (linkError !== null) {
-    // **만들다 만 계정을 남기지 않는다.** 남으면 그 아이디를 아무도 다시
+    // **만들다 만 계정을 남기지 않는다.** 남으면 그 이메일을 아무도 다시
     // 못 쓰는데 화면에는 아무것도 안 보인다.
     await admin.auth.admin.deleteUser(created.user.id);
     console.error(`[student-login] 연결 실패: ${linkError.message}`);
@@ -134,7 +140,7 @@ export async function changeChildPassword(
   accountId: string,
   input: { studentId: string; password: string },
 ): Promise<LoginResult> {
-  if (input.password.length < 6) {
+  if (!isValidPassword(input.password)) {
     return { ok: false, error: '비밀번호는 6자 이상으로 정해주세요.' };
   }
 
@@ -187,13 +193,13 @@ export async function studentIdOfViewer(
 // 잡아 본다.** 학생 만들기가 실패하면 잡아 둔 것을 놓아 준다.
 
 /**
- * 이 아이디를 쓸 수 있나. **누르기 전에 알려 주려고 본다.**
+ * 이 이메일을 쓸 수 있나. **누르기 전에 알려 주려고 본다.**
  *
  * 겹치는지는 선점할 때(`reserveChildAuthUser`) 이미 걸린다. 다만 그때는
  * 폼을 다 채우고 누른 뒤다 — 부모는 처음부터 다시 짓는다.
  *
  * **여기 답은 참고용이다.** 확정은 선점이 한다. 보는 곳이 다르기 때문이다 —
- * 여기는 `student.login_id` 를 보고, 선점은 Auth 를 본다. 선점만 되고
+ * 여기는 `student.login_email` 을 보고, 선점은 Auth 를 본다. 선점만 되고
  * 학생에 못 붙은 계정이 남아 있으면 여기서는 안 보인다. 그 드문 경우는
  * 누를 때 걸린다.
  *
@@ -203,15 +209,15 @@ export async function studentIdOfViewer(
  */
 export type IdCheck = 'ok' | 'taken' | 'invalid';
 
-export async function checkLoginIdFree(loginId: string): Promise<IdCheck> {
-  const id = loginId.trim().toLowerCase();
-  if (!isValidLoginId(id)) return 'invalid';
+export async function checkLoginEmailFree(loginEmail: string): Promise<IdCheck> {
+  const email = loginEmail.trim().toLowerCase();
+  if (!looksLikeEmail(email)) return 'invalid';
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('student')
     .select('student_id')
-    .eq('login_id', id)
+    .eq('login_email', email)
     .maybeSingle();
 
   // 못 읽었으면 「쓸 수 있다」고 하지 않는다. 확정은 어차피 선점이 한다.
@@ -221,26 +227,26 @@ export async function checkLoginIdFree(loginId: string): Promise<IdCheck> {
 
 export type Reserved = { ok: true; userId: string } | { ok: false; error: string };
 
-/** 아이디를 선점한다. 겹치면 여기서 끝난다 — 아직 아무것도 안 만들었다 */
+/** 이메일을 선점한다. 겹치면 여기서 끝난다 — 아직 아무것도 안 만들었다 */
 export async function reserveChildAuthUser(input: {
-  loginId: string;
+  loginEmail: string;
   password: string;
 }): Promise<Reserved> {
-  const loginId = input.loginId.trim().toLowerCase();
+  const loginEmail = input.loginEmail.trim().toLowerCase();
 
-  if (!isValidLoginId(loginId)) {
-    return { ok: false, error: '아이디는 영문 소문자·숫자·밑줄 4~20자로 지어주세요.' };
+  if (!looksLikeEmail(loginEmail)) {
+    return { ok: false, error: '아이가 쓰는 이메일을 정확히 입력해주세요.' };
   }
-  if (input.password.length < 6) {
-    return { ok: false, error: '아이 비밀번호는 6자 이상으로 정해주세요.' };
+  if (!isValidPassword(input.password)) {
+    return { ok: false, error: `아이 비밀번호는 ${PASSWORD_RULE_TEXT}` };
   }
 
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.createUser({
-    email: emailForLoginId(loginId),
+    email: loginEmail,
     password: input.password,
     email_confirm: true,
-    user_metadata: { role: 'student' },
+    app_metadata: { role: 'student' },
   });
 
   if (error !== null || data.user === null) {
@@ -251,7 +257,7 @@ export async function reserveChildAuthUser(input: {
   return { ok: true, userId: data.user.id };
 }
 
-/** 뒤가 실패했을 때 되돌린다. 놓아 주지 못하면 그 아이디는 아무도 못 쓴다 */
+/** 뒤가 실패했을 때 되돌린다. 놓아 주지 못하면 그 이메일은 아무도 못 쓴다 */
 export async function releaseChildAuthUser(userId: string): Promise<void> {
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.deleteUser(userId);
@@ -267,11 +273,11 @@ export async function releaseChildAuthUser(userId: string): Promise<void> {
  */
 export async function attachChildLogin(
   client: Client,
-  input: { studentId: string; loginId: string; userId: string },
+  input: { studentId: string; loginEmail: string; userId: string },
 ): Promise<boolean> {
   const { error } = await client
     .from('student')
-    .update({ login_id: input.loginId.trim().toLowerCase(), auth_user_id: input.userId })
+    .update({ login_email: input.loginEmail.trim().toLowerCase(), auth_user_id: input.userId })
     .eq('student_id', input.studentId);
 
   if (error !== null) {

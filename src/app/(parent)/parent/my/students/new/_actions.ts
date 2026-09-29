@@ -17,7 +17,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { readStudentForm, registerStudent } from '@/lib/services/student-registration';
-import { checkLoginIdFree, type IdCheck } from '@/lib/services/student-login';
+import { checkLoginEmailFree, type IdCheck } from '@/lib/services/student-login';
 import { requireParent } from '@/lib/services/viewer';
 import type { NewStudentState } from '@/components/student/StudentForm';
 
@@ -28,9 +28,9 @@ import type { NewStudentState } from '@/components/student/StudentForm';
  * 알려주는 것이라, 아무나 부르게 두면 남의 아이 아이디를 찾아낼 수 있다
  * (`AUTH-001` 이 로그인 실패 이유를 안 알려주는 것과 같은 이유다).
  */
-export async function checkLoginId(loginId: string): Promise<IdCheck> {
+export async function checkLoginId(loginEmail: string): Promise<IdCheck> {
   await requireParent();
-  return checkLoginIdFree(loginId);
+  return checkLoginEmailFree(loginEmail);
 }
 
 export async function addStudentFromParent(
