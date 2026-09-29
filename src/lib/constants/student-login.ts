@@ -1,48 +1,57 @@
 /**
- * 아이 로그인 아이디 (COM-005 §9 · COM-002 §4)
+ * 아이 로그인 (COM-007 §2-2 · COM-002 §4)
  *
- * Supabase Auth 는 이메일로만 로그인한다. 그런데 **아이에게 이메일 주소를
- * 받지 않는다** — 만 14세 미만에게서 굳이 더 걷지 않기로 했다(COM-007).
+ * **아이도 이메일로 들어온다.** 로그인 화면은 부모와 아이가 같다.
  *
- * 그래서 아이디를 서버에서 가짜 이메일로 바꿔 Auth 에 넘긴다.
+ * ## 전에는 아이디를 받았다 (2026-09-29 개정)
+ *
+ * Supabase Auth 는 이메일로만 로그인한다. 아이에게 이메일을 받지 않기로
+ * 했던 때에는 아이디를 서버가 가짜 이메일로 바꿔 넘겼다.
  *
  * ```text
  *   아이가 치는 것        jaeun2016
  *   Auth 가 받는 것       jaeun2016@student.aipm.invalid
  * ```
  *
- * **이 주소로는 메일이 오갈 수 없다.** `.invalid` 는 그러라고 예약된
- * TLD 다(RFC 2606) — 누가 실수로 등록할 수도 없다. 그래서 아이 계정에는
- * 이메일로 비밀번호를 재설정하는 길이 없다. 부모가 마이페이지에서
- * 바꿔 준다(MY-003).
+ * 로그인·회원가입 정책 v0.1 §7 이 **아이 계정도 로그인 이메일로 만들도록**
+ * 정하면서 그 장치가 없어졌다. 부모가 **아이가 이미 쓰는 이메일**을
+ * 입력한다.
+ *
+ * **아이 이메일이 없으면 계정을 만들 수 없다.** 부모가 먼저 만들어 주어야
+ * 한다 — 초등 4~6학년에게 이메일이 없는 경우가 적지 않다.
+ *
+ * ## 아이는 스스로 비밀번호를 바꾸지 못한다
+ *
+ * 실제 이메일이 생기면서 `/password` 로 아이가 직접 재설정할 수 있게
+ * 됐지만, 정책 §8 이 금지한다. 서버가 막는다(`password/_actions.ts`).
+ * 재설정은 부모가 마이페이지에서 한다(MY-003).
  */
-
-/** 도메인을 바꾸면 이미 만든 아이 계정은 로그인하지 못한다. 함부로 고치지 않는다 */
-export const STUDENT_EMAIL_DOMAIN = 'student.aipm.invalid';
 
 /**
- * 영문 소문자 · 숫자 · 밑줄, 4~20자.
+ * 이메일 모양인가.
  *
- * DB 의 `student_login_id_format` 제약과 **같은 글자로 맞춰 둔다**. 한쪽만
- * 고치면 화면은 받아 놓고 저장에서 터진다.
- */
-export const LOGIN_ID_PATTERN = /^[a-z0-9_]{4,20}$/;
-
-export function isValidLoginId(value: string): boolean {
-  return LOGIN_ID_PATTERN.test(value);
-}
-
-export function emailForLoginId(loginId: string): string {
-  return `${loginId}@${STUDENT_EMAIL_DOMAIN}`;
-}
-
-/**
- * 로그인 칸에 들어온 글이 이메일인가 아이디인가.
+ * **로그인 칸이 하나다.** 부모든 아이든 이메일을 친다. 「보호자용」/
+ * 「학생용」 을 고르게 하면 아이가 고르는 것부터 틀린다.
  *
- * **칸을 두 개로 나누지 않는다.** `@` 가 있으면 부모의 이메일이고, 없으면
- * 아이의 아이디다. 「보호자용」/「학생용」 을 고르게 하면 아이가 고르는
- * 것부터 틀린다.
+ * `hello@meti` 처럼 도메인이 덜 적힌 것을 걸러 준다. 느슨하게 두면
+ * Auth 를 부르고 나서야 틀린 것을 알게 된다.
  */
+const EMAIL = /^[^\s@]+@[^\s@.]+\.[^\s@]+$/;
+
 export function looksLikeEmail(value: string): boolean {
-  return value.includes('@');
+  return EMAIL.test(value.trim());
 }
+
+/**
+ * 비밀번호 규칙 (정책 v0.1 §3.2 · §7)
+ *
+ * **영문과 숫자를 함께 쓴 8자 이상.** 부모와 아이가 같은 규칙이다.
+ * 전에는 8자 이상만 보고 조합은 「권장」 이라고만 적었다.
+ */
+export const PASSWORD_MIN = 8;
+
+export function isValidPassword(value: string): boolean {
+  return value.length >= PASSWORD_MIN && /[A-Za-z]/.test(value) && /[0-9]/.test(value);
+}
+
+export const PASSWORD_RULE_TEXT = '영문과 숫자를 섞어 8자 이상으로 해주세요.';

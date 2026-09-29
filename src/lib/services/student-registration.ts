@@ -51,7 +51,7 @@ export function readStudentForm(formData: FormData) {
     birthDate: text('birth_date'),
     grade: Number(formData.get('grade') ?? 0),
     // 아이디는 대소문자를 가리지 않는다. 아이가 대문자로 치면 못 들어온다.
-    loginId: text('login_id').toLowerCase(),
+    loginEmail: text('login_email').toLowerCase(),
     loginPassword: String(formData.get('login_password') ?? ''),
     loginPasswordConfirm: String(formData.get('login_password_confirm') ?? ''),
   };
@@ -93,13 +93,13 @@ export async function registerStudent(
    * 학생이 있어서 NOT NULL 로 조일 수 없다 — 그 아이들은 MY-003 에서
    * 아이디를 만들어 준다.
    */
-  const { loginId, loginPassword } = input;
+  const { loginEmail, loginPassword } = input;
 
   if (loginPassword !== input.loginPasswordConfirm) {
     return { ok: false, error: '비밀번호가 일치하지 않아요. 다시 입력해 주세요.' };
   }
 
-  if (loginId === '' || loginPassword === '') {
+  if (loginEmail === '' || loginPassword === '') {
     return {
       ok: false,
       error: '아이가 쓸 아이디와 비밀번호를 채워주세요. 아이는 이것으로 들어옵니다.',
@@ -109,7 +109,7 @@ export async function registerStudent(
   // **아이디를 먼저 잡는다.** 학생을 만든 뒤에 붙이면, 아이디가 겹쳤을 때
   // 학생만 남는다 — 부모는 등록이 됐는지 모르고 다시 눌러 같은 아이를 둘로
   // 만든다. 겹치는지는 Auth 만 알고 있다.
-  const reserved = await reserveChildAuthUser({ loginId, password: loginPassword });
+  const reserved = await reserveChildAuthUser({ loginEmail, password: loginPassword });
   if (!reserved.ok) return { ok: false, error: reserved.error };
   const reservedUserId = reserved.userId;
 
@@ -132,7 +132,7 @@ export async function registerStudent(
 
   const attached = await attachChildLogin(client, {
     studentId,
-    loginId,
+    loginEmail,
     userId: reservedUserId,
   });
   if (!attached) {

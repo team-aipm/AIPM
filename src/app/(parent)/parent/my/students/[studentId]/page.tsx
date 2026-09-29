@@ -110,7 +110,7 @@ export default async function StudentProfilePage({
         만들면 된다.
       */}
       {!pending && (
-        <ChildLoginSection studentId={student.student_id} loginId={student.login_id} />
+        <ChildLoginSection studentId={student.student_id} loginEmail={student.login_email} />
       )}
 
       <section className="flex flex-col gap-2 rounded-2xl bg-white p-5 shadow-sm">
