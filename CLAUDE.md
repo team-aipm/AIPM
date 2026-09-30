@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-> **Version:** 1.2 · **Updated:** 2026-09-30 · **Owner:** 운영 및 백오피스 PM
+> **Version:** 1.3 · **Updated:** 2026-09-30 · **Owner:** 운영 및 백오피스 PM
 
 Claude Code가 이 프로젝트에서 작업할 때 따르는 규칙이다.
 상세 기준은 `docs/`의 COM / DEV 문서에 있으며, **이 파일과 문서가 충돌하면
@@ -91,7 +91,7 @@ Storage) / Google Gemini API / Vercel / npm
 
 ```text
 src/app/(auth)      AUTH
-src/app/(student)   STU + MIS   ← 학생 어휘, 하단 Nav 없음
+src/app/(student)   STU + MIS   ← 학생 어휘, 하단 Nav 3탭 (COM-003 §11)
 src/app/(parent)    PAR + RPT + BIL + MY   ← 부모 어휘, 하단 Nav 3탭
 src/app/api         스트리밍 · 외부 콜백 · 배치만
 src/components/ui       공통 UI
