@@ -24,7 +24,7 @@ import 'server-only';
  * 한다.
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient, currentUser } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/database';
 
@@ -40,18 +40,36 @@ export type AdminContext = {
 /** 운영자가 아니면 `null`. 부르는 쪽이 화면을 안 그린다 */
 export async function currentAdmin(): Promise<AdminContext | null> {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (auth.user === null) return null;
+  const user = await currentUser();
+  if (user === null) return null;
 
   const { data, error } = await supabase
     .from('admin_user')
     .select('*')
-    .eq('admin_id', auth.user.id)
+    .eq('admin_id', user.id)
     .maybeSingle();
 
   if (error !== null || data === null || !data.is_active) return null;
 
   return { admin: data, db: createAdminClient() };
+}
+
+/**
+ * 로그인한 사람이 운영자인가. 로그인 직후 어디로 보낼지 고를 때만 쓴다.
+ *
+ * `currentAdmin` 과 같은 행을 보지만 service_role 클라이언트를 만들지 않는다.
+ * 보낼 곳을 고르는 데 남의 데이터를 읽을 힘은 필요 없다.
+ */
+export async function isActiveAdmin(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('admin_user')
+    .select('is_active')
+    .eq('admin_id', userId)
+    .maybeSingle();
+  return data?.is_active === true;
 }
 
 /** 권한 등급 (COM-007 §7-2) */
