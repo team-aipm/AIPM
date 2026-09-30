@@ -37,7 +37,7 @@ export type TermsDocument = {
   readonly required: boolean;
   /** 고치면 반드시 올린다 */
   readonly version: string;
-  /** `consent_log` 에 남길 값. 마케팅은 한 번에 셋이 남는다 */
+  /** `consent_log` 에 남길 값. 마케팅은 채널마다 한 행이다 */
   readonly consentTypes: readonly ConsentType[];
   readonly body: string;
 };
@@ -171,15 +171,14 @@ export const TERMS: Record<TermsKey, TermsDocument> = {
     title: '마케팅 정보 수신 동의',
     label: '마케팅 정보 수신 동의',
     required: false,
-    version: '2026-09-22',
+    version: '2026-09-30',
     /**
-     * **하나를 누르면 셋이 남는다.** 화면은 「마케팅 정보 수신 동의」 한
-     * 줄인데 COM-002 §3 은 이메일 · 문자 · 알림톡을 따로 갖는다. 가입
-     * 화면에서 셋을 따로 묻지 않기로 한 것이 디자인의 선택이므로, 같은
-     * 값으로 셋을 채우고 **나중에 `MY` 에서 따로 끌 수 있게** 둔다
-     * (`/parent/my/marketing`).
+     * **채널별로 따로 받는다** (COM-002 §25 · COM-007 §9 · 2026-09-30).
+     * 약관 문서는 하나지만 가입 화면은 「이메일」 · 「SMS」 두 줄이고,
+     * 각 줄이 자기 채널 하나만 남긴다. 알림톡은 받지 않는다 — 보낼 기능이
+     * 없는데 미리 받아 두지 않는다. 컬럼은 남아 있고 늘 false 다.
      */
-    consentTypes: ['marketing_email', 'marketing_sms', 'marketing_alimtalk'],
+    consentTypes: ['marketing_email', 'marketing_sms'],
     body: `회사는 아래와 같이 마케팅 정보를 보내기 위해 개인정보를 이용합니다.
 
 1. 보내는 내용
@@ -188,7 +187,7 @@ export const TERMS: Record<TermsKey, TermsDocument> = {
 · 학습 습관 형성을 돕는 안내
 
 2. 보내는 방법
-· 이메일, 문자메시지(SMS), 알림톡
+· 이메일, 문자메시지(SMS)
 
 3. 보유 및 이용 기간
 · 동의를 철회하거나 회원에서 탈퇴할 때까지

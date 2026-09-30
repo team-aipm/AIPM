@@ -58,6 +58,11 @@ export function SignupForm() {
     guardian: false,
     marketing: false,
   });
+  /**
+   * 마케팅은 **채널별로 따로** 고른다(COM-002 §25). 약관 문서는 하나라
+   * `agreed.marketing` 은 쓰지 않고 이 둘이 대신한다. 기본은 둘 다 꺼짐.
+   */
+  const [channels, setChannels] = useState({ email: false, sms: false });
   const [sheet, setSheet] = useState<TermsKey | null>(null);
 
   /**
@@ -75,7 +80,11 @@ export function SignupForm() {
       const box = form.elements.namedItem(`agree_${key}`);
       if (box instanceof HTMLInputElement) box.checked = agreed[key];
     }
-  }, [state, agreed]);
+    for (const channel of ['email', 'sms'] as const) {
+      const box = form.elements.namedItem(`agree_marketing_${channel}`);
+      if (box instanceof HTMLInputElement) box.checked = channels[channel];
+    }
+  }, [state, agreed, channels]);
 
   if (state.status === 'done' || state.status === 'sent') {
     return <DoneNotice email={state.status === 'sent' ? state.email : null} />;
@@ -94,10 +103,51 @@ export function SignupForm() {
   const message = state.status === 'error' ? state.message : '';
   const taken = state.status === 'taken';
 
-  const all = TERMS_ORDER.every((key) => agreed[key]);
+  const all = TERMS_ORDER.every((key) =>
+    key === 'marketing' ? channels.email && channels.sms : agreed[key],
+  );
 
-  const toggleAll = (on: boolean) =>
+  const toggleAll = (on: boolean) => {
     setAgreed({ terms: on, privacy: on, guardian: on, marketing: on });
+    setChannels({ email: on, sms: on });
+  };
+
+  /** 동의 한 줄. 줄마다 44px, 오른쪽에 「보기」 */
+  const row = (
+    key: TermsKey,
+    name: string,
+    label: string,
+    checked: boolean,
+    onChange: (on: boolean) => void,
+  ) => (
+    <div key={name} className="flex min-h-[44px] items-center justify-between">
+      <label className="flex flex-1 cursor-pointer items-center gap-3 p-2">
+        <input
+          type="checkbox"
+          name={name}
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className={CHECK}
+        />
+        <span className="text-[16px] leading-6 text-text-primary">
+          ({TERMS[key].required ? '필수' : '선택'}) {label}
+        </span>
+      </label>
+
+      {/*
+        **버튼이지 링크가 아니다.** 다른 곳으로 가는 것이 아니라
+        이 화면 위에 시트를 연다(COM-003 §13-3).
+      */}
+      <button
+        type="button"
+        onClick={() => setSheet(key)}
+        aria-label={`${TERMS[key].title} 보기`}
+        className="flex h-[44px] min-w-[45px] items-center justify-center text-[14px] font-semibold leading-5 text-text-secondary"
+      >
+        보기
+      </button>
+    </div>
+  );
 
   return (
     <>
@@ -206,37 +256,22 @@ export function SignupForm() {
               </span>
             </label>
 
-            {TERMS_ORDER.map((key) => (
-              <div key={key} className="flex min-h-[44px] items-center justify-between">
-                <label className="flex flex-1 cursor-pointer items-center gap-3 p-2">
-                  <input
-                    type="checkbox"
-                    name={`agree_${key}`}
-                    checked={agreed[key]}
-                    onChange={(e) =>
-                      setAgreed((prev) => ({ ...prev, [key]: e.target.checked }))
-                    }
-                    className={CHECK}
-                  />
-                  <span className="text-[16px] leading-6 text-text-primary">
-                    ({TERMS[key].required ? '필수' : '선택'}) {TERMS[key].label}
-                  </span>
-                </label>
-
-                {/*
-                  **버튼이지 링크가 아니다.** 다른 곳으로 가는 것이 아니라
-                  이 화면 위에 시트를 연다(COM-003 §13-3).
-                */}
-                <button
-                  type="button"
-                  onClick={() => setSheet(key)}
-                  aria-label={`${TERMS[key].title} 보기`}
-                  className="flex h-[44px] min-w-[45px] items-center justify-center text-[14px] font-semibold leading-5 text-text-secondary"
-                >
-                  보기
-                </button>
-              </div>
-            ))}
+            {TERMS_ORDER.flatMap((key) =>
+              key === 'marketing'
+                ? [
+                    row(key, 'agree_marketing_email', '이메일 마케팅 수신', channels.email, (on) =>
+                      setChannels((prev) => ({ ...prev, email: on })),
+                    ),
+                    row(key, 'agree_marketing_sms', 'SMS 마케팅 수신', channels.sms, (on) =>
+                      setChannels((prev) => ({ ...prev, sms: on })),
+                    ),
+                  ]
+                : [
+                    row(key, `agree_${key}`, TERMS[key].label, agreed[key], (on) =>
+                      setAgreed((prev) => ({ ...prev, [key]: on })),
+                    ),
+                  ],
+            )}
           </div>
 
           {where === 'form' && (
