@@ -17,7 +17,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
-import { createStudent } from '@/lib/services/student';
+import { MAX_STUDENTS, countActiveStudents, createStudent } from '@/lib/services/student';
 import {
   reserveChildAuthUser,
   releaseChildAuthUser,
@@ -74,6 +74,12 @@ export async function registerStudent(
   // 막는다. 한쪽만 막으면 다른 경로로 들어온 값이 통과한다.
   if (grade < 4 || grade > 6) {
     return { ok: false, error: '지금은 4~6학년만 시작할 수 있어요.' };
+  }
+
+  // 자녀는 최대 3명이다(COM-002 §3). 화면도 막지만 주소를 직접 치고
+  // 들어온 요청까지 막는 곳은 여기다.
+  if ((await countActiveStudents(client, accountId)) >= MAX_STUDENTS) {
+    return { ok: false, error: `자녀는 최대 ${MAX_STUDENTS}명까지 등록할 수 있어요.` };
   }
 
   // 닉네임 기본값은 이름이다(COM-002 §4). 무엇을 기본으로 썼는지도 남긴다 —

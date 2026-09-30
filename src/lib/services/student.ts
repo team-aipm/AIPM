@@ -152,7 +152,38 @@ export async function softDeleteStudent(client: Client, studentId: string): Prom
 }
 
 /** 30일 안이면 되돌린다 (COM-007 §5-1) */
+/**
+ * 한 계정에 등록할 수 있는 자녀 수 (COM-002 §3 · CLAUDE.md).
+ *
+ * **서버에서 막는다.** 화면만 막으면 주소를 직접 치고 들어와 폼을 보내거나,
+ * 삭제 대기 중인 아이를 되돌려 네 번째가 생긴다. 등록과 되돌리기 둘 다
+ * 여기를 지난다. 화면이 세는 것과 같이 `active` 만 센다.
+ */
+export const MAX_STUDENTS = 3;
+
+export async function countActiveStudents(client: Client, accountId: string): Promise<number> {
+  const { count, error } = await client
+    .from('student')
+    .select('student_id', { count: 'exact', head: true })
+    .eq('account_id', accountId)
+    .eq('student_status', 'active');
+
+  if (error !== null) throw new Error(`자녀 수를 세지 못했습니다: ${error.message}`);
+  return count ?? 0;
+}
+
 export async function restoreStudent(client: Client, studentId: string): Promise<void> {
+  const { data: target, error: readError } = await client
+    .from('student')
+    .select('account_id')
+    .eq('student_id', studentId)
+    .maybeSingle();
+
+  if (readError !== null || target === null) throw new Error('되돌릴 자녀를 찾지 못했습니다');
+  if ((await countActiveStudents(client, target.account_id)) >= MAX_STUDENTS) {
+    throw new Error(`자녀는 최대 ${MAX_STUDENTS}명까지 등록할 수 있어요.`);
+  }
+
   const { error } = await client
     .from('student')
     .update({
