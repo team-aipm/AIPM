@@ -167,7 +167,38 @@ export const MODULE_ACTIONS: Record<string, readonly Action[]> = {
  * 그것을 대신 정하는 것이 아니라, **정해질 때까지 이름이 흩어지지 않게
  * 하는 임시 어휘**다. 확정되면 이 파일만 바꾼다.
  */
-export const CONCEPTS: Record<4 | 5 | 6, readonly string[]> = {
+/** 출제 범위 (COM-001 §9). 7 = 중1 */
+export type Grade = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export const GRADES: readonly Grade[] = [1, 2, 3, 4, 5, 6, 7];
+
+/**
+ * 학년별 학습 개념.
+ *
+ * ## 1~3학년과 중1 을 더했다 (2026-09-30)
+ *
+ * 학년을 넘나들게 되면서(COM-001 §9) 4·5·6학년 29개만으로는 모자랐다 —
+ * **1학년 문제를 내려 해도 고를 이름이 없었다.**
+ *
+ * 교육과정 단원명을 옮겼고 사람이 확인했다. 학기를 합친 것이 셋 있다 —
+ * 1학년 「덧셈과 뺄셈」 은 세 번 나오지만 한 줄이고, 3학년 「분수와 소수」
+ * 는 3-2 의 「분수」 를 함께 담는다. 이름이 같으면 취약 개념도 하나로
+ * 세어야 맞다.
+ */
+export const CONCEPTS: Record<Grade, readonly string[]> = {
+  1: [
+    '9까지의 수', '여러 가지 모양', '덧셈과 뺄셈', '비교하기',
+    '50까지의 수', '100까지의 수', '시계 보기와 규칙 찾기',
+  ],
+  2: [
+    '세 자리 수', '네 자리 수', '여러 가지 도형', '덧셈과 뺄셈',
+    '곱셈', '곱셈구구', '길이 재기', '시각과 시간',
+    '분류하기', '표와 그래프', '규칙 찾기',
+  ],
+  3: [
+    '덧셈과 뺄셈', '곱셈', '나눗셈', '분수와 소수',
+    '평면도형', '원', '길이와 시간', '들이와 무게', '자료의 정리',
+  ],
   4: [
     '큰 수', '각도', '곱셈과 나눗셈', '분수의 덧셈과 뺄셈',
     '소수의 덧셈과 뺄셈', '삼각형', '사각형',
@@ -183,17 +214,35 @@ export const CONCEPTS: Record<4 | 5 | 6, readonly string[]> = {
     '직육면체의 부피와 겉넓이', '각기둥과 각뿔',
     '비례식과 비례배분', '원의 넓이', '원기둥과 원뿔',
   ],
+  7: [
+    '소인수분해', '정수와 유리수', '문자와 식', '일차방정식',
+    '좌표평면과 그래프', '기본 도형', '평면도형의 성질',
+    '입체도형의 성질', '통계',
+  ],
 };
 
-/** 프롬프트에 넣을 목록. 학년을 모르면 셋 다 보여 준다 */
+/** 화면과 프롬프트에 쓰는 학년 이름. 7 은 중1 이다 */
+export function gradeName(grade: Grade): string {
+  return grade > 6 ? `중${grade - 6}` : `${grade}학년`;
+}
+
+/**
+ * 프롬프트에 넣을 목록. **학년을 가리지 않고 전부 보여 준다.**
+ *
+ * 학습 학년만 잘라 넣으면 프롬프트가 짧아지지만, 그 대신 **COMMON SYSTEM
+ * 앞부분이 학생마다 달라진다.** 그러면 캐시가 안 걸린다 — 고정 덩어리가
+ * 같아야 입력 비용의 절반 가까이가 빠진다(`_pricing.ts` · 2026-09-22 측정
+ * 기준 49%).
+ *
+ * 어느 학년에서 고를지는 입력의 `learning_target.grade` 가 정한다. 목록은
+ * 그대로 두고 그쪽에서 좁히는 편이 싸다.
+ */
 export function conceptsBlock(): string {
-  return ([4, 5, 6] as const)
-    .map((grade) => `${grade}학년\n  ${CONCEPTS[grade].join(' · ')}`)
-    .join('\n');
+  return GRADES.map((grade) => `${gradeName(grade)}\n  ${CONCEPTS[grade].join(' · ')}`).join('\n');
 }
 
 /** 목록에 있는 이름인가. 없는 이름이 들어와도 막지는 않는다 — 기록은 남긴다 */
 export function isKnownConcept(name: string): boolean {
   const trimmed = name.trim();
-  return ([4, 5, 6] as const).some((g) => CONCEPTS[g].includes(trimmed));
+  return GRADES.some((g) => CONCEPTS[g].includes(trimmed));
 }

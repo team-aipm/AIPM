@@ -46,7 +46,39 @@
  * 여기서 보는 것은 `student.current_difficulty` 하나다.
  */
 
-import { decide, MIN_LEVEL, MAX_LEVEL, START_LEVEL } from '../src/lib/services/difficulty.ts';
+import {
+  decide,
+  MIN_LEVEL,
+  MAX_LEVEL,
+  START_LEVEL,
+  MIN_GRADE,
+  MAX_GRADE,
+} from '../src/lib/services/difficulty.ts';
+
+// ── 학년을 가로지르는 자 ────────────────────────────────────────────
+//
+// 학년이 넘나들게 되면서(COM-001 §9) 레벨만으로는 「어디쯤인가」를 말할
+// 수 없다. 4학년 레벨 5 와 5학년 레벨 1 중 어느 쪽이 위인지 숫자가 알려
+// 주지 않는다.
+//
+// 그래서 **한 줄로 편 눈금**을 쓴다. 1학년 레벨 1 이 1, 중1 레벨 5 가
+// 35 다. 학생의 실력도 이 눈금 위의 값이다.
+//
+//     1학년 레벨1   1        5학년 레벨3   23
+//     4학년 레벨1  16        6학년 레벨5   30
+//     5학년 레벨1  21        중1   레벨5   35
+const SPAN = MAX_LEVEL - MIN_LEVEL + 1;
+const flat = ({ grade, level }) => (grade - MIN_GRADE) * SPAN + level;
+
+/** 한 줄 눈금 값을 학년·레벨로 되돌린다 */
+const unflat = (value) => ({
+  grade: Math.floor((value - 1) / SPAN) + MIN_GRADE,
+  level: ((value - 1) % SPAN) + MIN_LEVEL,
+});
+
+/** 학년을 사람이 읽는 말로. 7 은 중1 이다 */
+const gradeName = (grade) => (grade > 6 ? `중${grade - 6}` : `${grade}학년`);
+const placeName = (at) => `${gradeName(at.grade)} ${at.level}`;
 
 // ── 실제 서비스와 맞춘 상수 ────────────────────────────────────────
 //
@@ -85,18 +117,23 @@ const logistic = (x) => 1 / (1 + Math.exp(-x));
 // ── 학생 ────────────────────────────────────────────────────────────
 
 /**
- * `ability` 는 「이 아이에게 딱 맞는 문제 수준」이다. 레벨과 같은 1~5 눈금을
- * 쓰되 소수를 허용한다 — 3 과 4 사이에 있는 아이가 실제로는 가장 많다.
+ * **모두 5학년 아이다.** 실력만 다르다.
  *
- * `growthPerMonth` 는 6개월 동안 실력이 느는 정도다. 0 이면 「서비스를 써도
- * 늘지 않는 아이」이고, 그 경우에도 레벨이 제자리를 찾아가는지 보게 된다.
+ * `growthPerMonth` 는 한 달에 눈금 몇 칸이 느는가다. 0 이면 「서비스를
+ * 써도 늘지 않는 아이」이고, 그 경우에도 자리가 제자리를 찾아가는지 본다.
+ *
+ * `ability` 는 위의 한 줄 눈금 위 값이다. 5학년 레벨 3 이 23 이므로
+ * 23 근처가 「제 학년 평균」이다. 13 은 3학년 레벨 3 —— 5학년인데 3학년
+ * 수준이라는 뜻이고, 그런 아이가 실제로 있다.
  */
+const START_AT = { grade: 5, level: START_LEVEL };
+
 const PROFILES = [
-  { name: '빠른 아이', ability: 4.6, growthPerMonth: 0.15 },
-  { name: '보통 아이', ability: 3.2, growthPerMonth: 0.12 },
-  { name: '느린 아이', ability: 1.9, growthPerMonth: 0.10 },
-  { name: '안 느는 아이', ability: 3.0, growthPerMonth: 0 },
-  { name: '아주 잘하는 아이', ability: 6.0, growthPerMonth: 0 },
+  { name: '빠른 아이', ability: 27.5, growthPerMonth: 0.8 },
+  { name: '보통 아이', ability: 23.5, growthPerMonth: 0.6 },
+  { name: '두 학년 뒤진 아이', ability: 13.5, growthPerMonth: 0.5 },
+  { name: '안 느는 아이', ability: 23.0, growthPerMonth: 0 },
+  { name: '아주 잘하는 아이', ability: 40.0, growthPerMonth: 0 },
 ];
 
 /**
@@ -105,12 +142,12 @@ const PROFILES = [
  * 되먹임이 여기 있다. `gap` 이 음수면(문제가 실력보다 위) 처음부터 맞힐
  * 확률이 떨어지고 도움을 많이 받는다. 그러면 `decide()` 가 레벨을 내린다.
  */
-function solve(random, ability, level) {
-  const gap = ability - level;
+function solve(random, ability, at) {
+  const gap = ability - flat(at);
 
   // 1.6 은 기울기다. 이 값이 크면 실력과 수준이 조금만 어긋나도 결과가
   // 확 갈리고, 작으면 뭉개진다. gap 1 에서 처음 정답률이 약 83% 가 되도록
-  // 잡았다 — 「한 단계 쉬우면 대체로 맞힌다」는 감각에 맞춘다.
+  // 잡았다 — 「한 칸 쉬우면 대체로 맞힌다」는 감각에 맞춘다.
   const initialAccuracy = random() < logistic(gap * 1.6);
 
   // 도움은 gap 이 낮을수록 많이 받는다. 처음부터 맞혔으면 도움받을 일이
@@ -143,17 +180,26 @@ function simulate(profile, options) {
   const { days, daysPerWeek, problemsPerDay, seed, variant } = options;
   const random = rng(seed);
 
-  let level = START_LEVEL;
+  // **학년과 레벨이 함께 움직인다.** 레벨 1 에서 더 내려가면 학년이
+  // 넘어간다 (COM-001 §9).
+  let at = { ...START_AT };
   const recent = [];
-  const daily = []; // 그날을 마쳤을 때의 레벨
-  let moves = 0; // 레벨이 바뀐 총 횟수
+  const daily = []; // 그날을 마쳤을 때의 자리. 한 줄 눈금 값으로 담는다
+  let moves = 0;
+  let gradeMoves = 0; // 그중 학년이 넘어간 횟수
   let studyDays = 0;
+
+  const apply = (decision) => {
+    moves++;
+    if (decision.gradeMoved) gradeMoves++;
+    at = { grade: decision.grade, level: decision.level };
+  };
 
   for (let day = 1; day <= days; day++) {
     // 매일 하지는 않는다. 주 daysPerWeek 회.
     const rest = day % 7 >= daysPerWeek;
     if (rest) {
-      daily.push(level);
+      daily.push(flat(at));
       continue;
     }
     studyDays++;
@@ -162,21 +208,20 @@ function simulate(profile, options) {
     const ability = profile.ability + profile.growthPerMonth * months;
 
     for (let i = 0; i < problemsPerDay; i++) {
-      recent.unshift(solve(random, ability, level));
+      recent.unshift(solve(random, ability, at));
       if (recent.length > RECENT_WINDOW) recent.length = RECENT_WINDOW;
 
       // 'daily' 안은 문제마다 판정하지 않는다. 하루를 마칠 때 한 번만 본다.
       if (variant === 'daily') continue;
 
       // **서비스와 같은 함수다.** 문제를 마칠 때마다 부른다.
-      const decision = decide(recent, level);
+      const decision = decide(recent, at);
       if (decision.move !== 'SAME') {
-        moves++;
-        level = decision.level;
+        apply(decision);
 
-        // 레벨이 바뀌면 앞 기록은 **다른 수준에서 푼 것**이다. 서비스는
-        // `problem.difficulty` 로 현재 수준의 평가만 골라 읽으므로, 여기서
-        // 창을 비우는 것과 같다 (COM-001 §9).
+        // 자리가 바뀌면 앞 기록은 **다른 자리에서 푼 것**이다. 서비스는
+        // `problem` 의 학년·수준으로 지금 자리의 평가만 골라 읽으므로,
+        // 여기서 창을 비우는 것과 같다 (COM-001 §9).
         //
         // 'keep' 은 그 규칙이 없던 때를 재현한다. 무엇이 나아졌는지
         // 보려면 비교 대상이 있어야 한다.
@@ -185,14 +230,11 @@ function simulate(profile, options) {
     }
 
     if (variant === 'daily') {
-      const decision = decide(recent, level);
-      if (decision.move !== 'SAME') {
-        moves++;
-        level = decision.level;
-      }
+      const decision = decide(recent, at);
+      if (decision.move !== 'SAME') apply(decision);
     }
 
-    daily.push(level);
+    daily.push(flat(at));
   }
 
   // 마지막 30일이 얼마나 출렁였는가. 6개월을 써서 자리를 잡았다면
@@ -201,7 +243,14 @@ function simulate(profile, options) {
   const mean = tail.reduce((sum, v) => sum + v, 0) / tail.length;
   const settle = Math.sqrt(tail.reduce((sum, v) => sum + (v - mean) ** 2, 0) / tail.length);
 
-  return { daily, finalLevel: level, movesPerDay: moves / Math.max(1, studyDays), settle };
+  return {
+    daily,
+    final: at,
+    finalFlat: flat(at),
+    movesPerDay: moves / Math.max(1, studyDays),
+    gradeMoves,
+    settle,
+  };
 }
 
 // ── 실행 ────────────────────────────────────────────────────────────
@@ -290,7 +339,7 @@ function measure(options) {
       runs.push(simulate(profile, { ...options, seed: options.seed + i * 7919 }));
     }
 
-    // 개월별 평균 레벨
+    // 개월별 평균 자리. 한 줄 눈금 값이다 (1학년 레벨1 = 1)
     const checkpoints = [30, 60, 90, 120, 150, 180]
       .filter((d) => d <= options.days)
       .map((d) => ({
@@ -298,13 +347,14 @@ function measure(options) {
         level: runs.reduce((sum, r) => sum + r.daily[d - 1], 0) / runs.length,
       }));
 
-    const finals = runs.map((r) => r.finalLevel);
+    // 최종 자리를 학년별로 센다. 「몇 학년에서 끝났나」가 레벨보다 크다
     const distribution = {};
-    for (let l = MIN_LEVEL; l <= MAX_LEVEL; l++) {
-      distribution[l] = finals.filter((f) => f === l).length;
+    for (let g = MIN_GRADE; g <= MAX_GRADE; g++) {
+      distribution[g] = runs.filter((r) => r.final.grade === g).length;
     }
 
     const movedRatio = runs.filter((r) => r.movesPerDay > 0).length / runs.length;
+    const flats = runs.map((r) => r.finalFlat);
 
     return {
       profile,
@@ -312,8 +362,11 @@ function measure(options) {
       distribution,
       movedRatio,
       movesPerDay: runs.reduce((sum, r) => sum + r.movesPerDay, 0) / runs.length,
+      gradeMoves: runs.reduce((sum, r) => sum + r.gradeMoves, 0) / runs.length,
       settle: runs.reduce((sum, r) => sum + r.settle, 0) / runs.length,
-      finalMedian: median(finals),
+      finalMedian: median(flats),
+      /** 중앙값을 학년·레벨로 되돌린 것. 화면에 그대로 쓴다 */
+      finalAt: unflat(median(flats)),
       sample: runs[0],
     };
   });
@@ -335,53 +388,57 @@ function report(results, options) {
 
   console.log('');
   console.log(c.bold('  난이도 시뮬레이터') + c.dim(`  ·  ${options.days}일 · 주 ${options.daysPerWeek}회 · 하루 ${options.problemsPerDay}문제 · 유형마다 ${options.runs}명`));
-  console.log(c.dim(`  src/lib/services/difficulty.ts 의 decide() 를 그대로 사용. 시작 레벨 ${START_LEVEL}`));
+  console.log(c.dim(`  src/lib/services/difficulty.ts 의 decide() 를 그대로 사용. 모두 ${placeName(START_AT)} 에서 시작`));
   console.log(c.dim(`  판정 방식: ${VARIANTS[options.variant]}`));
+  console.log(c.dim(`  숫자는 한 줄 눈금이다 — 1학년1 = 1, ${placeName(START_AT)} = ${flat(START_AT)}, 중1 5 = ${flat({ grade: MAX_GRADE, level: MAX_LEVEL })}`));
   console.log('');
 
   const months = results[0].checkpoints.map((cp) => `${cp.day / 30}개월`);
-  console.log(c.dim('  ' + pad('유형', 18) + pad('실력', 8) + months.map((m) => lpad(m, 8)).join('') + lpad('최종', 8) + lpad('하루이동', 10) + lpad('막달출렁', 10)));
-  console.log(c.dim('  ' + '─'.repeat(18 + 8 + months.length * 8 + 28)));
+  console.log(c.dim('  ' + pad('유형', 20) + pad('실력', 7) + months.map((m) => lpad(m, 8)).join('') + lpad('최종', 10) + lpad('하루이동', 10) + lpad('막달출렁', 10)));
+  console.log(c.dim('  ' + '─'.repeat(20 + 7 + months.length * 8 + 30)));
 
   for (const r of results) {
-    const cells = r.checkpoints.map((cp) => lpad(cp.level.toFixed(2), 8)).join('');
+    const cells = r.checkpoints.map((cp) => lpad(cp.level.toFixed(1), 8)).join('');
     const moves = r.movedRatio === 0 ? c.red(lpad('없음', 10)) : lpad(r.movesPerDay.toFixed(1) + '회', 10);
-    // 0.5 는 「마지막 30일 동안 레벨이 한 칸 안팎으로 계속 오간다」는 뜻이다
+    // 0.5 는 「마지막 30일 동안 한 칸 안팎으로 계속 오간다」는 뜻이다
     const settleText = lpad(r.settle.toFixed(2), 10);
     console.log(
-      '  ' + pad(r.profile.name, 18) +
-      pad(String(r.profile.ability), 8) +
+      '  ' + pad(r.profile.name, 20) +
+      pad(String(r.profile.ability), 7) +
       cells +
-      lpad(String(r.finalMedian), 8) +
+      lpad(placeName(r.finalAt), 10) +
       moves +
       (r.settle >= 0.5 ? c.yellow(settleText) : settleText),
     );
   }
 
+  const GRADES = [];
+  for (let g = MIN_GRADE; g <= MAX_GRADE; g++) GRADES.push(g);
+
   console.log('');
-  console.log(c.dim('  최종 레벨 분포 (' + options.runs + '명 중)'));
-  console.log(c.dim('  ' + pad('유형', 18) + [1, 2, 3, 4, 5].map((l) => lpad(`Lv${l}`, 7)).join('')));
+  console.log(c.dim('  6개월 뒤 어느 학년에 있나 (' + options.runs + '명 중)'));
+  console.log(c.dim('  ' + pad('유형', 20) + GRADES.map((g) => lpad(gradeName(g), 7)).join('')));
   for (const r of results) {
-    const cells = [1, 2, 3, 4, 5]
+    const cells = GRADES
       .map((l) => {
         const n = r.distribution[l];
         const text = lpad(String(n), 7);
         return n === 0 ? c.dim(text) : n > options.runs / 2 ? c.green(text) : text;
       })
       .join('');
-    console.log('  ' + pad(r.profile.name, 18) + cells);
+    console.log('  ' + pad(r.profile.name, 20) + cells);
   }
 
   if (options.trace) {
     console.log('');
-    console.log(c.dim('  한 명의 날짜별 레벨 (10일 간격)'));
+    console.log(c.dim('  한 명의 날짜별 자리 (10일 간격 · 한 줄 눈금)'));
     for (const r of results) {
       const marks = r.sample.daily
         .map((l, i) => ({ l, i }))
         .filter(({ i }) => i % 10 === 0)
         .map(({ l }) => l)
         .join(' ');
-      console.log('  ' + pad(r.profile.name, 18) + c.dim(marks));
+      console.log('  ' + pad(r.profile.name, 20) + c.dim(marks));
     }
   }
 
@@ -394,9 +451,9 @@ function report(results, options) {
   const spread = new Set(results.map((r) => r.finalMedian)).size;
 
   if (stuck.length === results.length) {
-    console.log('  ' + c.red('레벨이 움직이지 않는다.') + ' 모든 유형이 시작 레벨에 머문다.');
+    console.log('  ' + c.red('자리가 움직이지 않는다.') + ' 모든 유형이 시작 자리에 머문다.');
   } else if (spread === 1) {
-    console.log('  ' + c.yellow('움직이기는 하는데 유형이 갈리지 않는다.') + ' 실력이 달라도 같은 레벨로 수렴한다.');
+    console.log('  ' + c.yellow('움직이기는 하는데 유형이 갈리지 않는다.') + ' 실력이 달라도 같은 자리로 수렴한다.');
   } else {
     console.log('  ' + c.green('레벨이 실력에 따라 갈린다.') + ` 최종 레벨이 ${spread}가지로 나뉜다.`);
   }
