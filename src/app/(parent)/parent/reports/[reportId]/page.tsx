@@ -12,8 +12,10 @@
  * (learning_report_select_own).
  */
 
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createClient, currentUser } from '@/lib/supabase/server';
+import { TERMS } from '@/lib/constants/copy';
 import { getStudent } from '@/lib/services/student';
 import { BackBar } from '@/components/ui/BackBar';
 import { formatPeriod } from '../_components/period';
@@ -90,6 +92,55 @@ export default async function ReportDetailPage({
   if (data === null) notFound();
 
   const student = await getStudent(supabase, data.student_id);
+
+  /**
+   * 미션이 0개인 주 (COM-003 §4.9). 배치가 모델을 부르지 않고 사실만 남겼다.
+   * 학습일 0일과 도장 미획득만 보여주고, 안 한 것을 나무라지 않는다.
+   */
+  if ((data.summary_data as Record<string, unknown> | null)?.empty_week === true) {
+    return (
+      <>
+        <BackBar href={`/parent/reports?child=${data.student_id}`} label="주간 리포트로 돌아가기" />
+        <main className="flex flex-1 flex-col gap-6 px-5 pt-2 pb-8">
+          <header className="flex flex-col gap-1">
+            <p className="text-[12px] leading-[18px] text-text-secondary">
+              {formatPeriod(data.period_start, data.period_end)}
+            </p>
+            <h1 className="text-[24px] leading-8 font-bold text-text-primary">
+              {student === null ? '주간 리포트' : `${student.nickname}의 주간 리포트`}
+            </h1>
+          </header>
+
+          <section className="flex flex-col gap-4 rounded-2xl border border-meti-line bg-surface-primary p-5 shadow-card">
+            <p className="text-[16px] leading-6 font-semibold text-text-primary">
+              이번 주는 {TERMS.learning.parent}한 날이 없어요
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col items-center gap-1 rounded-2xl bg-background-primary py-4">
+                <p className="text-[24px] leading-8 font-bold text-button-primary">0일</p>
+                <p className="text-[14px] leading-5 text-text-secondary">{TERMS.learning.parent}일</p>
+              </div>
+              <div className="flex flex-col items-center gap-1 rounded-2xl bg-background-primary py-4">
+                <p className="text-[24px] leading-8 font-bold text-button-primary">0개</p>
+                <p className="text-[14px] leading-5 text-text-secondary">참여 도장</p>
+              </div>
+            </div>
+            <p className="text-[14px] leading-5 text-text-secondary">
+              알림을 켜 두면 {TERMS.learning.parent}할 시간을 함께 챙길 수 있어요.
+            </p>
+          </section>
+
+          <Link
+            href="/parent/my/notifications"
+            className="flex h-[52px] items-center justify-center rounded-lg bg-button-primary px-5 text-[16px] leading-6 font-semibold text-white transition-colors hover:bg-button-hover active:bg-button-pressed"
+          >
+            알림 설정 확인하기
+          </Link>
+        </main>
+      </>
+    );
+  }
+
   const report = ((data.summary_data as Record<string, unknown>)?.report ?? {}) as Record<
     string,
     unknown

@@ -40,7 +40,7 @@ export default async function NotificationsPage() {
             <span className="flex flex-1 flex-col gap-0.5">
               <span className="text-[16px] leading-6 text-text-primary">마케팅 수신 설정</span>
               <span className="text-[12px] leading-[18px] text-text-secondary">
-                이메일 · 문자 · 알림톡
+                이메일 · 문자
               </span>
             </span>
             <ChevronRight />

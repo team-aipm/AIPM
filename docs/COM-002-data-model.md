@@ -1151,10 +1151,9 @@ marketing_alimtalk_opt_in   컬럼은 두고 화면에서 안 받는다. 기본 
 - `ConsentLog`(§20-B)에는 **거절도 행으로 남긴다.** 동의하지 않았다는
   사실 자체가 증명해야 할 것이다.
 
-**지금 코드는 아직 한 칸이다 · 맞춰야 할 것.** `(auth)/signup/_actions.ts`
-의 `metadataFor` 가 체크박스 하나를 읽어 세 값을 같이 켠다. 화면을 두
-칸으로 나눌 때 함께 고친다 — 컬럼은 그대로 두고 `alimtalk` 은 `false` 로
-둔다.
+**코드도 맞췄다 (2026-09-30).** 가입 화면이 이메일 · SMS 두 줄을 따로
+받고, `metadataFor` 가 채널마다 따로 남긴다. `alimtalk` 은 가입과 MY-006
+모두 `false` 로 저장하고 `consent_log` 에 남기지 않는다.
 
 ---
 

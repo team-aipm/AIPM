@@ -86,7 +86,7 @@
 
 ```text
 src/app/(auth)          AUTH
-src/app/(student)       STU + MIS   ← 학생 어휘, 하단 Nav 없음
+src/app/(student)       STU + MIS   ← 학생 어휘, 하단 Nav 3탭 (COM-003 §11)
 src/app/(parent)        PAR + RPT + BIL + MY   ← 부모 어휘, 하단 Nav 3탭
 src/app/api             스트리밍 · 외부 콜백 · 배치만
 src/components/ui       공통 UI

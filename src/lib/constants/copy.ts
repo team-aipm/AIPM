@@ -43,7 +43,7 @@ const say = (pair: Pair, to: Audience): string => pair[to];
  */
 export const PARTNER_NAME: Record<Enums['persona_type'], string> = {
   friend: '메티',
-  villain: '헷티',
+  villain: '헤티',
 };
 
 // ============================================================
@@ -53,7 +53,7 @@ export const PARTNER_NAME: Record<Enums['persona_type'], string> = {
 /**
  * 모드 이름은 **파트너 이름을 안고 있다.**
  *
- * "메티 채점하기" 는 파트너가 헷티면 "헷티 채점하기" 가 되어야 한다.
+ * "메티 채점하기" 는 파트너가 헤티면 "헤티 채점하기" 가 되어야 한다.
  * 그래서 문자열이 아니라 함수다. 문자열로 박으면 파트너마다 한 벌씩
  * 복사하게 된다.
  *
