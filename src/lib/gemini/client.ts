@@ -12,6 +12,45 @@ import 'server-only';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
+/**
+ * 안전 설정을 **코드에 적어 둔다.**
+ *
+ * 지금까지 아무것도 보내지 않아 모델 기본값에 맡기고 있었다. 기본값은
+ * 제공자가 바꿀 수 있고, 바뀌어도 우리는 모른다. **초등학생이 쓰는
+ * 서비스**에서 그 값이 조용히 느슨해지는 것을 두고 볼 수는 없다.
+ *
+ * ```text
+ * 성적 표현        BLOCK_LOW_AND_ABOVE       한 칸 더 엄하게
+ * 괴롭힘 · 혐오     BLOCK_MEDIUM_AND_ABOVE    문서상의 기본값
+ * 위험 행동        BLOCK_MEDIUM_AND_ABOVE    문서상의 기본값
+ * ```
+ *
+ * **성적 표현만 한 칸 올렸다.** 수학 학습 대화에서 잘못 걸릴 일이 거의
+ * 없는 항목이라 올려도 잃는 것이 없다.
+ *
+ * **나머지는 올리지 않았다.** 「사탕을 셋이 나눠 먹는데 하나가 깨졌다」
+ * 같은 문장이 위험 항목에 낮은 점수로 걸릴 수 있다. 엄하게 할수록 멀쩡한
+ * 문제가 막히고, 아이는 이유를 모른 채 같은 화면을 다시 본다. 아이를
+ * 지키는 일과 학습을 막는 일은 다르다.
+ *
+ * **느슨하게 하는 쪽(`BLOCK_NONE`)은 쓰지 않는다.** 어떤 이유로도.
+ */
+const SAFETY_SETTINGS = [
+  { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+] as const;
+
+/** 응답이 잘린 것이 아니라 **막힌** 것임을 뜻하는 값들 */
+const BLOCKED_FINISH = new Set([
+  'SAFETY',
+  'PROHIBITED_CONTENT',
+  'BLOCKLIST',
+  'SPII',
+  'IMAGE_SAFETY',
+]);
+
 export type GeminiUsage = {
   prompt_tokens: number | null;
   output_tokens: number | null;
@@ -34,9 +73,24 @@ export type GeminiUsage = {
   cached_tokens: number | null;
 };
 
+/**
+ * 왜 실패했나. **부르는 쪽이 학생에게 할 말을 고르는 데 쓴다.**
+ *
+ * ```text
+ * blocked     안전 필터가 막았다. 입력이 막힌 것과 출력이 막힌 것 둘 다
+ * truncated   길이에 걸려 잘렸다. JSON 이면 읽을 수 없다
+ * other       그 밖 (통신 · 5xx · JSON 아님 · 키 없음)
+ * ```
+ *
+ * 전에는 셋이 한 문구로 나갔다 — 「잠깐 멈췄어. 다시 한 번 말해줄래?」.
+ * 안전 필터에 걸린 아이는 같은 말을 다시 해도 같은 화면을 보게 되고,
+ * 왜 그런지 알 길이 없었다.
+ */
+export type GeminiFailure = 'blocked' | 'truncated' | 'other';
+
 export type GeminiResult =
   | { ok: true; text: string; usage: GeminiUsage; elapsed_ms: number }
-  | { ok: false; error: string; elapsed_ms: number };
+  | { ok: false; kind: GeminiFailure; error: string; elapsed_ms: number };
 
 /** 첨부 이미지. data 는 base64 본문만. */
 export type GeminiImage = { mediaType: string; data: string };
@@ -92,6 +146,7 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
   if (!apiKey) {
     return {
       ok: false,
+      kind: 'other',
       error:
         'API 키가 없습니다. 화면 상단에 입력하거나, .env.local의 GEMINI_API_KEY를 채우고 dev 서버를 다시 시작하세요.',
       elapsed_ms: elapsed(),
@@ -99,7 +154,7 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
   }
 
   if (!req.model.trim()) {
-    return { ok: false, error: '모델명이 비어 있습니다.', elapsed_ms: elapsed() };
+    return { ok: false, kind: 'other', error: '모델명이 비어 있습니다.', elapsed_ms: elapsed() };
   }
 
   /**
@@ -143,6 +198,7 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
           ],
           // 지정하지 않은 값은 키 자체를 넣지 않는다. 빈 값을 0으로 바꿔
           // 보내면 사용자가 의도하지 않은 설정이 적용된다.
+          safetySettings: SAFETY_SETTINGS,
           generationConfig: {
             ...(req.temperature != null ? { temperature: req.temperature } : {}),
             ...(req.maxOutputTokens != null
@@ -163,12 +219,14 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
     if (abort.signal.aborted) {
       return {
         ok: false,
+        kind: 'other',
         error: `응답이 ${TIMEOUT_MS / 1000}초 안에 오지 않아 끊었습니다.`,
         elapsed_ms: elapsed(),
       };
     }
     return {
       ok: false,
+      kind: 'other',
       error: `요청을 보내지 못했습니다: ${String(cause)}`,
       elapsed_ms: elapsed(),
     };
@@ -181,6 +239,7 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
   if (!response.ok) {
     return {
       ok: false,
+      kind: 'other',
       error: `Gemini ${response.status}\n${raw.slice(0, 2000)}`,
       elapsed_ms: elapsed(),
     };
@@ -192,7 +251,50 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
   } catch {
     return {
       ok: false,
+      kind: 'other',
       error: `응답이 JSON이 아닙니다.\n${raw.slice(0, 2000)}`,
+      elapsed_ms: elapsed(),
+    };
+  }
+
+  /**
+   * **막힌 것을 먼저 본다.** 텍스트가 있느냐보다 앞이다.
+   *
+   * 길이에 걸려 잘린 응답(`MAX_TOKENS`)은 텍스트가 **있다.** 그대로
+   * 넘기면 반쪽 JSON 이 다음 단계로 흘러가 「JSON 으로 읽지 못했습니다」가
+   * 되고, 진짜 원인(너무 길었다)이 사라진다.
+   */
+  const promptBlock = blockReasonOf(body);
+  if (promptBlock !== null) {
+    // **입력이 막혔다.** 모델은 아무 말도 하지 않았다.
+    //
+    // 이유 값만 남긴다. 전에는 응답 본문을 2,000자까지 오류에 붙였는데,
+    // 그 글이 `recordAiFailure` 를 지나 DB 로 간다 — 무엇이 들어 있을지
+    // 모르는 것을 아이 기록 옆에 쌓지 않는다(COM-002 §14).
+    return {
+      ok: false,
+      kind: 'blocked',
+      error: `차단됨(입력 · ${promptBlock})`,
+      elapsed_ms: elapsed(),
+    };
+  }
+
+  const stop = finishReasonOf(body);
+
+  if (stop !== null && BLOCKED_FINISH.has(stop)) {
+    return {
+      ok: false,
+      kind: 'blocked',
+      error: `차단됨(출력 · ${stop})`,
+      elapsed_ms: elapsed(),
+    };
+  }
+
+  if (stop === 'MAX_TOKENS') {
+    return {
+      ok: false,
+      kind: 'truncated',
+      error: '응답이 길이 제한에 걸려 잘렸습니다(MAX_TOKENS).',
       elapsed_ms: elapsed(),
     };
   }
@@ -201,12 +303,28 @@ export async function callGemini(req: GeminiRequest): Promise<GeminiResult> {
   if (text === null) {
     return {
       ok: false,
-      error: `응답에서 텍스트를 찾지 못했습니다. 안전 필터에 걸렸을 수 있습니다.\n${JSON.stringify(body).slice(0, 2000)}`,
+      kind: 'other',
+      error: `응답에서 텍스트를 찾지 못했습니다(finishReason: ${stop ?? '없음'}).`,
       elapsed_ms: elapsed(),
     };
   }
 
   return { ok: true, text, usage: extractUsage(body), elapsed_ms: elapsed() };
+}
+
+/** 입력 자체가 막혔을 때 `promptFeedback.blockReason` 에 이유가 온다 */
+function blockReasonOf(body: unknown): string | null {
+  const feedback = (body as { promptFeedback?: { blockReason?: unknown } })?.promptFeedback;
+  const reason = feedback?.blockReason;
+  return typeof reason === 'string' && reason !== '' ? reason : null;
+}
+
+/** 모델이 왜 멈췄나. `STOP` 이 정상이다 */
+function finishReasonOf(body: unknown): string | null {
+  const candidates = (body as { candidates?: unknown })?.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+  const reason = (candidates[0] as { finishReason?: unknown })?.finishReason;
+  return typeof reason === 'string' && reason !== '' ? reason : null;
 }
 
 function extractText(body: unknown): string | null {

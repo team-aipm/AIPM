@@ -9,7 +9,7 @@
  * 도구에서 고친 글은 브라우저에만 있으므로 제품은 코드의 프리셋을 쓴다.
  */
 
-import { callGemini, type GeminiImage } from '@/lib/gemini/client';
+import { callGemini, type GeminiFailure, type GeminiImage } from '@/lib/gemini/client';
 import { COMMON_RULES } from '@/lib/ai/prompts/common-rules';
 import { AIPM_PRESET, type StagePreset } from '@/lib/ai/prompts/stages';
 import { personaBlock } from '@/lib/ai/prompts/variables';
@@ -42,7 +42,20 @@ export type StageName =
 
 export type RunResult =
   | { ok: true; output: Record<string, unknown>; raw: string; elapsedMs: number }
-  | { ok: false; error: string; raw: string | null; elapsedMs: number };
+  | {
+      ok: false;
+      /**
+       * 왜 실패했나. **학생에게 할 말이 달라진다.**
+       *
+       * `blocked` 은 안전 필터가 막은 것이다. 같은 말을 다시 해도 또
+       * 막히므로 「다시 말해줄래?」 라고 하면 아이가 같은 화면을 반복해서
+       * 본다.
+       */
+      kind: GeminiFailure;
+      error: string;
+      raw: string | null;
+      elapsedMs: number;
+    };
 
 export function stageOf(name: StageName): StagePreset {
   const stage = AIPM_PRESET.find((s) => s.name === name);
@@ -92,7 +105,13 @@ export async function runStage(
 
   if (!result.ok) {
     recordAiFailure(who, name, result.error);
-    return { ok: false, error: result.error, raw: null, elapsedMs: result.elapsed_ms };
+    return {
+      ok: false,
+      kind: result.kind,
+      error: result.error,
+      raw: null,
+      elapsedMs: result.elapsed_ms,
+    };
   }
 
   const parsed = parseOutput(result.text);
@@ -102,6 +121,7 @@ export async function runStage(
     recordAiFailure(who, name, 'JSON 으로 읽지 못했습니다');
     return {
       ok: false,
+      kind: 'other',
       error: 'JSON 으로 읽지 못했습니다',
       raw: result.text,
       elapsedMs: result.elapsed_ms,
