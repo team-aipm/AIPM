@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
+import type { Standing } from '@/lib/services/difficulty';
 
 type Client = SupabaseClient<Database>;
 export type Problem = Database['public']['Tables']['problem']['Row'];
@@ -22,6 +23,8 @@ export async function createProblem(
     problemSource: Enums['problem_source'];
     problemText: string;
     concept: string;
+    /** 낼 때의 학년. 1~7 (7 = 중1). `difficulty` 는 이 학년 안에서의 수준이다 */
+    learningGrade: number;
     difficulty: number;
     learningMode: Enums['learning_mode'];
     verifiedAnswer: unknown;
@@ -40,6 +43,7 @@ export async function createProblem(
       problem_source: input.problemSource,
       problem_text: input.problemText,
       concept: input.concept,
+      learning_grade: input.learningGrade,
       difficulty: input.difficulty,
       learning_mode: input.learningMode,
       // 검증 실패면 NULL 이다(COM-002 §6). 지어내지 않는다.
@@ -124,10 +128,10 @@ export async function listSessionProblemTexts(
 export async function lastProblemLevel(
   client: Client,
   studentId: string,
-): Promise<number | null> {
+): Promise<Standing | null> {
   const { data, error } = await client
     .from('problem')
-    .select('difficulty')
+    .select('difficulty, learning_grade')
     .eq('student_id', studentId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -137,5 +141,15 @@ export async function lastProblemLevel(
     console.error(`[problem] 지난 난이도를 읽지 못했습니다: ${error.message}`);
     return null;
   }
-  return data?.difficulty ?? null;
+  if (data === null) return null;
+
+  // **학년이 없으면 견줄 수 없다.** 이 칸이 생기기 전에 만들어진 문제다
+  // (`20260928063545`). 레벨만 남아 있어도 어느 학년의 레벨인지 모르므로
+  // 견주면 틀린 답이 나온다. `null` 을 돌려주면 `moveFrom` 이 `SAME` 으로
+  // 본다 — 다음 문제가 지금 수준으로 나갈 뿐이다.
+  if (data.learning_grade === null) return null;
+
+  // **학년을 함께 돌려준다.** 레벨만 견주면 4학년 레벨 5 → 5학년 레벨 1 이
+  // `DOWN` 으로 읽힌다. 올라간 것인데 내려갔다고 말하게 된다.
+  return { grade: data.learning_grade, level: data.difficulty };
 }

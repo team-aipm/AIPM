@@ -546,6 +546,8 @@ MODE A가 담당하는 범위는 다음과 같다.
     "learning_target": {
       "concept": "string",
       "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
+      "grade": 5,
+      "level": 3,
       "difficulty": "DOWN | SAME | UP"
     },
     "problem": {
@@ -868,6 +870,8 @@ target_logic_gap,
     "learning_target": {
       "concept": "string",
       "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
+      "grade": 5,
+      "level": 3,
       "difficulty": "DOWN | SAME | UP"
     },
     "problem": {
@@ -969,6 +973,8 @@ MODE B가 담당하는 범위는 다음과 같다.
     "learning_target": {
       "concept": "string | null",
       "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
+      "grade": 5,
+      "level": 3,
       "difficulty": "DOWN | SAME | UP | null"
     },
     "source_problem": {
@@ -1346,6 +1352,8 @@ completion.action = "COMPLETE"
     "learning_target": {
       "concept": "string | null",
       "target_logic_gap": "knowledge_gap | evidence_gap | rule_gap | inference_gap | transfer_gap | monitoring_gap | null",
+      "grade": 5,
+      "level": 3,
       "difficulty": "DOWN | SAME | UP | null"
     },
     "source_problem": {
