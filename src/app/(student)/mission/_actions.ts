@@ -24,7 +24,7 @@ import {
   lastProblemLevel,
   listSessionProblemTexts,
 } from '@/lib/services/problem';
-import { moveFrom, updateDifficulty } from '@/lib/services/difficulty';
+import { moveFrom, updateDifficulty, type Standing } from '@/lib/services/difficulty';
 import {
   applyDailySummary,
   forPrompt,
@@ -296,6 +296,8 @@ function buildModeAInput(args: {
   /** 이번 세션에서 이미 낸 문제. 같은 것을 다시 내지 않게 한다 */
   previousProblems?: string[];
   /** 지난 문제보다 어느 쪽인지 (COM-001 §9). 없으면 SAME */
+  /** 이 문제를 낼 자리. 학년과 그 안에서의 수준 (COM-001 §9) */
+  standing: Standing;
   difficulty?: 'DOWN' | 'SAME' | 'UP';
   /** 이 문제에서 내가 이미 한 말. 같은 것을 다시 묻지 않게 한다 */
   asked?: string[];
@@ -327,6 +329,11 @@ function buildModeAInput(args: {
   // 넣는 것보다 낫다.
   input = write(input, 'payload.learning_target.concept', args.concept ?? null);
   input = write(input, 'payload.learning_target.target_logic_gap', null);
+  // **절대 수준을 함께 준다.** `difficulty` 만으로는 모델이 「지난 문제보다
+  // 위」 인 것만 알고 지금 어디인지는 모른다. 그러면 레벨을 심어도 그 수준에
+  // 맞는 문제가 나오지 않는다 (COM-001 §9 · COMMON SYSTEM 의 LEVEL).
+  input = write(input, 'payload.learning_target.grade', args.standing.grade);
+  input = write(input, 'payload.learning_target.level', args.standing.level);
   input = write(input, 'payload.learning_target.difficulty', args.difficulty ?? 'SAME');
 
   input = write(input, 'payload.problem.problem_text', args.problem?.text ?? null);
@@ -449,6 +456,7 @@ export async function startProblem(): Promise<ProblemReply> {
   const input = buildModeAInput({
     studentId: student.student_id,
     grade: student.grade,
+    standing: { grade: student.learning_grade, level: student.current_difficulty },
     persona: student.persona_type,
     sessionId: session.session_id,
     problemNumber,
@@ -557,6 +565,7 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
   const common = {
     studentId: student.student_id,
     grade: student.grade,
+    standing: { grade: student.learning_grade, level: student.current_difficulty },
     persona: student.persona_type,
     sessionId: session.session_id,
     problemNumber: session.completed_problem_count + 1,
@@ -1102,6 +1111,8 @@ function buildModeBInput(args: {
   /** 지금까지 준 힌트. 04 · 02 · 03 · 05 가 모두 이것을 본다(COM-002 §7) */
   hints?: Hint[];
   /** 지난 문제보다 어느 쪽인지 (COM-001 §9). 없으면 SAME */
+  /** 이 문제를 낼 자리. 학년과 그 안에서의 수준 (COM-001 §9) */
+  standing: Standing;
   difficulty?: 'DOWN' | 'SAME' | 'UP';
   /** 이 문제에서 내가 이미 한 말. 같은 것을 다시 묻지 않게 한다 */
   asked?: string[];
@@ -1128,6 +1139,11 @@ function buildModeBInput(args: {
   input = write(input, 'payload.mode_phase', args.phase);
   input = write(input, 'payload.learning_target.concept', null);
   input = write(input, 'payload.learning_target.target_logic_gap', null);
+  // **절대 수준을 함께 준다.** `difficulty` 만으로는 모델이 「지난 문제보다
+  // 위」 인 것만 알고 지금 어디인지는 모른다. 그러면 레벨을 심어도 그 수준에
+  // 맞는 문제가 나오지 않는다 (COM-001 §9 · COMMON SYSTEM 의 LEVEL).
+  input = write(input, 'payload.learning_target.grade', args.standing.grade);
+  input = write(input, 'payload.learning_target.level', args.standing.level);
   input = write(input, 'payload.learning_target.difficulty', args.difficulty ?? 'SAME');
 
   input = write(input, 'payload.source_problem.input_type', args.inputType ?? 'TEXT');
@@ -1207,6 +1223,7 @@ export async function offerSourceProblem(text: string): Promise<SourceStep> {
   const input = buildModeBInput({
     studentId: student.student_id,
     grade: student.grade,
+    standing: { grade: student.learning_grade, level: student.current_difficulty },
     persona: student.persona_type,
     sessionId: session.session_id,
     problemNumber: session.completed_problem_count + 1,
@@ -1270,6 +1287,7 @@ export async function confirmSourceProblem(
   const input = buildModeBInput({
     studentId: student.student_id,
     grade: student.grade,
+    standing: { grade: student.learning_grade, level: student.current_difficulty },
     persona: student.persona_type,
     sessionId: session.session_id,
     problemNumber,
@@ -1413,6 +1431,7 @@ export async function readPhotoProblem(formData: FormData): Promise<SourceStep> 
   const input = buildModeBInput({
     studentId: student.student_id,
     grade: student.grade,
+    standing: { grade: student.learning_grade, level: student.current_difficulty },
     persona: student.persona_type,
     sessionId: session.session_id,
     problemNumber: session.completed_problem_count + 1,
