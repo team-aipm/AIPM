@@ -1,6 +1,6 @@
 # COM-002 · 공통 데이터 구조 정의서 --- 개발용
 
-> **Version:** 1.8 · **Updated:** 2026-09-29 · **Owner:** (미지정)\
+> **Version:** 1.9 · **Updated:** 2026-09-30 · **Owner:** (미지정)\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -26,9 +26,17 @@ Account
 │    │
 │    ├── StudentMemory
 │    ├── Subscription
-│    └── LearningReport
+│    ├── LearningReport
+│    │
+│    ├── ParticipationStamp      도장 (§22-1)
+│    ├── LearningStreak          연속 평일 (§22-2)
+│    ├── CoinLedger              코인 원장 (§22-3)
+│    ├── StudentCharacter        캐릭터 소유권 (§22-4)
+│    ├── RewardGoal              보상 목표 (§22-5)
+│    └── TemporaryUpload         사진 임시 (§23)
 │
 ├── Payment
+├── Notification                 알림 (§24)
 └── Event
 ```
 
@@ -37,7 +45,10 @@ LearningSession 1 : N Problem - Problem 1 : N Message - Problem 1 : 0..1
 Evaluation - Problem 1 : 0..N LogicGap - Student 1 : 1 StudentMemory -
 Student 1 : N Subscription history, 단 동시에 active 구독은 1개 -
 Account 1 : N Payment - Student 1 : N LearningReport - Account/Student 1
-: N Event
+: N Event - Student 1 : N ParticipationStamp(하루 1개) - Student 1 : 1
+LearningStreak - Student 1 : N CoinLedger - Student 1 : N StudentCharacter -
+Student 1 : N RewardGoal(동시 active 1개 · queued 1개) - Account 1 : N
+Notification
 
 ## 2. 공통 명명 규칙
 
@@ -122,6 +133,36 @@ Figma 「메티_서비스」의 `부모 / 회원가입` 프레임에 그 칸들�
 `account_status` 는 `active` 와 `test` 다. `test` 는 **프롬프트 랩 전용
 계정**이며 테스트 학생을 매다는 자리다(§4). 집계는 이 계정을 세지 않는다.
 탈퇴 관련 값은 COM-007 확정 후 enum 으로 전환한다.
+
+### 3-2. 탈퇴와 복구 · **2026-09-30**
+
+COM-007 이 미뤄 두었던 회원탈퇴가 정해졌다. **요청한 순간 못 들어오고,
+30일 뒤에 지운다.** 그 사이에는 되돌릴 수 있다.
+
+`account_status` 에 두 값이 늘어난다.
+
+```text
+active             쓰고 있다
+test               프롬프트 랩 전용 (§3-1)
+deleted_pending   탈퇴를 요청했다. 로그인 차단. 30일 안이면 복구 가능
+                  (COM-007 §5 가 쓰는 이름 그대로다)
+deleted            30일이 지났다. 개인정보와 학습데이터를 지웠다
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `deleted_at` | TIMESTAMPTZ | NO | 탈퇴를 **요청한** 시각 |
+| `purge_at` | TIMESTAMPTZ | NO | 실제로 지우는 시각. `deleted_at + 30일` |
+
+- **지우는 일은 배치가 한다**(`/api/cron/purge-deleted-accounts`).
+  요청 순간에 지우면 되돌릴 수 없다.
+- 부모가 탈퇴하면 **연결된 아이 전부**가 같은 절차를 밟는다(§4-3).
+- 결제 기록은 법이 보관하라고 한 것이라 함께 지우지 않는다.
+  운영 데이터와 **분리해서** 남긴다(COM-007).
+
+**휴대폰 본인확인은 아직 없다.** 팀이 정한 정책은 탈퇴 · 결제수단 변경 같은
+중요한 행동에 재인증을 요구하지만, 본인확인 수단 계약이 없다(CLAUDE.md
+미작성 문서). 지금은 **비밀번호를 다시 받는 것**까지만 한다.
 
 ## 4. Student
 
@@ -285,6 +326,39 @@ RLS는 `owns_student()` 한 곳에서 갈린다. 부모(`account_id = auth.uid()
 사람이 고치면 다음 문제 선정이 어긋난다(COM-003 §9). DB 트리거
 `student_self_update_guard`가 막는다.
 
+### 4-3. 캐릭터 · 학년 확인 · 삭제 · **2026-09-30**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `active_character_id` | TEXT | YES | 지금 함께하는 캐릭터. `meti`/`heti`/`quri`/`poki`/`tori`/`mono` |
+| `grade_confirmed_at` | TIMESTAMPTZ | NO | 부모가 학년을 확인해 준 시각 |
+| `deleted_at` | TIMESTAMPTZ | NO | 삭제를 **요청한** 시각 |
+| `purge_at` | TIMESTAMPTZ | NO | `deleted_at + 30일` |
+
+`student_status` 에 두 값이 늘어난다(§4 의 `active`/`test` 에 더해서).
+
+```text
+pending            등록만 됐고 아직 한 번도 안 들어왔다
+active             쓰고 있다
+test               프롬프트 랩 전용
+deleted_pending   삭제를 요청했다. 로그인 차단
+deleted            30일이 지났다
+```
+
+- **캐릭터는 아이가 고른다.** 부모는 바꾸지 못한다.
+  `active_character_id` 는 `StudentCharacter`(§22-4)에 소유권이 있는 것만
+  가리킬 수 있다.
+- **삭제를 되돌리는 것은 부모만 할 수 있다.** 아이는 못 들어오므로
+  스스로 되돌릴 방법이 없다.
+- `nickname` · `nickname_source` 는 **남겨 두되 새로 쓰지 않는다.** 폼이
+  이름 한 칸만 받으므로 같은 값이 양쪽에 들어간다(§4-2). 컬럼을 지우면
+  배포된 코드가 먼저 깨진다.
+
+**학생 로그인 이메일은 `student.login_email` 그대로다**(§4-1). 팀 정책
+문서는 별도 `StudentLoginIdentity` 테이블과 인증번호 · 메티 이메일 발급을
+제안했지만, 도메인과 메일 수신 설정이 없어 **부모가 직접 입력하는 방식을
+유지한다**(`FIGMA-MD-AUDIT.md` §0).
+
 ## 5. LearningSession
 
 하루 학습 목표를 관리하는 단위.
@@ -313,6 +387,29 @@ RLS는 `owns_student()` 한 곳에서 갈린다. 부모(`account_id = auth.uid()
 
 Rules: - 하루 기본 목표는 10문제. - 학생 중간 종료 가능. - 다음날 이전
 세션을 이어갈 수 있음. - 새 세션을 시작해도 이전 기록은 유지.
+
+### 5-1. 세션의 종류와 기한 · **2026-09-30**
+
+전에는 세션이 「오늘 한 묶음」 하나였다. 지난 미션과 주말 자유학습이
+생기면서 **어떤 묶음인지 구분해야** 도장과 코인을 맞게 줄 수 있다.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_type` | ENUM/TEXT | YES | `daily` / `past` / `weekend_free` / `extra` |
+| `target_problem_count` | SMALLINT | YES | `daily` 는 10 |
+| `eligible_until` | TIMESTAMPTZ | NO | 지난 미션으로 이어갈 수 있는 기한 |
+
+```text
+daily          월~금 오늘의 미션 10개. 학생·날짜당 1개뿐이다
+past           못 끝낸 daily 를 7일 안에 이어서 하는 것
+weekend_free   토·일. 새 미션은 안 나오고 지난 것과 가져온 것만
+extra          그 밖
+```
+
+- **`daily` 는 평일에만 만든다.** 주말에 새 10개를 내지 않는다.
+- `past` · `weekend_free` · `extra` 는 **그날의 기본 10개에 안 들어간다.**
+  도장에도 코인에도 반영하지 않는다(§22).
+- `eligible_until` 은 `session_date + 7일`이다. 지나면 `expired` 다.
 
 ## 6. Problem
 
@@ -367,6 +464,27 @@ Rules: - `verified_answer`는 학습 시작 전에 검증되어야 한다. - 검
 `problem_status`를 `verification_failed`로 둔다. - 세 값의 판정 기준은
 `prompts/logic-auditor.md`의 Prompt 02에서
 정의한다.
+
+### 6-1. 무엇을 셀 것인가 · **2026-09-30**
+
+도장과 코인을 주려면 **이 문제가 오늘의 기본 10개인지**를 문제 행이 스스로
+알고 있어야 한다. 세션 종류만 보면 나중에 세션 종류가 바뀌었을 때 이미 준
+코인이 흔들린다.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `counts_toward_daily` | BOOLEAN | YES | 오늘의 기본 10개에 드는가 |
+| `coin_eligible` | BOOLEAN | YES | 코인을 줄 수 있는 문제인가 |
+| `completed_at` | TIMESTAMPTZ | NO | 실제로 끝난 시각 |
+
+- 두 값은 **문제를 만들 때 정하고 그 뒤로 바꾸지 않는다.**
+- `completed` · `needs_review` 만 「참여 완료」로 센다. `system_interrupted`
+  · `verification_failed` · `abandoned` 는 세지 않는다(COM-001 §19).
+- **`learning_mode` 는 그대로다.** 팀 정책 문서는 `learning_flow`
+  (`student_solves` / `student_teaches` / `guided_solve`) 라고 부르는데,
+  우리 컬럼 `learning_mode` 의 MODE A · MODE B 와 같은 것이다. 이름을
+  바꾸지 않는다(§17). 대화 중 「잘 모르겠어」로 함께 풀기로 넘어가는 것은
+  **같은 문제 안에서** 일어난다 — 새 문제를 만들지 않는다.
 
 ## 7. Message
 
@@ -827,10 +945,224 @@ COM-007 §13 이 요청한 세 가지다. 없으면 ADM 영역을 만들 수 없
 
 ---
 
+## 22. 보상 · 코인 · 캐릭터 (2026-09-30 추가)
+
+> 근거: `meti-core-learning-mechanism.md` §7 · `FIGMA-MD-AUDIT.md` P0-5 ·
+> P1-1 · P1-5. 이 영역은 전에 문서에 아예 없었다.
+
+두 가지를 나눠서 준다. **섞으면 안 된다.**
+
+```text
+도장   평일 오늘의 미션 10개를 다 했을 때  하루 1개   → 부모가 약속한 보상
+코인   미션 1개를 끝낼 때마다  10개 (하루 100)        → 캐릭터 해금
+```
+
+아이가 중간에 그만두면 **한 것만큼의 코인은 남고, 도장은 안 준다.**
+9개까지 했다고 해서 도장을 주면 「10개」라는 약속이 의미를 잃는다.
+
+### 22-1. ParticipationStamp
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `stamp_id` | UUID | YES | PK |
+| `student_id` | UUID | YES | FK → Student |
+| `stamp_date` | DATE | YES | 기준일 |
+| `trigger_problem_id` | UUID | YES | 10개째를 채운 문제 |
+| `created_at` | TIMESTAMPTZ | YES | 지급 시각 |
+
+- `student_id + stamp_date` 는 **UNIQUE**. 하루에 두 개가 나올 수 없다.
+- 월~금의 `daily` 세션에서 `counts_toward_daily` 인 문제 10개가 모두
+  `completed` 또는 `needs_review` 가 된 **그 순간에만** 만든다.
+- 1~9개에서는 만들지 않는다. 지난 미션과 주말 학습으로는 채울 수 없다.
+
+### 22-2. LearningStreak
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `student_id` | UUID | YES | PK · FK → Student |
+| `current_weekday_streak` | INTEGER | YES | 지금 이어진 평일 수 |
+| `last_stamp_date` | DATE | NO | 마지막 도장일 |
+| `updated_at` | TIMESTAMPTZ | YES | 갱신 시각 |
+
+- 토 · 일은 **건너뛴다.** 주말에 안 했다고 끊기지 않는다.
+- 공휴일 달력은 MVP 에서 쓰지 않는다.
+- **끊긴 것을 실패처럼 보여주지 않는다**(CLAUDE.md · COM-003).
+  연속기록은 곁들이는 정보지 평가가 아니다.
+
+### 22-3. CoinLedger
+
+**원장이다. 고치지 않고 행을 더한다.** 잘못 준 코인은 음수 행으로 바로잡는다
+— 지운 자리는 나중에 아무도 설명하지 못한다.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `coin_ledger_id` | UUID | YES | PK |
+| `student_id` | UUID | YES | FK → Student |
+| `problem_id` | UUID | NO | 지급 사유. **UNIQUE** |
+| `character_id` | TEXT | NO | 해금 사유 |
+| `idempotency_key` | TEXT | NO | 해금 중복 방지. **UNIQUE** |
+| `amount` | INTEGER | YES | 지급 `+10`, 해금은 음수 |
+| `reason` | TEXT | YES | `daily_problem_completed` / `character_unlock` / `adjustment` |
+| `occurred_at` | TIMESTAMPTZ | YES | 발생 시각 |
+
+- `problem_id` 가 UNIQUE 라서 **같은 문제로 두 번 받을 수 없다.**
+  새로고침이나 재시도로 코인이 불어나는 일을 DB 가 막는다.
+- 지급은 `coin_eligible` 이고 `completed`/`needs_review` 인 문제에만.
+  `system_interrupted` 에는 주지 않는다 — 아이 잘못이 아니지만, 하지 않은
+  학습을 셀 수도 없다. **대신 정답률에도 반영하지 않는다**(COM-001 §19).
+- 학생 · 날짜별 지급 합계는 **최대 100** 이다.
+- **완료 보너스는 없다.** 전에 있던 「+30」 은 없앴다(`FIGMA-MD-AUDIT` P1-5).
+- 잔액은 이 표의 합이다. 따로 들고 있지 않는다 — 두 곳에 두면 어긋난다.
+
+### 22-4. StudentCharacter
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `student_character_id` | UUID | YES | PK |
+| `student_id` | UUID | YES | FK → Student |
+| `character_id` | TEXT | YES | `meti`/`heti`/`quri`/`poki`/`tori`/`mono` |
+| `unlock_source` | TEXT | YES | `default` / `coin` |
+| `coin_price` | INTEGER | YES | **해금 당시** 가격. 기본은 0 |
+| `unlocked_at` | TIMESTAMPTZ | YES | 소유 시작 |
+
+```text
+메티 · 헤티   기본 제공 (학생을 만들 때 default 로 두 행을 만든다)
+큐리            500 코인
+포키            800 코인
+토리          1,200 코인
+모노          2,000 코인
+```
+
+- `student_id + character_id` 는 **UNIQUE**.
+- `coin_price` 를 **그때 값으로 박아 둔다.** 가격을 올리면 예전에 산 아이의
+  기록이 따라 바뀌면 안 된다.
+- 잔액 확인 · 음수 `CoinLedger` · 이 행 만들기를 **한 트랜잭션**으로 한다.
+  실패하면 코인이 줄지 않는다. 두 번 눌러도 한 번만 빠진다
+  (`idempotency_key`).
+- 해금은 **영구**다. 되돌리지 않는다.
+- 캐릭터는 말투와 연출만 담당한다. **정답 · 평가 · 난이도를 바꾸지 않는다**
+  (CLAUDE.md · COM-001 §19).
+
+### 22-5. RewardGoal
+
+부모가 아이와 **약속한** 보상이다. 서비스가 정하는 것이 아니다.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `reward_goal_id` | UUID | YES | PK |
+| `student_id` | UUID | YES | FK → Student |
+| `account_id` | UUID | YES | 정한 보호자 |
+| `reward_name` | TEXT | YES | 약속한 것 |
+| `target_stamp_count` | INTEGER | YES | 목표 도장 수. 1~365 |
+| `reward_status` | TEXT | YES | `queued`/`active`/`achieved`/`delivered`/`cancelled` |
+| `activated_at` | TIMESTAMPTZ | NO | 시작 |
+| `achieved_at` | TIMESTAMPTZ | NO | 도장을 다 모은 시각 |
+| `delivered_at` | TIMESTAMPTZ | NO | 실제로 준 시각 |
+
+- 학생당 `active` 1개 · `queued` 1개까지.
+- **`achieved` 와 `delivered` 는 다르다.** 도장을 다 모은 것과 부모가
+  실제로 사 준 것은 같은 날이 아니다.
+- 달성하면 `queued` 가 곧바로 `active` 가 되고 **도장은 계속 쌓인다.**
+  0 으로 되돌리지 않는다 — 아이가 모은 것을 뺏는 셈이 된다.
+- 진행 중인 목표의 **이름은 고칠 수 있지만 목표 수는 못 고친다.**
+- 365 까지 저장은 되고, 100 이 넘으면 화면이 「오래 걸려요」라고 **말만**
+  한다. 막지 않는다.
+- `delivered` 로 바꾸는 것은 부모만 한다.
+
+---
+
+## 23. TemporaryUpload · 사진은 남기지 않는다 (2026-09-30 추가)
+
+> 근거: `meti-core-learning-mechanism.md` §4 · COM-007 · `FIGMA-MD-AUDIT` P0-3.
+
+**사진은 입력 수단이지 학습기록이 아니다.** 아이가 찍은 종이에는 이름 ·
+학교 · 다른 문제까지 같이 찍힌다. 그래서 글자를 뽑아내고 **바로 지운다.**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `upload_id` | UUID | YES | PK |
+| `student_id` | UUID | YES | FK → Student |
+| `storage_path` | TEXT | YES | 비공개 임시 경로 |
+| `upload_status` | TEXT | YES | `processing`/`confirmed`/`failed`/`cancelled`/`deleted` |
+| `expires_at` | TIMESTAMPTZ | YES | 강제 만료 |
+| `deleted_at` | TIMESTAMPTZ | NO | 실제로 지운 것을 확인한 시각 |
+
+- 아이가 **확인 · 실패 · 취소한 직후** 지운다. 셋 다 지운다.
+- 못 지운 것이 남으면 배치가 다시 지운다
+  (`/api/cron/delete-temporary-uploads`).
+- **`Problem` 에 사진 경로를 저장하지 않는다.** 아이가 확인한 텍스트와
+  구조화 데이터만 남는다.
+- 도형 · 그래프를 제대로 구조화하지 못하면 **학습을 시작하지 않고**
+  다시 찍거나 글로 쓰라고 안내한다. 반쪽짜리로 진행하면 엉뚱한 것을
+  가르치게 된다.
+- **학습 대화 중에는 사진을 받지 않는다**(MVP). 미션을 가져올 때만이다.
+
+---
+
+## 24. Notification · 알림 (2026-09-30 추가)
+
+`Event`(§14)와 다르다. **`Event` 는 우리가 보려고 남기는 기록이고,
+`Notification` 은 부모에게 실제로 보낸 것**이다.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `notification_id` | UUID | YES | PK |
+| `account_id` | UUID | YES | 받는 보호자 |
+| `student_id` | UUID | NO | 어느 아이 얘기인지 |
+| `notification_type` | TEXT | YES | `weekly_report`/`reward_achieved`/`trial_ending`/`payment` … |
+| `title` | TEXT | YES | |
+| `body` | TEXT | YES | |
+| `read_at` | TIMESTAMPTZ | NO | 읽은 시각 |
+| `created_at` | TIMESTAMPTZ | YES | |
+
+`NotificationPreference` 는 무엇을 받을지 정하는 것이다.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `account_id` | UUID | YES | PK · FK → Account |
+| `weekly_report_on` | BOOLEAN | YES | |
+| `reward_on` | BOOLEAN | YES | |
+| `learning_summary_on` | BOOLEAN | YES | |
+| `updated_at` | TIMESTAMPTZ | YES | |
+
+- **결제와 구독 알림은 끄지 못한다.** 돈이 나가는 일이다.
+- **아이에게는 마케팅을 보내지 않는다.** 동의도 받지 않는다.
+- 알림 센터(`/parent/notifications`)와 알림 설정
+  (`/parent/my/notifications`)은 다른 화면이다(DEV-002).
+
+---
+
+## 25. 마케팅 동의는 두 채널이다 (2026-09-30 변경)
+
+전에는 셋이었다 — 이메일 · SMS · 알림톡. **카카오 알림톡은 뺀다.**
+보낼 기능이 없는데 미리 동의를 받아 두는 것은 받아 놓고 안 쓰는 개인정보다.
+
+```text
+marketing_email_opt_in      쓴다
+marketing_sms_opt_in        쓴다
+marketing_alimtalk_opt_in   컬럼은 두고 화면에서 안 받는다. 기본 false
+```
+
+- **기본값은 둘 다 미동의**다. 체크를 미리 켜 두지 않는다.
+- 가입 화면에서 채널별로 따로 고른다. 한 줄로 묶지 않는다.
+- 동의하지 않아도 가입과 서비스 이용을 막지 않는다.
+- 나중에 알림톡을 실제로 보내게 되면 그때 `marketing_kakao` 동의를 새로
+  받는다. 지금 받아 둔 것으로 보내지 않는다.
+- `ConsentLog`(§20-B)에는 **거절도 행으로 남긴다.** 동의하지 않았다는
+  사실 자체가 증명해야 할 것이다.
+
+**지금 코드는 아직 한 칸이다 · 맞춰야 할 것.** `(auth)/signup/_actions.ts`
+의 `metadataFor` 가 체크박스 하나를 읽어 세 값을 같이 켠다. 화면을 두
+칸으로 나눌 때 함께 고친다 — 컬럼은 그대로 두고 `alimtalk` 은 `false` 로
+둔다.
+
+---
+
 ## Changelog
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.9 | 2026-09-30 | **팀 정책 반영 · 엔티티 8개 추가.** §22 보상(`ParticipationStamp`·`LearningStreak`·`CoinLedger`·`StudentCharacter`·`RewardGoal`) · §23 `TemporaryUpload` · §24 `Notification`·`NotificationPreference` · §25 마케팅 2채널. `Account` 에 §3-2 탈퇴/복구(30일), `Student` 에 §4-3 `active_character_id`·`grade_confirmed_at`·삭제, `LearningSession` 에 §5-1 `session_type`, `Problem` 에 §6-1 `counts_toward_daily`·`coin_eligible` 을 더했다. **`StudentLoginIdentity` 는 만들지 않는다** — 아이 이메일은 부모가 직접 입력하는 `student.login_email` 그대로다(`FIGMA-MD-AUDIT` §0). `nickname` 컬럼은 남긴다. 마이그레이션은 화면을 만들 때 그 화면이 쓰는 것만 추가한다 | — |
 | 1.8 | 2026-09-29 | §4 `login_id` **제거**, `login_email` **추가**(유일). 아이도 이메일로 로그인한다 — 로그인 화면이 부모·아이 공통이므로 한 칸에 이메일 하나만 받는다(정책 v0.1 §5·§7·§8). §4-1 재작성: 부모가 **아이가 이미 쓰는 이메일**을 입력하고, 확인 메일은 보내지 않으며, 아이는 스스로 재설정하지 못한다. 아이 판별을 가짜 이메일 도메인에서 **`app_metadata.role`** 로 옮겼다 — `service_role` 만 쓸 수 있어 누구나 실을 수 있던 `user_metadata.role` 보다 튼튼하다. 기존 아이 로그인 5개는 초기화했고 **학습기록은 남겼다**. COM-007 §2-2 와 함께 변경 | — |
 | 1.7 | 2026-09-26 | §4 `student_status` 에 **`test`** 추가(enum 마이그레이션), §3 `account_status` 에 **`test`** 명시(TEXT 라 마이그레이션 없음). 프롬프트 랩이 만든 학생·계정을 진짜와 가른다 — 없으면 집계가 부풀려지고 주간 리포트 배치가 테스트 학생마다 AI 를 불러 **실제 비용이 나간다**. `.eq('student_status','active')` 를 쓰는 곳은 자동 제외되고, 상태를 안 보던 `admin-metrics.funnel()` 6개 집계는 명시적으로 걸렀다. 운영자 목록에는 그대로 보인다. 되돌리기는 랩 전용 Account 삭제(cascade) — 단 `Event` 는 `on delete set null` 이라 남는다. 필드·관계 변경 없음 | — |
 | 1.6 | 2026-09-26 | §10 `current_level` 을 **누가 채우는지** 명시. 하루를 마칠 때 **서버가** 그날 `Problem.difficulty` 중앙값으로 정한다. 전에는 06 DAILY ANALYZER 의 `memory_update.current_level` 을 읽게 돼 있었으나 **06 의 출력 스펙에 그 필드가 없어** 아무도 채우지 않았다 — 운영 중 학생 5명 전원이 시작값 3 에 머물러 있었다. `Student.current_difficulty`(§4)와의 역할 구분도 함께 적었다. 필드·타입·관계 변경 없음. COM-001 §9 와 함께 변경 | — |

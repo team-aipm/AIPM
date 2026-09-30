@@ -1,6 +1,6 @@
 # DEV-001 · 폴더 구조 및 PM 소유 경로
 
-> **Version:** 1.5 · **Updated:** 2026-09-02 · **Owner:** 세팅 담당\
+> **Version:** 1.6 · **Updated:** 2026-09-30 · **Owner:** 세팅 담당\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -75,24 +75,35 @@ src/app/
 │  │  └─ verify/
 │  └─ password/
 │
-├─ (student)/                     # STU + MIS · 하단 Nav 없음 · 학생 어휘
-│  ├─ layout.tsx
+├─ (student)/                     # STU + MIS · 하단 Nav 3탭 · 학생 어휘
+│  ├─ layout.tsx                  # 홈 / 학습하기 / 내 정보
 │  ├─ onboarding/
 │  │  ├─ student/
 │  │  └─ persona/
 │  ├─ students/
 │  ├─ home/
 │  │  └─ today/
+│  ├─ missions/                   # STU-006 지난 미션 (2026-09-30)
+│  │  └─ past/
+│  ├─ me/                         # STU-007 내 정보 (2026-09-30)
+│  │  └─ characters/
+│  │     └─ [characterId]/        # STU-009 해금
 │  └─ mission/
 │     ├─ _components/
 │     ├─ _actions.ts
 │     └─ create/
 │        └─ photo/
 │
-├─ (parent)/                      # PAR + RPT + BIL + MY · 하단 Nav 4탭
-│  ├─ layout.tsx
+├─ (parent)/                      # PAR + RPT + BIL + MY + RWD · 하단 Nav 3탭
+│  ├─ layout.tsx                  # 홈 / 리포트 / 설정
 │  ├─ pin/
 │  │  └─ settings/
+│  ├─ students/
+│  │  └─ [studentId]/             # PAR-003 자녀 학습 상세 (2026-09-30)
+│  ├─ notifications/              # PAR-004 알림 센터 (2026-09-30)
+│  ├─ rewards/                    # RWD (2026-09-30)
+│  │  ├─ new/
+│  │  └─ [rewardGoalId]/
 │  ├─ reports/
 │  │  ├─ [reportId]/
 │  │  └─ history/
@@ -102,7 +113,9 @@ src/app/
 │     ├─ students/
 │     │  ├─ new/
 │     │  └─ [studentId]/
-│     ├─ profile/  marketing/  notifications/
+│     ├─ profile/
+│     │  └─ password/             # MY-011 (2026-09-30)
+│     ├─ marketing/  notifications/
 │     └─ account/
 │        └─ withdraw/
 │           └─ confirm/
@@ -123,8 +136,17 @@ src/app/
    ├─ ai/verify/                  # Answer Verification
    ├─ ai/ocr/                     # 사진 문제 인식
    ├─ webhooks/payment/           # PG 콜백 (외부 진입)
-   └─ cron/weekly-report/         # 주간 리포트 배치
+   ├─ cron/weekly-report/         # 주간 리포트 배치
+   ├─ cron/delete-temporary-uploads/   # 못 지운 임시 사진 (2026-09-30)
+   └─ cron/purge-deleted-accounts/     # 30일 지난 탈퇴 (2026-09-30)
 ```
+
+**위 트리에 2026-09-30 주석이 달린 폴더는 아직 없다.** 빈 폴더를 미리
+만들지 않는다(§1). 그 화면을 만들 때 생긴다.
+
+`(parent)/students/[studentId]`(학습 현황)와
+`(parent)/my/students/[studentId]`(계정 관리)는 **다른 화면이다.**
+헷갈리기 쉬우니 DEV-002 §8-A 의 대조표를 먼저 본다.
 
 각 폴더에 대응하는 Screen ID는 `DEV-002-routes.md`를 따른다.
 `(dev)/`는 예외다. Screen ID가 없고 DEV-002에도 넣지 않는다.
@@ -221,7 +243,13 @@ src/lib/
 │  ├─ message.ts              ├─ evaluation.ts
 │  ├─ logic-gap.ts            ├─ student-memory.ts
 │  ├─ subscription.ts         ├─ payment.ts
-│  ├─ learning-report.ts      └─ event.ts
+│  ├─ learning-report.ts      ├─ event.ts
+│  │
+│  │   # 2026-09-30 · COM-002 §22~24. 화면을 만들 때 그때 만든다
+│  ├─ participation-stamp.ts  ├─ learning-streak.ts
+│  ├─ coin-ledger.ts          ├─ student-character.ts
+│  ├─ reward-goal.ts          ├─ temporary-upload.ts
+│  └─ notification.ts
 │
 ├─ auth/
 │  ├─ session.ts
@@ -479,6 +507,7 @@ rebase한다.** 그 브랜치는 135 커밋 뒤에서 갈라져 있었다.
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.6 | 2026-09-30 | **팀 정책 반영.** 학생 하단 Nav 3탭 · 부모 4탭 → 3탭 · `(student)/missions`·`(student)/me` · `(parent)/students`·`notifications`·`rewards` · `my/profile/password` · cron 2개. `lib/services` 에 COM-002 §22~24 엔티티 7개 자리 추가. **빈 폴더는 만들지 않는다** — 화면을 만들 때 생긴다 | — |
 | 1.0 | 2026-08-28 | 최초 작성. COM-005 §7 하위 구조 상세화 | — |
 | 1.1 | 2026-08-28 | §6 PM별 Branch 표기 제거(담당은 소유 경로가 결정) + 공통 코드 변경 절차 추가. §7 Migration 명명을 연번 → timestamp 접두어로 변경 | — |
 | 1.2 | 2026-08-31 | §6을 5역할 개인 소유 → **2트랙 공동 소유**로 개편(AI 코어 2인 · 서비스 2인). 세팅 담당을 한시적 역할로 명시하고 인계 대상을 DEV-003 §12로 연결 | — |
