@@ -1,6 +1,6 @@
 # DEV-002 · Screen ID ↔ Route 매핑
 
-> **Version:** 1.3 · **Updated:** 2026-09-28 · **Owner:** 운영 및 백오피스 PM\
+> **Version:** 1.4 · **Updated:** 2026-09-30 · **Owner:** 운영 및 백오피스 PM\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -176,6 +176,52 @@ Next.js 라우팅 특성상 `students/new`가 `students/[studentId]`보다 먼�
 
 ---
 
+## 8-A. 2026-09-30 에 더한 Route
+
+> 근거: COM-003 §4.9 · COM-001 §11-A · §11-2.
+
+| Screen ID | 화면 | Route | 파일 |
+|---|---|---|---|
+| `STU-006` | 지난 미션 목록 | `/missions/past` | `(student)/missions/past/page.tsx` |
+| `STU-007` | 학생 내 정보 | `/me` | `(student)/me/page.tsx` |
+| `STU-008` | 캐릭터 목록·변경 | `/me/characters` | `(student)/me/characters/page.tsx` |
+| `STU-009` | 캐릭터 해금 | `/me/characters/[characterId]` | `(student)/me/characters/[characterId]/page.tsx` |
+| `PAR-003` | 자녀 학습 상세 | `/parent/students/[studentId]` | `(parent)/students/[studentId]/page.tsx` |
+| `PAR-004` | 알림 센터 | `/parent/notifications` | `(parent)/notifications/page.tsx` |
+| `RWD-001` | 보상 목록 | `/parent/rewards` | `(parent)/rewards/page.tsx` |
+| `RWD-002` | 보상 만들기 | `/parent/rewards/new` | `(parent)/rewards/new/page.tsx` |
+| `RWD-003` | 보상 상세·수정 | `/parent/rewards/[rewardGoalId]` | `(parent)/rewards/[rewardGoalId]/page.tsx` |
+| `MY-011` | 보호자 비밀번호 변경 | `/parent/my/profile/password` | `(parent)/my/profile/password/page.tsx` |
+
+**`/parent/my/**` 를 그대로 쓴다.** 팀 정책 문서는 `/parent/me/**` 로
+적었는데, 뜻이 같고 우리 쪽은 이미 배포돼 있다. 옮기면 폴더 11개가 움직이고
+얻는 것이 없다 (`FIGMA-MD-AUDIT.md` §0).
+
+**BIL 도 §7 그대로다.** 팀 정책 문서의 `/parent/subscriptions` 계열은 쓰지
+않는다. 결제 PG 가 정해지면 그때 §7 을 다시 본다(COM-005 §13).
+
+### 헷갈리는 짝
+
+```text
+/parent/notifications      PAR-004  받은 알림을 본다
+/parent/my/notifications   MY-007   무엇을 받을지 정한다
+
+/parent/students/[id]      PAR-003  학습 현황. 읽기 중심
+/parent/my/students/[id]   MY-003   계정 관리. 수정·삭제
+```
+
+두 짝 모두 **학생 세션으로 넘어가지 않는다.** 부모 계정으로 부모 화면을
+볼 뿐이다.
+
+`MY-011` 은 **이메일 가입자만** 들어온다. 카카오 · 구글 가입자가 주소로
+직접 와도 `/parent/my/profile` 로 보낸다.
+
+`/me` 와 `/parent/my` 는 다른 영역이다. 앞쪽은 아이, 뒤쪽은 부모다.
+접근 제어는 §5 의 표를 따른다 — 부모 계정이 `/me` 로 오면 `/parent` 로
+보낸다.
+
+---
+
 ## 9. Route Handler (화면 아님)
 
 | 경로 | 용도 | 오너 |
@@ -185,6 +231,8 @@ Next.js 라우팅 특성상 `students/new`가 `students/[studentId]`보다 먼�
 | `/api/ai/ocr` | 사진 문제 인식 | AI 코어 PM |
 | `/api/webhooks/payment` | PG 결제 콜백 | 과금 PM |
 | `/api/cron/weekly-report` | 주간 리포트 생성 배치 | 그로스 PM |
+| `/api/cron/delete-temporary-uploads` | 못 지운 임시 사진 재삭제 (COM-002 §23) | AI 코어 PM |
+| `/api/cron/purge-deleted-accounts` | 30일 지난 탈퇴 계정 완전 삭제 (COM-002 §3-2) | 운영 PM |
 
 그 외 서버 로직은 Route Handler를 만들지 않고 Server Action을 쓴다.
 (DEV-001 §2 규칙 5)
@@ -234,14 +282,15 @@ URL 이 없어 쓸 수 없었다.
 | Area | COM-003 §12 | 본 문서 Route |
 |---|---|---|
 | AUTH | 5 | 3 |
-| STU | 5 | 5 |
+| STU | 9 | 9 |
 | MIS | 3 | 3 |
-| PAR | 3 | 3 |
+| PAR | 5 | 5 |
 | RPT | 3 | 3 |
 | BIL | 6 | 6 |
-| MY | 10 | 10 |
+| MY | 11 | 11 |
+| RWD | 3 | 3 |
 | ADM | 4 | 5 |
-| **합계** | **39** | **38** |
+| **합계** | **49** | **48** |
 
 > ADM 이 하나 더 많다. `ADM-005` 가 목록과 상세 두 Route 를 쓴다 —
 > 서로 다른 Screen 이며 State/Modal 을 Route 로 만든 것이 아니다.
@@ -325,6 +374,7 @@ ADM 화면이 없던 동안에는 Supabase Studio 조회로 버텼다. 이제 �
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.4 | 2026-09-30 | **§8-A 추가 · Route 10개.** 지난 미션 · 학생 내 정보 · 캐릭터 2 · 자녀 학습 상세 · 알림 센터 · 보상 3 · 비밀번호 변경. cron 2개(`delete-temporary-uploads` · `purge-deleted-accounts`). **`/parent/my/**` 와 §7 BIL 은 그대로 둔다** — 팀 정책 문서의 `/parent/me/**` · `/parent/subscriptions` 를 따르지 않는 이유를 §8-A 에 적었다. §10 합계 38 → 48 | — |
 | 1.3 | 2026-09-28 | **§9-1 추가 — Screen ID 없는 공개 Route.** `/`(서비스 소개) · `/terms` · `/privacy` · `/guardian` · `/marketing`. 구글 OAuth 동의 화면을 게시하려면 홈페이지 · 개인정보처리방침 · 이용약관의 **공개 URL** 이 필요한데, 가입 폼의 바텀시트(`AUTH-003`)는 URL 이 없어 쓸 수 없었다. 본문은 `lib/constants/terms.ts` 한 곳에서만 읽는다. COM-003 §12 합계는 늘리지 않는다 — 제품 화면이 아니다. `/` 는 로그인한 사람을 전과 같이 `/parent`·`/home` 으로 보낸다 | — |
 | 1.2 | 2026-09-22 | **§2 `AUTH-003` · `AUTH-004` 의 Route 를 걷어냈다**(§2-1 추가). Figma 가 약관 동의를 가입 폼 안에 두고 본문만 바텀시트로 띄운다 — `/signup/terms` 는 COM-003 §13-3 과 어긋났다. 휴대폰 인증은 회원가입이 휴대폰을 받지 않게 되면서(COM-002 §3-1) 인증할 번호가 없어져 **미정**으로 둔다. Screen ID 는 그대로다. 흐름 줄과 §10 합계(AUTH 5 → 3)를 함께 맞췄다 | — |
 | 1.1 | 2026-09-17 | **학생 ↔ 부모 영역을 계정으로 가른다**(§3 · §5 · COM-003 §4.2). 전에는 "별도 확인 없이 오간다" 였다. `/onboarding/student` 만 학생 Area 에 있으면서 부모가 연다. Route 추가·삭제·개명 없음 | — |
