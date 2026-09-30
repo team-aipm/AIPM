@@ -44,7 +44,7 @@ export async function undoDeleteStudent(formData: FormData): Promise<void> {
   redirect('/parent/my/students');
 }
 
-/** MY-006 마케팅 수신설정. 3종을 각각 받는다(COM-002 §3 · COM-007 §9) */
+/** MY-006 마케팅 수신설정. 이메일 · SMS 를 각각 받는다(COM-002 §25 · COM-007 §9) */
 export async function saveMarketing(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
@@ -55,7 +55,8 @@ export async function saveMarketing(formData: FormData): Promise<void> {
     .update({
       marketing_email_opt_in: formData.get('marketing_email_opt_in') === 'on',
       marketing_sms_opt_in: formData.get('marketing_sms_opt_in') === 'on',
-      marketing_alimtalk_opt_in: formData.get('marketing_alimtalk_opt_in') === 'on',
+      // 알림톡은 받지 않는다. 전에 켜 둔 값이 남아 있어도 저장할 때 끈다(COM-002 §25).
+      marketing_alimtalk_opt_in: false,
       // 언제 바꿨는지가 동의 이력이다(COM-002 §3).
       marketing_consent_updated_at: new Date().toISOString(),
     })

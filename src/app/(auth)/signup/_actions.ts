@@ -21,7 +21,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { isValidPassword, PASSWORD_RULE_TEXT } from '@/lib/constants/student-login';
-import { REQUIRED_TERMS, TERMS, TERMS_ORDER, type TermsKey } from '@/lib/constants/terms';
+import { REQUIRED_TERMS, TERMS, TERMS_ORDER, type ConsentType, type TermsKey } from '@/lib/constants/terms';
 
 /**
  * **이 파일에서 상수를 내보내면 안 된다.** `'use server'` 파일은 async
@@ -81,7 +81,12 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: metadataFor(agreed) },
+    options: {
+      data: metadataFor(agreed, {
+        email: formData.get('agree_marketing_email') !== null,
+        sms: formData.get('agree_marketing_sms') !== null,
+      }),
+    },
   });
 
   if (error !== null) {
@@ -114,24 +119,28 @@ export async function signUp(
 /**
  * 트리거가 읽는 값.
  *
- * 마케팅은 화면에서 한 줄인데 COM-002 §3 은 셋을 갖는다. 같은 값으로 셋을
- * 채우고, 수단별로 끄는 것은 `MY` 에서 하게 둔다(`/parent/my/marketing`).
+ * **마케팅은 채널별로 따로 받는다** (COM-002 §25). 전에는 체크박스 하나로
+ * 이메일 · SMS · 알림톡 셋을 같이 켰다. 알림톡은 이제 받지 않으므로 언제나
+ * false 이고 `consent_log` 에도 남기지 않는다.
  *
  * **거절도 함께 보낸다.** `consent_log` 는 철회도 행으로 남긴다
  * (COM-002 §20-B) — 동의하지 않았다는 사실 자체가 증명해야 할 것이다.
  */
-function metadataFor(agreed: Set<TermsKey>) {
-  const marketing = agreed.has('marketing');
+function metadataFor(agreed: Set<TermsKey>, marketing: { email: boolean; sms: boolean }) {
+  const channel: Partial<Record<ConsentType, boolean>> = {
+    marketing_email: marketing.email,
+    marketing_sms: marketing.sms,
+  };
 
   return {
-    marketing_email_opt_in: marketing,
-    marketing_sms_opt_in: marketing,
-    marketing_alimtalk_opt_in: marketing,
+    marketing_email_opt_in: marketing.email,
+    marketing_sms_opt_in: marketing.sms,
+    marketing_alimtalk_opt_in: false,
     consents: TERMS_ORDER.flatMap((key) =>
       TERMS[key].consentTypes.map((consent_type) => ({
         consent_type,
         document_version: TERMS[key].version,
-        agreed: agreed.has(key),
+        agreed: channel[consent_type] ?? agreed.has(key),
       })),
     ),
   };

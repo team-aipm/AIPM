@@ -1,12 +1,12 @@
 /**
  * MY-006 마케팅 수신설정 · `/parent/my/marketing` (DEV-002)
  *
- * **3종을 각각 받는다**(COM-002 §3 · COM-007 §9). 한 번에 묶지 않는다.
+ * **이메일 · SMS 두 채널을 각각 받는다**(COM-002 §25 · COM-007 §9).
+ * 알림톡은 받지 않는다 — 컬럼은 남아 있고 저장할 때 늘 false 로 둔다.
  * 대상은 부모뿐이며 학생에게는 어떤 마케팅도 보내지 않는다.
  *
- * 생김새는 Figma `설정 · 10 마케팅 수신 설정` 이다. Figma 는 이메일 · SMS
- * 둘에 「카카오 채널은 나중에」 인데, 저장하는 칸이 셋이라 알림톡 줄도
- * 둔다. 스위치는 누르는 즉시 저장하지 않는다 — 저장 버튼을 누를 때
+ * 생김새는 Figma `설정 · 10 마케팅 수신 설정` 이다. 스위치는 누르는 즉시
+ * 저장하지 않는다 — 저장 버튼을 누를 때
  * 한 번에 보낸다(동의 이력이 한 번에 한 줄 남는다).
  */
 
@@ -22,7 +22,6 @@ export const metadata = { title: '소식 받기 · 메티' };
 const ITEMS = [
   { name: 'marketing_email_opt_in', label: '이메일' },
   { name: 'marketing_sms_opt_in', label: '문자' },
-  { name: 'marketing_alimtalk_opt_in', label: '알림톡' },
 ] as const;
 
 export default async function MarketingPage() {
@@ -33,7 +32,7 @@ export default async function MarketingPage() {
   const { data: account } = await supabase
     .from('account')
     .select(
-      'marketing_email_opt_in, marketing_sms_opt_in, marketing_alimtalk_opt_in, marketing_consent_updated_at',
+      'marketing_email_opt_in, marketing_sms_opt_in, marketing_consent_updated_at',
     )
     .eq('account_id', user.id)
     .maybeSingle();
