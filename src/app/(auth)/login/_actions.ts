@@ -3,9 +3,10 @@
 /**
  * AUTH-001 로그인.
  *
- * **부모와 아이가 같은 칸에 친다.** `@` 가 있으면 부모의 이메일이고, 없으면
- * 아이의 아이디다(`lib/constants/student-login.ts`). 「보호자용」/「학생용」
- * 을 고르게 하면 아이가 고르는 것부터 틀린다.
+ * **부모와 아이가 같은 칸에 친다.** 둘 다 이메일이다 (정책 v0.1 §5 · §8 ·
+ * 2026-09-29 개정). 전에는 `@` 가 없으면 아이 아이디로 보고 서버가 가짜
+ * 이메일로 바꿨다. 「보호자용」/「학생용」 을 고르게 하지 않는 것은 그대로다
+ * — 아이가 고르는 것부터 틀린다.
  *
  * 들어간 뒤 가는 곳이 다르다.
  *
@@ -33,7 +34,7 @@ import {
   REMEMBER_OFF,
   untilBrowserCloses,
 } from '@/lib/constants/session-persistence';
-import { emailForLoginId, isValidLoginId, looksLikeEmail } from '@/lib/constants/student-login';
+import { looksLikeEmail } from '@/lib/constants/student-login';
 import { studentIdOfViewer } from '@/lib/services/student-login';
 
 export type SignInState = { error: string | null };
@@ -49,15 +50,15 @@ export async function signIn(
   const password = String(formData.get('password') ?? '');
 
   if (typed === '' || password === '') {
-    return { error: '아이디(또는 이메일)와 비밀번호를 모두 입력해주세요.' };
+    return { error: '이메일과 비밀번호를 모두 입력해주세요.' };
   }
 
-  // 아이디 모양이 아니면 Auth 를 부르지 않는다. 어차피 그런 계정이 없다.
-  if (!looksLikeEmail(typed) && !isValidLoginId(typed)) {
+  // 이메일 모양이 아니면 Auth 를 부르지 않는다. 어차피 그런 계정이 없다.
+  if (!looksLikeEmail(typed)) {
     return { error: WRONG };
   }
 
-  const email = looksLikeEmail(typed) ? typed : emailForLoginId(typed);
+  const email = typed;
 
   /**
    * **「로그인 유지」 를 세션이 생기기 전에 정해 둔다.**

@@ -54,7 +54,7 @@ function Create({ studentId }: { studentId: string }) {
       <label className="flex flex-col gap-1.5">
         <span className="text-xs font-semibold text-meti-sub">아이디</span>
         <input
-          name="login_id"
+          name="login_email"
           type="text"
           required
           autoCapitalize="none"
@@ -88,14 +88,14 @@ function Create({ studentId }: { studentId: string }) {
   );
 }
 
-function Reset({ studentId, loginId }: { studentId: string; loginId: string }) {
+function Reset({ studentId, loginEmail }: { studentId: string; loginEmail: string }) {
   const [state, action, pending] = useActionState(resetChildPassword, EMPTY);
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1 rounded-xl bg-meti-bg px-3.5 py-3">
         <span className="text-[11px] font-semibold text-meti-sub">아이디</span>
-        <span className="text-[15px] font-bold text-meti-ink">{loginId}</span>
+        <span className="text-[15px] font-bold text-meti-ink">{loginEmail}</span>
       </div>
 
       <p className="text-[12px] leading-relaxed text-meti-sub">
@@ -129,18 +129,18 @@ function Reset({ studentId, loginId }: { studentId: string; loginId: string }) {
 
 export function ChildLoginSection({
   studentId,
-  loginId,
+  loginEmail,
 }: {
   studentId: string;
-  loginId: string | null;
+  loginEmail: string | null;
 }) {
   return (
     <section className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
       <h2 className="text-[12px] font-bold text-meti-sub">아이 로그인</h2>
-      {loginId === null ? (
+      {loginEmail === null ? (
         <Create studentId={studentId} />
       ) : (
-        <Reset studentId={studentId} loginId={loginId} />
+        <Reset studentId={studentId} loginEmail={loginEmail} />
       )}
     </section>
   );

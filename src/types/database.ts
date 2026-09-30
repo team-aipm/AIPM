@@ -576,7 +576,7 @@ export type Database = {
           concept: string
           created_at: string
           difficulty: number
-          learning_grade: number
+          learning_grade: number | null
           learning_mode: Database["public"]["Enums"]["learning_mode"]
           problem_id: string
           problem_source: Database["public"]["Enums"]["problem_source"]
@@ -594,7 +594,7 @@ export type Database = {
           concept: string
           created_at?: string
           difficulty: number
-          learning_grade: number
+          learning_grade?: number | null
           learning_mode: Database["public"]["Enums"]["learning_mode"]
           problem_id?: string
           problem_source: Database["public"]["Enums"]["problem_source"]
@@ -612,7 +612,7 @@ export type Database = {
           concept?: string
           created_at?: string
           difficulty?: number
-          learning_grade?: number
+          learning_grade?: number | null
           learning_mode?: Database["public"]["Enums"]["learning_mode"]
           problem_id?: string
           problem_source?: Database["public"]["Enums"]["problem_source"]
@@ -651,7 +651,7 @@ export type Database = {
           grade: number
           learning_data_retain_until: string | null
           learning_grade: number
-          login_id: string | null
+          login_email: string | null
           nickname: string
           nickname_source: Database["public"]["Enums"]["nickname_source"]
           persona_type: Database["public"]["Enums"]["persona_type"]
@@ -671,7 +671,7 @@ export type Database = {
           grade: number
           learning_data_retain_until?: string | null
           learning_grade?: number
-          login_id?: string | null
+          login_email?: string | null
           nickname: string
           nickname_source?: Database["public"]["Enums"]["nickname_source"]
           persona_type: Database["public"]["Enums"]["persona_type"]
@@ -691,7 +691,7 @@ export type Database = {
           grade?: number
           learning_data_retain_until?: string | null
           learning_grade?: number
-          login_id?: string | null
+          login_email?: string | null
           nickname?: string
           nickname_source?: Database["public"]["Enums"]["nickname_source"]
           persona_type?: Database["public"]["Enums"]["persona_type"]
