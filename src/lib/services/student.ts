@@ -77,6 +77,15 @@ export async function getStudent(
  *
  * `current_difficulty` 는 3 이다. COM-001 §9 "학생 grade 를 기준으로 중간
  * 난이도에서 시작한다", COM-002 §4 예시도 3.
+ *
+ * **`learning_grade` 는 등록 학년으로 시작한다.** 이 줄이 없으면 컬럼
+ * 기본값 `5` 가 들어가, 4학년 아이가 5학년 문제부터 받는다
+ * (`20260928050105`). 마이그레이션은 그때 있던 학생만 `grade` 로 채웠고
+ * 새로 들어오는 학생은 여기서 정해야 한다.
+ *
+ * 등록 학년과 출제 학년은 **여기서만 같다.** 그 뒤로는 따로 움직인다 —
+ * 아이가 계속 막히면 출제 학년이 내려가고, 잘 풀면 올라간다
+ * (`lib/services/difficulty.ts`).
  */
 export async function createStudent(
   client: Client,
@@ -101,6 +110,7 @@ export async function createStudent(
       grade: input.grade,
       persona_type: 'friend',
       current_difficulty: 3,
+      learning_grade: input.grade,
     })
     .select('*')
     .single();
