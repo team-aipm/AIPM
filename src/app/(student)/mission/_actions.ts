@@ -25,6 +25,7 @@ import {
   listSessionProblemTexts,
 } from '@/lib/services/problem';
 import { moveFrom, updateDifficulty, type Standing } from '@/lib/services/difficulty';
+import { POLICY } from '@/lib/ai/policy';
 import {
   applyDailySummary,
   forPrompt,
@@ -42,6 +43,34 @@ import { runStage, stageOf } from '@/lib/ai/pipeline/run';
 import { getPath, parsePath, setPath } from '@/lib/ai/pipeline/paths';
 
 export type Turn = { who: 'ai' | 'student'; text: string };
+
+/**
+ * 모델이 답을 못 줬을 때 아이에게 할 말.
+ *
+ * **아이 잘못처럼 말하지 않는다**(CLAUDE.md UI). 그런데 전에는 세 가지가
+ * 한 문구로 나갔다 — 「잠깐 멈췄어. 다시 한 번 말해줄래?」.
+ *
+ * ```text
+ * blocked    안전 필터가 막았다. 다시 말해도 또 막힌다
+ * truncated  응답이 잘렸다. 다시 부르면 될 수도 있다
+ * other      통신 · 서버 · JSON. 다시 부르면 될 수도 있다
+ * ```
+ *
+ * `blocked` 에 「다시 말해줄래?」 라고 하면 아이는 같은 말을 다시 하고
+ * 같은 화면을 또 본다. 무엇을 하면 되는지 알려주지 못하는 안내다.
+ *
+ * **왜 막혔는지는 말하지 않는다.** 아이에게 「위험한 말을 했어」 라고
+ * 읽히게 하지 않는다. 경계를 말하고 돌아갈 곳을 준다.
+ */
+function stumble(
+  kind: 'blocked' | 'truncated' | 'other',
+  /** 막힌 것이 아닐 때 할 말. 자리마다 다음에 할 일이 다르다 */
+  retry: string,
+  /** 막혔을 때 할 말. 미션을 가져오는 자리는 돌아갈 곳이 다르다 */
+  blocked = '그건 여기서 얘기하기 어려워. 우리 미션으로 돌아가 볼까?',
+): string {
+  return kind === 'blocked' ? blocked : retry;
+}
 export type Choice = { label: string; value: string };
 
 export type HostReply =
@@ -204,6 +233,41 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
   const session = seat?.session ?? (await findTodaySession(supabase, student.student_id));
   if (session === null) return { ok: false, message: '오늘 미션을 먼저 시작해줘.' };
 
+  /**
+   * **여기에도 상한이 있다** (2026-09-30 추가).
+   *
+   * 문제 풀이에는 5턴 제한이 있는데(`TURN_LIMIT`) 시작 대화에는 없었다.
+   * 아이가 미션을 안 고르고 계속 떠들 수 있고, 한 마디마다 4,500 토큰이
+   * 나간다.
+   *
+   * **`turns` 는 클라이언트가 보낸다.** 브라우저가 보낸 수를 그대로 믿지
+   * 않고 서버가 센다.
+   */
+  const saidSoFar = turns.filter((turn) => turn.who === 'student').length;
+  const willSay = saidSoFar + (text === null ? 0 : 1);
+
+  if (willSay > POLICY.hostTurnLimit) {
+    /**
+     * **모델을 부르지 않는다.** 닿았으면 더 이야기하지 않는 것이 핵심이다.
+     *
+     * 나무라지 않고 고를 것 두 개만 내민다. `ok: true` 로 돌려주는 이유는
+     * 화면이 버튼을 그려야 하기 때문이다 — `ok: false` 는 말만 띄우고
+     * 버튼을 지운다(`MissionChat`).
+     *
+     * 문구는 01 프롬프트가 쓰는 버튼 글자를 그대로 쓴다. 아이가 방금까지
+     * 보던 것과 같아야 한다.
+     */
+    return {
+      ok: true,
+      message: '얘기 더 하고 싶은데, 오늘 미션도 해야 하니까! 뭐부터 할까?',
+      choices: [
+        { label: 'AI가 문제 내기', value: 'A' },
+        { label: '내가 문제 가져오기', value: 'B' },
+      ],
+      nextModule: 'SESSION_HOST',
+    };
+  }
+
   const memory = await getMemory(supabase, student.student_id);
 
   const input = buildHostInput({
@@ -215,7 +279,9 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
     totalProblems: session.target_problem_count,
     isFirstUse: session.completed_problem_count === 0 && turns.length === 0,
     memory,
-    turns,
+    // **뒤에서부터 자른다.** 조작된 요청이 프롬프트를 부풀리지 못하게
+    // 막는다. 정상 대화는 `hostTurnLimit` 안에서 끝나므로 여기 닿지 않는다.
+    turns: turns.slice(-POLICY.hostHistoryLimit),
     latest: text,
   });
 
@@ -225,7 +291,7 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
     // **학생 잘못처럼 말하지 않는다**(CLAUDE.md UI). 무엇을 하면 되는지만
     // 알려준다.
     console.error(`[mission] 01 실패: ${result.error}`);
-    return { ok: false, message: '잠깐 멈췄어. 다시 한 번 말해줄래?' };
+    return { ok: false, message: stumble(result.kind, '잠깐 멈췄어. 다시 한 번 말해줄래?') };
   }
 
   const output = result.output;
@@ -474,7 +540,10 @@ export async function startProblem(): Promise<ProblemReply> {
   const result = await runStage('02 MODE A', input, student.persona_type, [], { studentId: student.student_id, sessionId: session.session_id });
   if (!result.ok) {
     console.error(`[mission] 02 PREPARE 실패: ${result.error}`);
-    return { ok: false, message: '문제를 고르다가 잠깐 멈췄어. 다시 해볼래?' };
+    return {
+      ok: false,
+      message: stumble(result.kind, '문제를 고르다가 잠깐 멈췄어. 다시 해볼래?', '지금은 낼 만한 문제를 못 찾았어. 다시 해볼래?'),
+    };
   }
 
   const output = result.output;
@@ -617,7 +686,7 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
   );
   if (!result.ok) {
     console.error(`[mission] 02 INTERACT 실패: ${result.error}`);
-    return { ok: false, message: '잠깐 멈췄어. 다시 한 번 말해줄래?' };
+    return { ok: false, message: stumble(result.kind, '잠깐 멈췄어. 다시 한 번 말해줄래?') };
   }
 
   const output = result.output;
@@ -1241,7 +1310,10 @@ export async function offerSourceProblem(text: string): Promise<SourceStep> {
   const result = await runStage('03 MODE B', input, student.persona_type, [], { studentId: student.student_id, sessionId: session.session_id });
   if (!result.ok) {
     console.error(`[mission] 03 RECOGNIZE 실패: ${result.error}`);
-    return { ok: false, message: '문제를 읽다가 잠깐 멈췄어. 다시 적어줄래?' };
+    return {
+      ok: false,
+      message: stumble(result.kind, '문제를 읽다가 잠깐 멈췄어. 다시 적어줄래?', '그 문제는 같이 풀기 어려워. 다른 문제로 해볼까?'),
+    };
   }
 
   const status = str(read(result.output, 'source_problem_update.recognition_status'));
@@ -1305,7 +1377,10 @@ export async function confirmSourceProblem(
   const result = await runStage('03 MODE B', input, student.persona_type, [], { studentId: student.student_id, sessionId: session.session_id });
   if (!result.ok) {
     console.error(`[mission] 03 PREPARE 실패: ${result.error}`);
-    return { ok: false, message: '문제를 풀어보다가 잠깐 멈췄어. 다시 해볼래?' };
+    return {
+      ok: false,
+      message: stumble(result.kind, '문제를 풀어보다가 잠깐 멈췄어. 다시 해볼래?', '그 문제는 같이 풀기 어려워. 다른 문제로 해볼까?'),
+    };
   }
 
   const output = result.output;
@@ -1464,7 +1539,10 @@ export async function readPhotoProblem(formData: FormData): Promise<SourceStep> 
   if (!result.ok) {
     console.error(`[mission] 03 RECOGNIZE(사진) 실패: ${result.error}`);
     await drop();
-    return { ok: false, message: '사진을 읽다가 잠깐 멈췄어. 다시 찍어줄래?' };
+    return {
+      ok: false,
+      message: stumble(result.kind, '사진을 읽다가 잠깐 멈췄어. 다시 찍어줄래?', '그 사진으로는 같이 풀기 어려워. 문제만 나오게 다시 찍어줄래?'),
+    };
   }
 
   const status = str(read(result.output, 'source_problem_update.recognition_status'));
@@ -1569,7 +1647,7 @@ export async function askHint(): Promise<HintReply> {
   );
   if (!result.ok) {
     console.error(`[mission] 04 실패: ${result.error}`);
-    return { ok: false, message: '잠깐 멈췄어. 다시 눌러줄래?' };
+    return { ok: false, message: stumble(result.kind, '잠깐 멈췄어. 다시 눌러줄래?') };
   }
 
   const message = str(read(result.output, 'hint.message'));

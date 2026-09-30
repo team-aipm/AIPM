@@ -81,7 +81,7 @@ async function callOpenAi(req: ProviderRequest): Promise<ProviderResult> {
   const elapsed = () => Date.now() - started;
 
   if (!req.apiKey.trim()) {
-    return { ok: false, error: 'OpenAI API 키를 입력하세요.', elapsed_ms: elapsed() };
+    return { ok: false, kind: 'other', error: 'OpenAI API 키를 입력하세요.', elapsed_ms: elapsed() };
   }
 
   // 지정하지 않은 값은 보내지 않는다. 추론 계열 모델은 temperature 를
@@ -125,17 +125,17 @@ async function callOpenAi(req: ProviderRequest): Promise<ProviderResult> {
   });
 
   if ('error' in response) {
-    return { ok: false, error: response.error, elapsed_ms: elapsed() };
+    return { ok: false, kind: 'other', error: response.error, elapsed_ms: elapsed() };
   }
 
   const { raw, ok, status } = response;
   if (!ok) {
-    return { ok: false, error: `OpenAI ${status}\n${raw.slice(0, 2000)}`, elapsed_ms: elapsed() };
+    return { ok: false, kind: 'other', error: `OpenAI ${status}\n${raw.slice(0, 2000)}`, elapsed_ms: elapsed() };
   }
 
   const parsed = parseJson(raw);
   if (parsed === null) {
-    return { ok: false, error: `응답이 JSON이 아닙니다.\n${raw.slice(0, 2000)}`, elapsed_ms: elapsed() };
+    return { ok: false, kind: 'other', error: `응답이 JSON이 아닙니다.\n${raw.slice(0, 2000)}`, elapsed_ms: elapsed() };
   }
 
   const choice = (parsed as { choices?: unknown[] }).choices?.[0];
@@ -145,6 +145,7 @@ async function callOpenAi(req: ProviderRequest): Promise<ProviderResult> {
     const reason = (choice as { finish_reason?: unknown })?.finish_reason;
     return {
       ok: false,
+      kind: 'other',
       error: `응답에서 텍스트를 찾지 못했습니다. finish_reason=${String(reason)}\n${raw.slice(0, 1500)}`,
       elapsed_ms: elapsed(),
     };
@@ -178,7 +179,7 @@ async function callAnthropic(req: ProviderRequest): Promise<ProviderResult> {
   const elapsed = () => Date.now() - started;
 
   if (!req.apiKey.trim()) {
-    return { ok: false, error: 'Claude API 키를 입력하세요.', elapsed_ms: elapsed() };
+    return { ok: false, kind: 'other', error: 'Claude API 키를 입력하세요.', elapsed_ms: elapsed() };
   }
 
   // max_tokens 는 필수라 비어 있으면 기본값을 넣는다.
@@ -223,17 +224,17 @@ async function callAnthropic(req: ProviderRequest): Promise<ProviderResult> {
   });
 
   if ('error' in response) {
-    return { ok: false, error: response.error, elapsed_ms: elapsed() };
+    return { ok: false, kind: 'other', error: response.error, elapsed_ms: elapsed() };
   }
 
   const { raw, ok, status } = response;
   if (!ok) {
-    return { ok: false, error: `Anthropic ${status}\n${raw.slice(0, 2000)}`, elapsed_ms: elapsed() };
+    return { ok: false, kind: 'other', error: `Anthropic ${status}\n${raw.slice(0, 2000)}`, elapsed_ms: elapsed() };
   }
 
   const parsed = parseJson(raw);
   if (parsed === null) {
-    return { ok: false, error: `응답이 JSON이 아닙니다.\n${raw.slice(0, 2000)}`, elapsed_ms: elapsed() };
+    return { ok: false, kind: 'other', error: `응답이 JSON이 아닙니다.\n${raw.slice(0, 2000)}`, elapsed_ms: elapsed() };
   }
 
   const message = parsed as {
@@ -248,6 +249,7 @@ async function callAnthropic(req: ProviderRequest): Promise<ProviderResult> {
     const detail = message.stop_details;
     return {
       ok: false,
+      kind: 'blocked',
       error: `모델이 요청을 거부했습니다. category=${String(detail?.category)}\n${String(detail?.explanation ?? '')}`,
       elapsed_ms: elapsed(),
     };
@@ -264,6 +266,7 @@ async function callAnthropic(req: ProviderRequest): Promise<ProviderResult> {
   if (text.length === 0) {
     return {
       ok: false,
+      kind: 'other',
       error: `응답에 text 블록이 없습니다. stop_reason=${String(message.stop_reason)}\n${raw.slice(0, 1500)}`,
       elapsed_ms: elapsed(),
     };
