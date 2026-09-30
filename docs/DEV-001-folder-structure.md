@@ -1,6 +1,6 @@
 # DEV-001 · 폴더 구조 및 PM 소유 경로
 
-> **Version:** 1.6 · **Updated:** 2026-09-30 · **Owner:** 세팅 담당\
+> **Version:** 1.7 · **Updated:** 2026-09-30 · **Owner:** 세팅 담당\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -445,8 +445,8 @@ lib        →  app                      (금지)
 
 ### 8-1. service_role 예외 (2026-09-10 추가)
 
-`auth.users`에 손대는 길은 Admin API뿐이라 RLS로는 대신할 수 없다. 아래 두
-곳만 예외로 두며, **둘 다 같은 순서를 지킨다.**
+`auth.users`에 손대는 길은 Admin API뿐이라 RLS로는 대신할 수 없다. 아래 세
+곳만 예외로 두며, **모두 같은 순서를 지킨다.**
 
 ```text
 1  로그인한 사람의 세션으로 대상을 읽는다   ← RLS가 남의 것을 안 준다
@@ -459,9 +459,19 @@ lib        →  app                      (금지)
 |---|---|---|
 | `lib/services/admin.ts` | 운영자가 남의 계정을 본다 | 확인 통과 후 조회 전체 |
 | `lib/services/student-login.ts` | 부모가 아이 계정을 만든다 | `auth.users` 생성·비밀번호 변경만 |
+| `lib/services/difficulty.ts` | 서버가 평가로 정한 난이도를 저장한다 | `student.current_difficulty` · `learning_grade` 두 칸 쓰기만 |
 
 4번을 service_role로 하지 않는 이유가 있다. 사용자 세션으로 쓰면 RLS와
 트리거가 그대로 걸린다 — 우회하는 길을 하나라도 덜 만든다.
+
+**난이도만 4번의 예외다** (2026-09-30). 미션은 아이 세션으로 돈다. 그런데
+`guard_student_self_update` 트리거는 아이 세션이 자기 난이도를 고치는 것을
+막는다 — 브라우저에서 요청을 직접 만들어 「내 난이도를 1로」 바꾸지 못하게
+하려는 것이다. DB 는 「서버가 평가를 보고 계산한 값」 과 「아이가 직접 만든
+요청」 을 세션만으로는 가려낼 수 없다. 그래서 계산은 서버에서 하고, 그
+결과만 service_role 로 쓴다. service_role 키는 브라우저에 가지 않으므로
+아이는 이 길을 쓸 수 없다. 1~2번(아이 세션으로 자기 행을 읽어 본인 확인)은
+그대로 지킨다.
 
 ---
 
@@ -507,6 +517,7 @@ rebase한다.** 그 브랜치는 135 커밋 뒤에서 갈라져 있었다.
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 1.7 | 2026-09-30 | §8-1 service_role 예외에 `lib/services/difficulty.ts`(난이도 저장) 추가. 아이 세션으로는 트리거가 난이도 쓰기를 막으므로, 서버가 계산한 값만 service_role 로 쓴다. 4번 순서의 유일한 예외로 사유를 적었다 | — |
 | 1.6 | 2026-09-30 | **팀 정책 반영.** 학생 하단 Nav 3탭 · 부모 4탭 → 3탭 · `(student)/missions`·`(student)/me` · `(parent)/students`·`notifications`·`rewards` · `my/profile/password` · cron 2개. `lib/services` 에 COM-002 §22~24 엔티티 7개 자리 추가. **빈 폴더는 만들지 않는다** — 화면을 만들 때 생긴다 | — |
 | 1.0 | 2026-08-28 | 최초 작성. COM-005 §7 하위 구조 상세화 | — |
 | 1.1 | 2026-08-28 | §6 PM별 Branch 표기 제거(담당은 소유 경로가 결정) + 공통 코드 변경 절차 추가. §7 Migration 명명을 연번 → timestamp 접두어로 변경 | — |
