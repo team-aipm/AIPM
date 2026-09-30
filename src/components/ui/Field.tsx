@@ -26,10 +26,13 @@ export function fieldClass(tone: FieldTone, invalid = false): string {
   const base =
     'h-[52px] w-full px-4 text-[16px] leading-6 text-meti-ink outline-none placeholder:text-meti-hint';
   const shape = tone === 'card' ? 'rounded-xl bg-meti-page' : 'rounded-lg bg-white';
+  // Focused 는 테두리가 2px 로 굵어진다. 굵어진 1px 만큼 안쪽 여백을 줄여
+  // 글자가 밀리지 않게 한다.
   const border = invalid
-    ? 'border border-red-500 focus:border-red-500'
-    : 'border border-meti-field focus:border-meti';
-  return `${base} ${shape} ${border}`;
+    ? 'border border-error-line focus:border-2 focus:border-error-line focus:px-[15px]'
+    : 'border border-meti-field focus:border-2 focus:border-button-primary focus:px-[15px]';
+  const off = 'disabled:border-meti-line disabled:bg-background-primary disabled:text-disabled-text';
+  return `${base} ${shape} ${border} ${off}`;
 }
 
 export function Field({
@@ -66,7 +69,7 @@ export function Field({
         되면서 아래 칸들이 통째로 밀린다 — 오타 하나에 화면이 출렁인다.
       */}
       {error != null && error !== '' ? (
-        <span role="alert" className="text-[14px] leading-5 text-red-500">
+        <span role="alert" className="text-[14px] leading-5 text-error-text">
           {error}
         </span>
       ) : hint !== undefined ? (

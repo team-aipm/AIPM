@@ -34,35 +34,82 @@
  * `bg-meti-bg` · `text-meti-sub` 처럼 이름으로 쓴다.
  */
 @theme {
-  /* 브랜드 */
+  /* ==========================================================================
+   * Figma 「메티_서비스」 01 · Foundations 9가지 핵심 Semantic Token
+   * ========================================================================== */
+  
+  /** 핵심 인터랙션. Figma `Action/Primary` (#2F8FA3) */
+  --color-action-primary: #2f8fa3;
+  
+  /** 버튼·선택 텍스트 배경. Figma `Button/Primary/Background` (#206B7C) */
+  --color-button-primary: #206b7c;
+  
+  /** 선택·학습 안내 카드. Figma `Surface/Brand` (#DDF4F6) */
+  --color-surface-brand: #ddf4f6;
+  
+  /** 성장·완료·진행률. Figma `Progress/Fill` (#57C7B6) */
+  --color-progress-fill: #57c7b6;
+  
+  /** 보상·성취 배지. Figma `Badge/Reward/Background` (#FFC857) */
+  --color-badge-reward: #ffc857;
+  
+  /** 전체 앱 배경. Figma `Background/Primary` (#F7FAFB) */
+  --color-background-primary: #f7fafb;
+  
+  /** 기본 카드 배경. Figma `Surface/Primary` (#FFFFFF) */
+  --color-surface-primary: #ffffff;
+  
+  /** 본문·제목 텍스트. Figma `Text/Primary` (#24333A) */
+  --color-text-primary: #24333a;
+  
+  /** 보조 안내 텍스트. Figma `Text/Secondary` (#718087) */
+  --color-text-secondary: #718087;
+
+  /* ==========================================================================
+   * 02 · Components 에서 쓰는 상태 색 — 9색 밖이지만 부품이 쓴다
+   * ========================================================================== */
+
+  /** `Button / Brand` Hover · Pressed */
+  --color-button-hover: #185363;
+  --color-button-pressed: #103c49;
+  /** `Button` Disabled — 바탕과 글자 */
+  --color-disabled-bg: #e2e8eb;
+  --color-disabled-text: #5b6a72;
+  /** `Input / Text Field` State=Error · `Toast` Tone=Error */
+  --color-error-line: #d95252;
+  --color-error-text: #b83a3a;
+  --color-error-bg: #fceded;
+
+  /** Figma `Shadow/Card` Y2 · Blur 8 · 6% · `Shadow/Overlay` Y8 · Blur 24 · 14% */
+  --shadow-card: 0 2px 8px rgb(31 41 51 / 0.06);
+  --shadow-overlay: 0 8px 24px rgb(31 41 51 / 0.14);
+  /** 하단 Nav — 위로 드리운다. Figma `Bottom Navigation` Y-2 · Blur 12 · 8% */
+  --shadow-nav: 0 -2px 12px rgb(36 51 59 / 0.08);
+
+  /* ==========================================================================
+   * 기존 사용성 유지 호환성 브랜드 변수 (Legacy & Alias)
+   * ========================================================================== */
   --color-meti: #206b7c;
+  --color-meti-action: #2f8fa3;
   --color-meti-hover: #267587;
   --color-meti-bg: #ddf4f6;
+  --color-meti-mint: #57c7b6;
+  --color-meti-yellow: #ffc857;
 
-  /* 글자 */
+  /* 글자 호환 */
   --color-meti-ink: #24333a;
-  --color-meti-sub: #5b6a72;
+  --color-meti-sub: #718087;
   /** 아직 안 친 글자 · 도움말. Figma `text/placeholder` · `text-tertiary` */
   --color-meti-hint: #66747b;
   /** 못 누르는 버튼의 글자. Figma `text-disabled` */
   --color-meti-off: #b5bdc2;
 
-  /* 바탕 */
-  /** 화면 바탕. Figma `background-primary`. 흰색이 아니다 */
+  /* 바탕 호환 */
   --color-meti-page: #f7fafb;
 
   /* 선 */
-  /** 카드 · 보조 버튼 테두리. Figma `border-default` */
   --color-meti-line: #e2e8eb;
-  /**
-   * 입력 칸 테두리. Figma `border/input`.
-   *
-   * `meti-line` 보다 진하다. 칸은 「여기 쳐라」 라고 말해야 하므로 더
-   * 또렷해야 한다 — 같은 회색으로 두면 칸인지 구역인지 구분이 안 된다.
-   */
   --color-meti-field: #89939a;
-
-  /** 못 누르는 브랜드 버튼의 바탕. Figma `action-primary-disabled` */
   --color-meti-off-bg: #c8dadd;
 }
 

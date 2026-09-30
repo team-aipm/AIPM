@@ -19,6 +19,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 type Client = SupabaseClient<Database>;
 
@@ -214,10 +215,32 @@ export async function updateDifficulty(
   const decision = decide(data ?? [], current);
   if (decision.move === 'SAME') return decision;
 
-  const { error: saveError } = await client
+  /**
+   * **쓰기만 service_role 로 한다** (DEV-001 §8-1).
+   *
+   * 미션은 아이 세션으로 돈다. 그 세션으로 난이도를 쓰면 트리거
+   * `guard_student_self_update` 가 막는다 — 아이가 브라우저에서 요청을 직접
+   * 만들어 자기 난이도를 고치지 못하게 하려는 것이고, DB 는 그 요청과 이
+   * 계산을 가려낼 수 없다.
+   *
+   * 그래서 먼저 **그 세션으로** 행을 읽어 본인 것인지 확인하고(RLS 가 남의
+   * 행을 안 준다), 서버가 계산한 두 칸만 service_role 로 쓴다.
+   */
+  const { data: own, error: ownError } = await client
+    .from('student')
+    .select('student_id')
+    .eq('student_id', studentId)
+    .maybeSingle();
+
+  if (ownError !== null || own === null) {
+    console.error(`[difficulty] 본인 확인에 실패했습니다: ${ownError?.message ?? '행 없음'}`);
+    return same(current, '본인 확인 실패');
+  }
+
+  const { error: saveError } = await createAdminClient()
     .from('student')
     .update({ current_difficulty: decision.level, learning_grade: decision.grade })
-    .eq('student_id', studentId);
+    .eq('student_id', own.student_id);
 
   if (saveError !== null) {
     console.error(`[difficulty] 저장하지 못했습니다: ${saveError.message}`);

@@ -85,7 +85,8 @@ export async function signUp(
   });
 
   if (error !== null) {
-    return { status: 'error', message: '가입을 마치지 못했습니다. 잠시 후 다시 해주세요.' };
+    console.error('Supabase SignUp Error:', error);
+    return { status: 'error', message: error.message || '가입을 마치지 못했습니다. 잠시 후 다시 해주세요.' };
   }
 
   /**

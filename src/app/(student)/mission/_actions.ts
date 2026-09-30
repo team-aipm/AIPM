@@ -209,7 +209,9 @@ function buildHostInput(args: {
  * 01 을 한 번 돌린다.
  *
  * `text` 가 null 이면 세션의 첫 말(START)이고, 있으면 학생이 방금 한 말이다.
- * 01 은 학생이 고르기 전까지 `next_module = "SESSION_HOST"` 로 두고 기다린다.
+ * 01 은 인사만 하고 곧바로 `next_module = "MODE_A"` 로 넘긴다. 아이에게
+ * 방식을 고르게 하지 않는다(COM-001 §6.3). 자기 문제는 문제를 마친 뒤
+ * 화면의 「사진으로 가져오기」 · 「내 문제 적기」 로 가져온다.
  */
 export async function talkToHost(text: string | null, turns: Turn[]): Promise<HostReply> {
   // 랩 자리를 먼저 본다. `context()` 와 같은 이유다.
@@ -250,21 +252,15 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
     /**
      * **모델을 부르지 않는다.** 닿았으면 더 이야기하지 않는 것이 핵심이다.
      *
-     * 나무라지 않고 고를 것 두 개만 내민다. `ok: true` 로 돌려주는 이유는
-     * 화면이 버튼을 그려야 하기 때문이다 — `ok: false` 는 말만 띄우고
-     * 버튼을 지운다(`MissionChat`).
-     *
-     * 문구는 01 프롬프트가 쓰는 버튼 글자를 그대로 쓴다. 아이가 방금까지
-     * 보던 것과 같아야 한다.
+     * 나무라지 않고 곧바로 문제로 넘긴다. 전에는 「AI가 문제 내기 / 내가
+     * 문제 가져오기」 두 버튼을 내밀었는데, 아이에게 방식을 고르게 하지
+     * 않기로 했다(COM-001 §6.3 · 2026-09-30). 01 의 START 와 같은 길이다.
      */
     return {
       ok: true,
-      message: '얘기 더 하고 싶은데, 오늘 미션도 해야 하니까! 뭐부터 할까?',
-      choices: [
-        { label: 'AI가 문제 내기', value: 'A' },
-        { label: '내가 문제 가져오기', value: 'B' },
-      ],
-      nextModule: 'SESSION_HOST',
+      message: '얘기 더 하고 싶은데, 오늘 미션도 해야 하니까! 내가 문제 낼게.',
+      choices: [],
+      nextModule: 'MODE_A',
     };
   }
 
@@ -858,8 +854,17 @@ const score = (value: unknown, fallback: number): number =>
 const scoreOrNull = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
 
-const boolOrNull = (value: unknown): boolean | null =>
-  typeof value === 'boolean' ? value : null;
+/**
+ * **글자로 온 `"true"` · `"false"` 도 받는다.** 모델이 가끔 불리언을 따옴표에
+ * 싸서 낸다. 전에는 그것을 「값 없음」 으로 저장해, 처음부터 맞힌 문제가
+ * `initial_accuracy = null` 이 되고 난이도가 오르지 못했다.
+ */
+const boolOrNull = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
+};
 
 /**
  * 문제가 끝나면 평가를 남긴다 (05 EVALUATOR).
@@ -969,7 +974,7 @@ async function evaluateProblem(
       initialAccuracy: boolOrNull(read(evaluation, 'initial_accuracy')),
       reasoningScore: score(read(evaluation, 'reasoning_score'), 0),
       ruleScore: score(read(evaluation, 'rule_score'), 0),
-      selfCorrection: read(evaluation, 'self_correction') === true,
+      selfCorrection: boolOrNull(read(evaluation, 'self_correction')) === true,
       transferScore: scoreOrNull(read(evaluation, 'transfer_score')),
       reflectionScore: scoreOrNull(read(evaluation, 'reflection_score')),
       supportLevel: score(read(evaluation, 'support_level'), args.supportLevel),

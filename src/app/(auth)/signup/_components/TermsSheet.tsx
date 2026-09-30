@@ -1,7 +1,16 @@
 'use client';
 
 /**
- * AUTH-003 약관 본문 · Figma `약관 본문 / 이용약관 (바텀시트)`
+ * AUTH-003 약관 본문 · Figma `약관 본문 / 이용약관 (바텀시트)` (1:5212 · 83:878 · 83:995)
+ *
+ * ```text
+ *   Scrim            검정 40%
+ *   Bottom Sheet     위 모서리 24 · p[20,20,34,20] · gap16 · shadow-overlay
+ *     손잡이         40×4
+ *     제목           20/28 w600
+ *     본문           16/24 · 스크롤
+ *     확인           Button / Brand
+ * ```
  *
  * **별도 Route 로 만들지 않았다.** COM-003 §13-3 — State/Modal 은 Route 가
  * 아니다. Figma 도 바텀시트로 그려져 있다.
@@ -16,14 +25,15 @@
 
 import { useEffect, useRef } from 'react';
 import { TERMS, type TermsKey } from '@/lib/constants/terms';
+import { BrandButton } from '@/components/ui/BrandButton';
 
 export function TermsSheet({ open, onClose }: { open: TermsKey | null; onClose: () => void }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
-  // 열리면 닫기 버튼으로 초점을 옮긴다. 키보드로 읽는 사람이 시트 안에서
+  // 열리면 시트로 초점을 옮긴다. 키보드로 읽는 사람이 시트 안에서
   // 시작하지 않으면, 탭을 눌러도 뒤에 있는 폼을 훑게 된다.
   useEffect(() => {
-    if (open !== null) closeRef.current?.focus();
+    if (open !== null) sheetRef.current?.focus();
   }, [open]);
 
   // Esc 로 닫는다. 바텀시트는 뒤로가기가 아니라 닫기로 빠져나가는 것이다.
@@ -44,7 +54,7 @@ export function TermsSheet({ open, onClose }: { open: TermsKey | null; onClose: 
     <div className="fixed inset-0 z-50 flex justify-center">
       {/*
         뒤를 눌러도 닫힌다. `aria-hidden` 은 붙이지 않는다 — 그러면 보조
-        기술이 이 버튼을 못 보고, 닫을 길이 Esc 하나만 남는다.
+        기술이 이 버튼을 못 보고, 닫을 길이 Esc 와 「확인」 만 남는다.
       */}
       <button
         type="button"
@@ -54,35 +64,32 @@ export function TermsSheet({ open, onClose }: { open: TermsKey | null; onClose: 
       />
 
       <div
+        ref={sheetRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={doc.title}
-        className="relative mt-auto flex max-h-[85vh] w-full max-w-[420px] flex-col rounded-t-3xl bg-white"
+        className="relative mt-auto flex max-h-[85vh] w-full max-w-[480px] flex-col gap-4 rounded-t-3xl bg-surface-primary px-5 pb-[34px] pt-5 shadow-overlay outline-none"
       >
-        <div className="flex items-center justify-between border-b border-meti-line px-5 py-4">
-          <h2 className="text-[18px] font-bold leading-7 text-meti-ink">{doc.title}</h2>
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-3 py-1 text-[14px] font-semibold leading-5 text-meti-sub"
-          >
-            닫기
-          </button>
-        </div>
+        {/* Figma `Handle` 40×4 · #C5CFD4 — 토큰에 없어 가장 가까운 meti-off 를 쓴다 */}
+        <div aria-hidden className="mx-auto h-1 w-10 shrink-0 rounded-full bg-meti-off" />
+
+        <h2 className="text-[20px] font-semibold leading-7 text-text-primary">{doc.title}</h2>
 
         {/*
           `whitespace-pre-wrap` 이라 본문의 줄바꿈이 그대로 나온다. 조문은
           줄바꿈이 의미를 갖는 글이라 문단으로 뭉치면 읽기 어려워진다.
         */}
-        <div className="overflow-y-auto px-5 py-4">
-          <p className="whitespace-pre-wrap text-[14px] leading-[22px] text-meti-ink">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <p className="whitespace-pre-wrap text-[16px] leading-6 text-text-secondary">
             {doc.body}
           </p>
-          <p className="mt-4 text-[12px] leading-[18px] text-meti-hint">
-            버전 {doc.version}
-          </p>
+          <p className="mt-4 text-[12px] leading-[18px] text-meti-hint">버전 {doc.version}</p>
         </div>
+
+        <BrandButton type="button" onClick={onClose}>
+          확인
+        </BrandButton>
       </div>
     </div>
   );

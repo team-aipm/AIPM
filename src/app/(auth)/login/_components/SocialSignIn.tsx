@@ -1,42 +1,36 @@
 'use client';
 
 /**
- * 간편 로그인 · Figma `간편 로그인` (통합 로그인 프레임 안, order 4)
+ * 간편 로그인 · Figma `간편 로그인` (통합 로그인 프레임 안) · 버튼은 `소셜` (2005:3983)
  *
  * ```text
- *   또는 구분선   선 — 「또는 간편하게 로그인」 — 선
- *   동그라미 둘   56px, 간격 20. G · K
+ *   또는 구분선   선 — 「보호자는 간편 로그인도 할 수 있어요」 — 선
+ *   버튼 둘       56px 터치 자리 안에 44px 공식 아이콘, 간격 20. Google · 카카오
  * ```
  *
- * **동그라미 안은 글자다.** 디자인에도 로고가 아니라 `G` · `K` 가 들어
- * 있고, 스티키에 「소셜 버튼은 추후 각 소셜에 맞춰 변경예정」 이라고 적혀
- * 있다. 진짜 로고는 각 사의 브랜드 가이드를 따라야 해서, 받기 전에 비슷한
- * 것을 그려 넣지 않는다.
+ * **아이콘은 Figma 에서 받은 공식 모양 그대로다**(`public/icons/google-sign-in.svg`
+ * · `kakao-sign-in.png`). 각 사 브랜드 가이드를 따라야 하는 그림이라 손으로
+ * 다시 그리지 않는다. 카카오 노랑도 그 그림 안에 들어 있어 우리 토큰에
+ * 넣지 않는다.
  *
- * 카카오 노랑은 우리 색이 아니라 그 회사 색이라 토큰으로 만들지 않았다.
- * `globals.css` 는 메티의 색만 갖는다.
+ * ## 네이버가 없다
  *
- * ## 네이버를 뺐다 (2026-09-28)
- *
- * Figma 에는 `N` 이 있었지만 **Supabase 가 네이버를 Provider 로 제공하지
- * 않는다.** 구글·카카오와 달리 문서 자체가 없다. 버튼만 두면 누르는
- * 사람에게 영영 안 되는 길을 보여주는 셈이다.
- *
- * 붙이려면 OAuth 를 직접 구현해야 한다 — 그건 「소셜 버튼 하나 추가」가
- * 아니라 별도 작업이다. 하기로 정하면 그때 되살린다.
+ * 2026-09-28 에 뺐다 — **Supabase 가 네이버를 Provider 로 제공하지 않는다.**
+ * Figma 도 버튼을 걷었다(FIGMA-MD-AUDIT P1-9). 그런데 AUDIT §0 은 저장소
+ * 결정으로 「버튼은 둔다 · 기능은 만들지 않는다」 고 적었다. 자리를 되살리려면
+ * 공식 아이콘이 있어야 하는데 Figma `소셜` 컴포넌트에 네이버 변형이 없어
+ * 아직 두지 않았다. 손으로 그려 넣지 않는다.
  */
 
+import Image from 'next/image';
 import { useActionState } from 'react';
 import { signInWithSocial, type SocialState } from '../_actions';
 
 const EMPTY: SocialState = { error: null };
 
-const CIRCLE =
-  'flex size-[56px] items-center justify-center rounded-full text-[18px] font-bold leading-7';
-
 const PROVIDERS = [
-  { id: 'google', mark: 'G', label: '구글로 로그인', className: 'border border-meti-line bg-white text-meti-ink' },
-  { id: 'kakao', mark: 'K', label: '카카오로 로그인', className: 'bg-[#FFC857] text-[#3E2D05]' },
+  { id: 'google', icon: '/icons/google-sign-in.svg', label: 'Google로 로그인' },
+  { id: 'kakao', icon: '/icons/kakao-sign-in.png', label: '카카오로 로그인' },
 ] as const;
 
 export function SocialSignIn() {
@@ -47,12 +41,14 @@ export function SocialSignIn() {
       {/* 또는 구분선 — 선이 남는 폭을 나눠 갖는다 */}
       <div className="flex items-center gap-3">
         <span className="h-px flex-1 bg-meti-line" />
-        <span className="text-[12px] leading-[18px] text-meti-hint">또는 간편하게 로그인</span>
+        <span className="text-[12px] leading-[18px] text-meti-hint">
+          보호자는 간편 로그인도 할 수 있어요
+        </span>
         <span className="h-px flex-1 bg-meti-line" />
       </div>
 
       <form action={action} className="flex justify-center gap-5">
-        {PROVIDERS.map(({ id, mark, label, className }) => (
+        {PROVIDERS.map(({ id, icon, label }) => (
           <button
             key={id}
             type="submit"
@@ -60,15 +56,15 @@ export function SocialSignIn() {
             value={id}
             aria-label={label}
             disabled={pending}
-            className={`${CIRCLE} ${className} disabled:opacity-60`}
+            className="flex size-[56px] items-center justify-center rounded-full disabled:opacity-60"
           >
-            {mark}
+            <Image src={icon} alt="" width={44} height={44} className="rounded-full" />
           </button>
         ))}
       </form>
 
       {state.error !== null && (
-        <p role="alert" className="text-center text-[14px] leading-5 text-meti-sub">
+        <p role="alert" className="text-center text-[14px] leading-5 text-text-secondary">
           {state.error}
         </p>
       )}

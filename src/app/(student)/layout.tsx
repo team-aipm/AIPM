@@ -1,15 +1,18 @@
 /**
  * STU · MIS 영역 공통 껍데기.
  *
- * **학생 어휘를 쓰고, 하단 Nav 를 두지 않는다**(CLAUDE.md · DEV-001).
- * 프로토타입에는 하단 5탭이 있지만 그건 COM-003 과 다르다 — 도감 · 상점이
- * COM-002 에 없기도 해서, 탭을 붙이는 것은 그 결정이 난 뒤에 한다.
+ * **학생 어휘를 쓴다**(CLAUDE.md · DEV-001). 폭은 Figma 375 화면을 가운데
+ * 두는 480 이다 — 부모 · 인증 영역과 같다.
+ *
+ * 하단 Nav(`홈 / 학습하기 / 내 정보`, COM-003 §11)는 여기 두지 않고 학생
+ * HOME 에만 붙인다. 미션 대화 · 오늘의 기록 · 캐릭터 선택 Figma 에는 Nav 가
+ * 없다. 레이아웃에 두면 그 화면들에서 걷어낼 방법이 없다.
  */
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh justify-center bg-meti-page">
-      <div className="flex w-full max-w-[420px] flex-col">{children}</div>
+    <div className="flex min-h-dvh justify-center bg-background-primary">
+      <div className="flex w-full max-w-[480px] flex-col">{children}</div>
     </div>
   );
 }
