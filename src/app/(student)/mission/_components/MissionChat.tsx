@@ -15,8 +15,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Database } from '@/types/database';
-import { learningModeLabel } from '@/lib/constants/copy';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { learningModeLabel, term } from '@/lib/constants/copy';
+import { BrandButton } from '@/components/ui/BrandButton';
 import { PartnerFace } from '@/components/ui/PartnerFace';
+import { PhotoSheet } from './PhotoSheet';
 import {
   answerProblem,
   confirmSourceProblem,
@@ -58,6 +62,7 @@ type Props = {
 };
 
 export function MissionChat({ partner, persona, initial }: Props) {
+  const router = useRouter();
   const [turns, setTurns] = useState<Turn[]>(
     initial.kind === 'problem' ? initial.turns : [],
   );
@@ -94,6 +99,15 @@ export function MissionChat({ partner, persona, initial }: Props) {
    * 쪽으로만 가서, 내 문제를 가져올 길이 없었다.
    */
   const canSendPhoto = !sessionDone && (problemText === null || finished);
+  /** 사진 출처를 고르는 바텀시트 */
+  const [sheetOpen, setSheetOpen] = useState(false);
+  /** 고정 문제 카드를 펼쳤는지. 접혀 있으면 한 줄만 보인다 */
+  const [problemOpen, setProblemOpen] = useState(false);
+  /**
+   * 힌트로 받은 말. 말풍선 대신 힌트 카드(Figma `Chat / Hint Card`)로 그린다.
+   * 새로고침하면 보통 말풍선으로 돌아간다 — `message` 에 구분이 없어서다.
+   */
+  const hintTurns = useRef(new WeakSet<Turn>());
   const opened = useRef(false);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -107,9 +121,15 @@ export function MissionChat({ partner, persona, initial }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial.kind]);
 
+  /**
+   * 말이 늘 때만이 아니라 **대화창이 줄어들 때도** 맨 아래로 내린다.
+   * 보기 영역이 새로 생기거나 문제 카드를 펼치면 창이 작아지는데, 그때
+   * 다시 내리지 않으면 방금 온 말이 창 아래에 숨는다 — 새 문제의 첫 인사가
+   * 안 보이던 이유다.
+   */
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [turns, pending]);
+  }, [turns, pending, choices, problemOpen, finished]);
 
   function addAi(text: string) {
     setTurns((now) => [...now, { who: 'ai', text }]);
@@ -191,6 +211,22 @@ ${reply.recognized}
     }
   }
 
+  /**
+   * MODE B · 글로 적어서 가져온다.
+   *
+   * 사진과 같은 자리로 들어간다 — 마친 상태를 풀고, 문제를 적으라고 한다.
+   * 아이가 적은 글은 `say` 가 `readSource` 로 보낸다.
+   */
+  function bringOwn() {
+    setFinished(false);
+    setProblemText(null);
+    setProblemOpen(false);
+    setChoices([]);
+    setFromPhoto(false);
+    setSourceStage('ask');
+    addAi('어떤 문제를 가져왔어? 문제를 그대로 적어줘.');
+  }
+
   /** MODE B · 사진으로 가져온다 */
   async function sendPhoto(file: File) {
     setPending(true);
@@ -261,7 +297,14 @@ ${reply.recognized}
   async function hint() {
     setPending(true);
     const reply = await askHint();
-    addAi(reply.message);
+    if (reply.ok) {
+      // 힌트 카드로 그리려고 표시만 해 둔다. 대화 내용은 그대로다
+      const turn: Turn = { who: 'ai', text: reply.message };
+      hintTurns.current.add(turn);
+      setTurns((now) => [...now, turn]);
+    } else {
+      addAi(reply.message);
+    }
     setPending(false);
   }
 
@@ -283,6 +326,10 @@ ${reply.recognized}
     setFinished(reply.finished);
     setSessionDone(reply.sessionFinished);
     setPending(false);
+
+    // 머리글의 「오늘의 미션 · n / 10」 은 서버가 그린다. 문제를 마쳤으면
+    // 새로 받아 온다. 이 컴포넌트는 그대로 남으므로 대화는 사라지지 않는다.
+    if (reply.finished) router.refresh();
   }
 
   /** `shown` 은 말풍선에 남는 말, `sent` 는 모델에게 가는 말이다 */
@@ -302,148 +349,204 @@ ${reply.recognized}
 
   // MODE B 의 앞마당에서는 학생이 자유롭게 적어야 한다. 보기가 없다.
   const inputBlocked = pending || finished || (sourceStage === null && !freeText);
+  const showHint = problemText !== null && !finished && !pending;
 
-  /**
-   * 사진 올리기.
-   *
-   * 두 자리에서 쓴다 — 입력줄 안(`icon`)과, 문제를 마친 뒤의 버튼 줄
-   * (`wide`). **폼 안에만 두면 마친 순간 폼째로 사라진다.**
-   */
+  /** Figma `Mission / Reflection Choice` · 44px · r12 · 14/20 SemiBold */
+  const chip =
+    'flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-meti-line bg-surface-primary px-3 py-3 text-[14px] font-semibold leading-5 text-text-primary transition-colors hover:border-button-primary active:border-button-primary active:bg-surface-brand active:text-button-primary disabled:bg-disabled-bg disabled:text-disabled-text';
+
+  /** 사진 올리기. 누르면 카메라 · 앨범을 고르는 시트가 열린다 */
   function photoButton(shape: 'icon' | 'wide') {
-    const icon = shape === 'icon';
-    return (
-      <label
-        aria-label="사진으로 문제 올리기"
-        className={`flex cursor-pointer items-center justify-center border border-meti/40 bg-white ${
-          icon
-            ? 'h-10 w-10 shrink-0 rounded-full text-[17px]'
-            : 'gap-2 rounded-xl py-3 text-[14px] font-bold text-meti'
-        } ${pending ? 'pointer-events-none opacity-40' : ''}`}
-      >
-        {icon ? '📷' : '📷 사진으로 문제 가져오기'}
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic"
-          // 휴대폰에서는 카메라가 바로 열린다
-          capture="environment"
+    if (shape === 'icon') {
+      return (
+        <button
+          type="button"
+          aria-label="사진으로 문제 올리기"
+          onClick={() => setSheetOpen(true)}
           disabled={pending}
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            // 같은 사진을 다시 골라도 onChange 가 오게 비운다
-            event.target.value = '';
-            if (file !== undefined) void sendPhoto(file);
-          }}
-        />
-      </label>
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-meti-line bg-background-primary transition-colors hover:bg-surface-brand disabled:opacity-40"
+        >
+          <Image src="/icons/camera.svg" alt="" width={24} height={24} />
+        </button>
+      );
+    }
+    return (
+      <BrandButton type="button" tone="neutral" disabled={pending} onClick={() => setSheetOpen(true)}>
+        <Image src="/icons/camera.svg" alt="" width={24} height={24} />
+        사진으로 가져오기
+      </BrandButton>
     );
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {problemText !== null && (
-        <div className="shrink-0 border-b border-black/5 bg-white px-5 py-3 shadow-sm">
-          <p className="text-[11px] font-bold text-meti-sub">오늘의 문제</p>
-          <p className="mt-1 text-[14px] font-semibold leading-relaxed text-meti-ink">
-            {problemText}
-          </p>
+        // Figma `미션 고정 영역` · 대화가 길어져도 문제는 늘 보인다(COM-003 §4.3)
+        <div className="shrink-0 bg-surface-primary px-5 py-2">
+          <div className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-meti-line bg-background-primary px-4 py-3">
+            <p
+              className={`min-w-0 flex-1 whitespace-pre-wrap text-[16px] font-semibold leading-6 text-text-primary ${
+                problemOpen ? '' : 'line-clamp-1'
+              }`}
+            >
+              {problemText}
+            </p>
+            <button
+              type="button"
+              onClick={() => setProblemOpen((now) => !now)}
+              aria-expanded={problemOpen}
+              className="shrink-0 self-start py-[3px] text-[12px] leading-[18px] text-text-secondary"
+            >
+              {problemOpen ? '접기' : '미션 보기'}
+            </button>
+          </div>
           {!finished && (
-            <p className="mt-1.5 text-[11px] text-meti-sub">
+            <p className="mt-1.5 px-1 text-[12px] leading-[18px] text-meti-hint">
               {turnsLeft}번 더 말할 수 있어
             </p>
           )}
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-5">
-        <p className="self-center rounded-full bg-white/70 px-3 py-1 text-[11px] font-semibold text-meti-sub">
-          오늘 · 생각 대화 시작
-        </p>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5">
+        {/* 말이 적을 때는 입력창 쪽(아래)에 붙인다. Figma `대화` 가 아래 정렬이다 */}
+        <div className="mt-auto flex flex-col gap-3.5">
+          {turns.map((turn, index) => {
+            if (turn.who === 'student') {
+              return (
+                <p
+                  key={index}
+                  className="max-w-[78%] self-end whitespace-pre-wrap rounded-2xl bg-button-primary px-4 py-3 text-[16px] leading-6 text-white"
+                >
+                  {turn.text}
+                </p>
+              );
+            }
+            // 파트너가 잇달아 말하면 얼굴은 첫 말풍선에만 붙인다
+            const grouped = index > 0 && turns[index - 1].who === 'ai';
+            const isHint = hintTurns.current.has(turn);
+            return (
+              <div key={index} className={`flex items-start gap-2 ${grouped ? '-mt-1.5' : ''}`}>
+                <span className="h-8 w-8 shrink-0">
+                  {!grouped && <PartnerFace persona={persona} size={32} />}
+                </span>
+                {isHint ? (
+                  <div className="flex min-w-0 flex-1 flex-col gap-2 rounded-2xl border border-button-primary bg-surface-primary px-4 py-3.5">
+                    <p className="flex items-center gap-1.5 text-[14px] font-semibold leading-5 text-button-primary">
+                      <Image src="/icons/hint.png" alt="" width={24} height={24} />
+                      힌트
+                    </p>
+                    <p className="whitespace-pre-wrap text-[16px] leading-6 text-text-primary">
+                      {turn.text}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="max-w-[calc(100%-40px)] whitespace-pre-wrap rounded-2xl bg-surface-brand px-4 py-3 text-[16px] leading-6 text-text-primary">
+                    {turn.text}
+                  </p>
+                )}
+              </div>
+            );
+          })}
 
-        {turns.map((turn, index) =>
-          turn.who === 'ai' ? (
-            <div key={index} className="flex items-start gap-2">
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
-                <PartnerFace persona={persona} size={26} />
+          {pending && (
+            // Figma `메티 응답 생성 중 / 2개 말풍선`
+            <div className="flex items-start gap-2" role="status">
+              <span className="h-8 w-8 shrink-0">
+                {(turns.length === 0 || turns[turns.length - 1].who !== 'ai') && (
+                  <PartnerFace persona={persona} size={32} />
+                )}
               </span>
-              <p className="max-w-[78%] whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-white px-3.5 py-2.5 text-[14px] leading-relaxed text-meti-ink shadow-sm">
-                {turn.text}
-              </p>
+              <div className="flex flex-col items-start gap-1.5">
+                <p className="rounded-2xl bg-surface-brand px-4 py-2.5 text-[16px] leading-6 text-text-primary">
+                  잠깐만, 생각해 볼게
+                </p>
+                <span
+                  aria-hidden
+                  className="flex h-10 items-center gap-1.5 rounded-2xl bg-surface-brand px-3.5"
+                >
+                  <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-button-primary/40" />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-button-primary/70 [animation-delay:240ms]" />
+                  <span className="h-[9px] w-[9px] animate-bounce rounded-full bg-button-primary [animation-delay:480ms]" />
+                </span>
+              </div>
             </div>
-          ) : (
-            <p
-              key={index}
-              className="max-w-[78%] self-end whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-meti px-3.5 py-2.5 text-[14px] leading-relaxed text-white"
-            >
-              {turn.text}
-            </p>
-          ),
-        )}
-
-        {pending && (
-          <p className="ml-9 text-[13px] text-meti-sub">{partner}가 생각하는 중…</p>
-        )}
+          )}
+        </div>
 
         <div ref={bottom} />
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-black/5 bg-white/60 px-5 py-4">
-        {choices.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {choices.map((choice) => (
-              <button
-                key={choice.value + choice.label}
-                type="button"
-                onClick={() => say(labelOf(choice, partner), choice.label)}
-                disabled={pending}
-                className="rounded-full border border-meti/40 bg-white px-3.5 py-2 text-[13px] font-semibold text-meti disabled:opacity-50"
-              >
-                {labelOf(choice, partner)}
-              </button>
-            ))}
+      <div className="flex shrink-0 flex-col border-t border-meti-line bg-surface-primary pb-[calc(12px+env(safe-area-inset-bottom))]">
+        {(choices.length > 0 || showHint) && (
+          // Figma `예시 답변 영역`
+          <div className="flex flex-col gap-2 bg-background-primary px-5 py-3">
+            {choices.length > 0 && (
+              <div className="flex flex-col gap-0.5">
+                <p className="text-[12px] leading-[18px] text-text-secondary">이렇게 말해 볼까?</p>
+                {!inputBlocked && (
+                  <p className="text-[12px] leading-[18px] text-text-secondary opacity-70">
+                    눌러서 보내거나 직접 말해도 돼
+                  </p>
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {choices.map((choice) => (
+                <button
+                  key={choice.value + choice.label}
+                  type="button"
+                  onClick={() => say(labelOf(choice, partner), choice.label)}
+                  disabled={pending}
+                  className={chip}
+                >
+                  {labelOf(choice, partner)}
+                </button>
+              ))}
+              {showHint && (
+                <button type="button" onClick={() => void hint()} className={chip}>
+                  <Image src="/icons/hint.png" alt="" width={20} height={20} />
+                  힌트 주세요
+                </button>
+              )}
+            </div>
           </div>
         )}
 
-        {problemText !== null && !finished && !pending && (
-          <button
-            type="button"
-            onClick={() => void hint()}
-            className="self-start rounded-full border border-meti/40 bg-white px-3.5 py-2 text-[13px] font-semibold text-meti"
-          >
-            💡 힌트 주세요
-          </button>
-        )}
-
         {finished ? (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3 px-5 pt-3">
             {sessionDone ? (
               <>
-                <p className="text-center text-[13px] font-bold text-meti-ink">
+                <p className="text-center text-[16px] font-semibold leading-6 text-text-primary">
                   오늘 미션 끝! 정말 잘했어
                 </p>
                 <a
                   href="/home/today"
-                  className="rounded-xl bg-meti py-3 text-center text-[14px] font-bold text-white"
+                  className="flex h-[52px] w-full items-center justify-center rounded-lg bg-button-primary text-[16px] font-semibold leading-6 text-white transition-colors hover:bg-button-hover active:bg-button-pressed"
                 >
-                  오늘의 기록 보기
+                  {term('learningResult', 'student')} 보기
                 </a>
               </>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => void openProblem()}
-                  disabled={pending}
-                  className="rounded-xl bg-meti py-3 text-[14px] font-bold text-white disabled:opacity-40"
-                >
-                  한 문제 더 하기
-                </button>
+                <BrandButton type="button" pending={pending} onClick={() => void openProblem()}>
+                  {term('nextProblem', 'student')}
+                </BrandButton>
                 {/*
-                  「한 문제 더 하기」는 파트너가 내는 쪽이다. 내 문제를
+                  「다음 미션」은 파트너가 내는 쪽이다. 내 문제를
                   가져오는 길이 여기 없으면, 아이는 다음 문제를 고를 수
-                  없다.
+                  없다. 사진과 글 두 길을 둔다(COM-001 §5 · 직접 입력 · 사진 촬영).
+                  「어느 방식으로 할래?」 를 묻는 대신 가져오는 행동 자체가
+                  선택이 된다(§6.3).
                 */}
-                {canSendPhoto && photoButton('wide')}
+                {canSendPhoto && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {photoButton('wide')}
+                    <BrandButton type="button" tone="neutral" disabled={pending} onClick={bringOwn}>
+                      내 문제 적기
+                    </BrandButton>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -453,13 +556,13 @@ ${reply.recognized}
               event.preventDefault();
               say(draft);
             }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 px-5 pt-3"
           >
             {/*
               **문제를 푸는 중에는 숨긴다.** 그때 올린 사진은 새 문제인데
               지금 문제가 아직 안 끝나서, 어느 쪽을 말하는지 아이도 AI 도
-              알 수 없다. 문제가 없을 때는 언제든 올릴 수 있다 — 파트너가
-              무엇을 물었든 사진부터 내밀어도 된다.
+              알 수 없다. 학습 대화에는 풀이 사진을 받지 않는다(COM-001 §6.4).
+              문제가 없을 때는 언제든 올릴 수 있다.
             */}
             {canSendPhoto && photoButton('icon')}
 
@@ -468,24 +571,38 @@ ${reply.recognized}
               onChange={(event) => setDraft(event.target.value)}
               disabled={inputBlocked}
               placeholder={
-              sourceStage === 'ask'
-                ? '문제를 그대로 적어줘'
-                : sourceStage === 'confirm'
-                  ? '맞으면 "응", 아니면 고쳐서 적어줘'
-                  : '내 생각을 써볼까?'
-            }
-              className="flex-1 rounded-full border border-black/10 bg-white px-4 py-2.5 text-[14px] outline-none focus:border-meti disabled:opacity-60"
+                pending
+                  ? `${partner}가 답을 만들고 있어`
+                  : sourceStage === 'ask'
+                    ? '문제를 그대로 적어줘'
+                    : sourceStage === 'confirm'
+                      ? '맞으면 "응", 아니면 고쳐서 적어줘'
+                      : '내 생각을 써 볼까?'
+              }
+              className="h-[54px] min-w-0 flex-1 rounded-xl border border-meti-line bg-background-primary px-4 text-[16px] leading-6 text-text-primary outline-none placeholder:text-meti-hint focus:border-button-primary disabled:opacity-55"
             />
             <button
               type="submit"
+              aria-label="보내기"
               disabled={inputBlocked || draft.trim() === ''}
-              className="rounded-full bg-meti px-4 py-2.5 text-[14px] font-bold text-white disabled:opacity-40"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-button-primary transition-colors hover:bg-button-hover active:bg-button-pressed disabled:bg-disabled-bg"
             >
-              보내기
+              <Image src="/icons/send.svg" alt="" width={24} height={24} />
             </button>
           </form>
         )}
       </div>
+
+      {sheetOpen && (
+        <PhotoSheet
+          onClose={() => setSheetOpen(false)}
+          onPick={(file) => {
+            setSheetOpen(false);
+            void sendPhoto(file);
+          }}
+        />
+      )}
     </div>
   );
 }
+

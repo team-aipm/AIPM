@@ -18,7 +18,7 @@ import 'server-only';
  */
 
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, currentUser } from '@/lib/supabase/server';
 import { studentIdOfViewer } from '@/lib/services/student-login';
 
 type Viewer = {
@@ -30,12 +30,12 @@ type Viewer = {
 
 async function viewer(): Promise<Viewer> {
   const client = await createClient();
-  const { data } = await client.auth.getUser();
-  if (data.user === null) redirect('/login');
+  const user = await currentUser();
+  if (user === null) redirect('/login');
   return {
     client,
-    userId: data.user.id,
-    studentId: await studentIdOfViewer(client, data.user.id),
+    userId: user.id,
+    studentId: await studentIdOfViewer(client, user.id),
   };
 }
 

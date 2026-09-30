@@ -1,7 +1,8 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient, currentUser } from '@/lib/supabase/server';
 import { studentIdOfViewer } from '@/lib/services/student-login';
 import { TERMS } from '@/lib/constants/terms';
 
@@ -20,6 +21,10 @@ import { TERMS } from '@/lib/constants/terms';
  * 그래서 이 페이지는 **가입 전 사람에게만** 보인다. 이미 들어와 있으면
  * `/login` 이 하던 것과 같은 분기로 보낸다 — 부모는 `/parent`, 아이는
  * `/home`. 로그인한 사람이 홈에 오려다 소개글을 보게 되면 안 된다.
+ *
+ * **Figma `진입 / 스플래시` (1:4770) 로 바꾸지 않았다.** 스플래시는 로고와
+ * 한 줄만 있는 화면이라, 구글 심사자와 처음 온 부모에게 서비스를 설명해야
+ * 하는 이 페이지의 일을 못 한다. 로고와 색만 가져왔다.
  *
  * **Screen ID 를 만들지 않았다.** COM-003 §12 의 화면 수를 늘리는 것은
  * 문서를 먼저 고쳐야 하는 일이고(CLAUDE.md), 이 페이지는 학습 기능이
@@ -49,25 +54,34 @@ const STEPS = [
 
 export default async function RootPage() {
   const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
+  const user = await currentUser();
 
-  if (data.user !== null) {
-    const studentId = await studentIdOfViewer(supabase, data.user.id);
+  if (user !== null) {
+    const studentId = await studentIdOfViewer(supabase, user.id);
     redirect(studentId === null ? '/parent' : '/home');
   }
 
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-10 px-5 py-14">
       <header className="flex flex-col gap-4">
+        {/* Figma `진입 / 스플래시` 의 `로고 묶음` — 로고 154×70 */}
+        <Image
+          src="/meti-logo.png"
+          alt="Meti"
+          width={154}
+          height={70}
+          className="h-[70px] w-[154px] object-contain object-left"
+          priority
+        />
         <p className="text-[14px] font-semibold leading-5 text-meti-hint">
           초등 4~6학년 수학 · 메타인지 학습
         </p>
-        <h1 className="text-[28px] font-bold leading-[40px] text-meti-ink">
+        <h1 className="text-[28px] font-bold leading-9 text-text-primary">
           답을 맞히는 데서 멈추지 않고,
           <br />
           스스로 설명하게 합니다
         </h1>
-        <p className="text-[16px] leading-[26px] text-meti-sub">
+        <p className="text-[16px] leading-6 text-text-secondary">
           메티는 아이가 푼 방법을 되묻습니다. 설명하다 막히는 자리가 실제로 모르는
           자리이기 때문입니다.
         </p>
@@ -76,12 +90,12 @@ export default async function RootPage() {
       <section className="flex flex-col gap-6">
         {STEPS.map((step, index) => (
           <div key={step.title} className="flex gap-4">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-meti-ink text-[13px] font-bold leading-5 text-white">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-button-primary text-[13px] font-semibold leading-5 text-white">
               {index + 1}
             </span>
             <div className="flex flex-col gap-1">
-              <h2 className="text-[16px] font-semibold leading-6 text-meti-ink">{step.title}</h2>
-              <p className="text-[15px] leading-[24px] text-meti-sub">{step.body}</p>
+              <h2 className="text-[16px] font-semibold leading-6 text-text-primary">{step.title}</h2>
+              <p className="text-[14px] leading-5 text-text-secondary">{step.body}</p>
             </div>
           </div>
         ))}
@@ -90,13 +104,13 @@ export default async function RootPage() {
       <div className="flex flex-col gap-3">
         <Link
           href="/signup"
-          className="flex h-[52px] items-center justify-center rounded-xl bg-meti-ink text-[16px] font-semibold leading-6 text-white"
+          className="flex h-[52px] items-center justify-center rounded-lg bg-button-primary px-5 text-[16px] font-semibold leading-6 text-white hover:bg-button-hover active:bg-button-pressed"
         >
           시작하기
         </Link>
         <Link
           href="/login"
-          className="flex h-[52px] items-center justify-center rounded-xl border border-meti-line bg-white text-[16px] font-semibold leading-6 text-meti-ink"
+          className="flex h-[52px] items-center justify-center rounded-lg border border-meti-line bg-surface-primary px-5 text-[16px] font-semibold leading-6 text-text-primary hover:bg-background-primary"
         >
           이미 계정이 있어요
         </Link>

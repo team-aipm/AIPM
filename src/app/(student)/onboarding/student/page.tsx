@@ -19,15 +19,17 @@ export default async function NewStudentPage() {
   /*
     Figma `자녀 계정 생성` 의 뼈대다 — 상단 바, 24/32 제목, 그 아래 폼.
     카드로 감싸지 않는다. 칸이 흰색이라 흰 카드 위에 올리면 경계가 사라진다.
+
+    제목은 Figma `완료 · 기존 이메일` 의 「자녀 계정 생성」 이다. 전에 쓰던
+    「나의 생각이 자라는 시간」 은 Figma 제목 레이어의 **이름**이었고 화면에
+    찍힌 글자가 아니었다. Figma 는 단계마다 제목이 바뀌지만 여기는 한 장이다.
   */
   return (
     <main className="flex flex-1 flex-col pb-5">
       <BackBar href="/parent" label="학습 현황으로" />
 
       <div className="flex flex-col gap-4 px-5 pt-3">
-        <h1 className="text-[24px] font-bold leading-8 text-meti-ink">
-          나의 생각이 자라는 시간
-        </h1>
+        <h1 className="text-[24px] font-bold leading-8 text-text-primary">자녀 계정 생성</h1>
 
         <StudentForm action={addStudent} checkEmail={checkLoginId} submitLabel="계정 만들기" />
       </div>

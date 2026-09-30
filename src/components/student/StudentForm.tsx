@@ -16,7 +16,7 @@
  * ## Figma 대로 바꾼 것 (2026-09-22)
  *
  * ```text
- *   자녀 정보    이름 또는 별명 · 학년
+ *   자녀 정보    자녀 이름 · 학년   (2026-09-30 Figma 라벨이 「자녀 이름」)
  *   로그인 정보  로그인 이메일 · 비밀번호 · 비밀번호 확인
  * ```
  *
@@ -37,7 +37,12 @@ import { useActionState, useState } from 'react';
 import { Field, fieldClass } from '@/components/ui/Field';
 import { FormSection } from '@/components/ui/FormSection';
 import { BrandButton } from '@/components/ui/BrandButton';
-import { looksLikeEmail } from '@/lib/constants/student-login';
+import {
+  PASSWORD_MIN,
+  PASSWORD_RULE_TEXT,
+  isValidPassword,
+  looksLikeEmail,
+} from '@/lib/constants/student-login';
 import type { IdCheck } from '@/lib/services/student-login';
 
 export type NewStudentState = { error: string | null };
@@ -72,6 +77,11 @@ export function StudentForm({
 
   const id = loginEmail.trim().toLowerCase();
 
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const ruleBroken = password !== '' && !isValidPassword(password);
+  const mismatch = confirm !== '' && confirm !== password;
+
   /**
    * 지금 칸에 적힌 아이디의 답. **렌더에서 셈한다.**
    *
@@ -103,7 +113,7 @@ export function StudentForm({
   return (
     <form action={formAction} className="flex flex-col gap-7">
       <FormSection title="자녀 정보">
-        <Field label="이름 또는 별명">
+        <Field label="자녀 이름">
           {/*
             **한 칸이 DB 두 칸으로 간다.** `student_name` 과 `nickname` 이
             둘 다 `not null` 이라 같은 값을 넣고, 무엇을 기본으로 썼는지
@@ -120,7 +130,7 @@ export function StudentForm({
           <select id="grade" name="grade" defaultValue="4" className={FIELD}>
             {[4, 5, 6].map((grade) => (
               <option key={grade} value={grade}>
-                {grade}학년
+                초등 {grade}학년
               </option>
             ))}
           </select>
@@ -132,14 +142,14 @@ export function StudentForm({
           label="로그인 이메일"
           error={
             status === 'taken'
-              ? '이미 쓰고 있는 이메일이에요. 다른 이메일을 넣어주세요.'
+              ? '이미 메티에 가입된 이메일이에요. 다른 이메일을 입력해 주세요.'
               : status === 'invalid'
-                ? '이메일 형식이 올바르지 않아요. 다시 확인해 주세요.'
+                ? '이메일 주소 형식을 확인해 주세요.'
                 : null
           }
           hint={
             status === 'ok' ? (
-              <b className="text-meti">쓸 수 있는 이메일이에요.</b>
+              <b className="font-semibold text-button-primary">쓸 수 있는 이메일이에요.</b>
             ) : (
               '아이가 이미 쓰는 이메일을 넣어주세요. 아이는 이 주소로 들어옵니다.'
             )
@@ -163,50 +173,62 @@ export function StudentForm({
               type="button"
               onClick={askId}
               disabled={id === '' || asking}
-              className="h-[52px] shrink-0 rounded-lg border border-meti px-4 text-[14px] font-semibold text-meti disabled:border-meti-line disabled:text-meti-off"
+              className="h-[52px] shrink-0 rounded-lg border border-button-primary bg-surface-primary px-4 text-[14px] font-semibold leading-5 text-button-primary disabled:border-meti-line disabled:bg-background-primary disabled:text-disabled-text"
             >
               {asking ? '확인 중' : '중복확인'}
             </button>
           </div>
         </Field>
 
-        <Field label="비밀번호" hint="6자 이상. 아이가 잊으면 마이페이지에서 바꿔주세요.">
+        {/*
+          규칙 · 일치는 **치는 동안 화면에서 먼저 본다**(Figma `비밀번호 설정 /
+          규칙 위반 · 확인 불일치`). 서버도 같은 규칙으로 다시 본다.
+        */}
+        <Field
+          label="비밀번호"
+          error={ruleBroken ? PASSWORD_RULE_TEXT : null}
+          hint={`${PASSWORD_RULE_TEXT} 아이가 잊으면 마이페이지에서 바꿔주세요.`}
+        >
           <input
             name="login_password"
             type="password"
-            minLength={6}
+            minLength={PASSWORD_MIN}
             autoComplete="new-password"
             required
             placeholder="비밀번호 입력"
-            className={FIELD}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className={fieldClass('page', ruleBroken)}
           />
         </Field>
 
-        <Field label="비밀번호 확인">
+        <Field label="비밀번호 확인" error={mismatch ? '비밀번호가 일치하지 않아요.' : null}>
           <input
             name="login_password_confirm"
             type="password"
             autoComplete="new-password"
             required
             placeholder="비밀번호를 다시 입력하세요"
-            className={FIELD}
+            value={confirm}
+            onChange={(event) => setConfirm(event.target.value)}
+            className={fieldClass('page', mismatch)}
           />
         </Field>
       </FormSection>
 
-      <p className="text-[14px] leading-5 text-meti-sub">
+      <p className="text-[14px] leading-5 text-text-secondary">
         아이는 이 이메일과 비밀번호로 자기 기기에서 들어옵니다. 아이에게 알려주세요.
       </p>
 
       {state.error !== null && (
-        <p role="alert" className="text-[14px] leading-5 text-red-500">
+        <p role="alert" className="text-[14px] leading-5 text-error-text">
           {state.error}
         </p>
       )}
 
       {/* 겹치는 것을 알면서 누르게 두지 않는다. 확인 중일 때는 막지
           않는다 — 못 물어본 경우에도 막히면 등록할 길이 없어진다 */}
-      <BrandButton pending={pending} disabled={status === 'taken'}>
+      <BrandButton pending={pending} disabled={status === 'taken' || ruleBroken || mismatch}>
         {pending ? '계정 만드는 중' : submitLabel}
       </BrandButton>
     </form>

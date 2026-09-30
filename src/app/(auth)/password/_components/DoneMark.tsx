@@ -1,7 +1,7 @@
 import Image from 'next/image';
 
 /**
- * 다 됐다는 표시 — 옥색 동그라미 안의 체크.
+ * 다 됐다는 표시 — Figma `Icon / 원형` 72px, 옥색(`surface-brand`) 안의 체크.
  *
  * `/password` 안에서 두 번 쓴다(메일 보냄 · 비밀번호 바꿈). 두 곳뿐이고
  * 이 Route 밖에서는 쓰지 않으므로 `src/components` 가 아니라 여기 둔다
@@ -15,7 +15,7 @@ export function DoneMark() {
   return (
     <div
       aria-hidden
-      className="flex size-[72px] items-center justify-center rounded-full bg-meti-bg"
+      className="flex size-[72px] items-center justify-center rounded-full bg-surface-brand"
     >
       <Image src="/icons/check.svg" alt="" width={18} height={13} />
     </div>

@@ -2,6 +2,9 @@
  * STU-002 학생 선택 · `/students` (DEV-002)
  *
  * 한 계정에 학생이 여럿일 수 있다(COM-002 §4). 누구로 들어갈지 먼저 고른다.
+ *
+ * Figma 에는 이 화면이 없다(학생 프로필 선택은 없앴다 · FIGMA-MD-AUDIT §8.5).
+ * 쿠키가 비었을 때 떨어지는 자리라 route 는 두고, 색 · 글자만 토큰에 맞춘다.
  */
 
 import { createClient } from '@/lib/supabase/server';
@@ -23,14 +26,14 @@ export default async function StudentsPage() {
   const students = await listStudents(supabase);
 
   return (
-    <main className="flex flex-1 flex-col gap-5 px-6 py-10">
-      <h1 className="text-xl font-extrabold text-meti-ink">누구로 시작할까?</h1>
+    <main className="flex flex-1 flex-col gap-5 px-5 py-10">
+      <h1 className="text-[24px] leading-8 font-bold text-text-primary">누구로 시작할까?</h1>
 
       {students.length === 0 ? (
         /* 아이 계정에는 자기 자신이 늘 있다. 여기가 비는 일은 없지만,
            지우면 화면이 깨지므로 남겨 둔다. 등록하는 길은 두지 않는다 —
            학생을 만드는 것은 부모의 일이다(COM-003 §4.2). */
-        <p className="rounded-2xl bg-white p-5 text-[14px] text-meti-sub shadow-sm">
+        <p className="rounded-2xl border border-meti-line bg-surface-primary p-5 text-[14px] leading-5 text-text-secondary shadow-card">
           들어갈 수 있는 학생이 없어요.
         </p>
       ) : (
@@ -41,16 +44,16 @@ export default async function StudentsPage() {
                 <input type="hidden" name="student_id" value={student.student_id} />
                 <button
                   type="submit"
-                  className="flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-sm"
+                  className="flex w-full items-center gap-4 rounded-2xl border border-meti-line bg-surface-primary p-4 text-left shadow-card hover:border-button-primary"
                 >
-                  <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-meti-bg">
+                  <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-brand">
                     <PartnerFace persona={student.persona_type} size={40} />
                   </span>
                   <span className="flex flex-col">
-                    <span className="text-[15px] font-bold text-meti-ink">
+                    <span className="text-[16px] leading-6 font-semibold text-text-primary">
                       {student.nickname}
                     </span>
-                    <span className="text-[12px] font-semibold text-meti-sub">
+                    <span className="text-[14px] leading-5 text-text-secondary">
                       초등 {student.grade}학년 · {PARTNER_NAME[student.persona_type]}와 함께
                     </span>
                   </span>
@@ -73,7 +76,7 @@ export default async function StudentsPage() {
       <form action={leaveApp}>
         <button
           type="submit"
-          className="w-full text-center text-[13px] font-semibold text-meti-sub underline"
+          className="w-full text-center text-[14px] leading-5 font-semibold text-text-secondary underline"
         >
           로그아웃
         </button>
