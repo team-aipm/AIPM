@@ -13,6 +13,7 @@
  * ```text
  *   부모   /parent     학습 현황. 보호자 화면이다
  *   아이   /home       고를 것이 없다. 자기 자신이다
+ *   운영자 /admin      admin_user 에 활성 행이 있을 때만 (COM-002 §20-B)
  * ```
  *
  * **부모는 보호자 화면으로 보낸다.** 전에는 `/students`(STU-002 학생 선택)
@@ -28,6 +29,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { endSession } from '@/lib/supabase/sign-out';
 import { EVENT, recordOnce } from '@/lib/analytics/events';
+import { isActiveAdmin } from '@/lib/services/admin';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 import {
   REMEMBER_COOKIE,
@@ -115,6 +117,10 @@ export async function signIn(
     jar.set(STUDENT_COOKIE, studentId, remember ? stay : untilBrowserCloses(stay));
     redirect('/home');
   }
+
+  // 운영자다. 부모 화면이 아니라 운영 화면으로 보낸다. 가입 퍼널에도
+  // 세지 않는다 — 운영자 계정은 고객이 아니다.
+  if (await isActiveAdmin(supabase, me.user.id)) redirect('/admin');
 
   // 부모다. 가입 순간에는 세션이 없어 남길 수 없었던 것을 여기서 남긴다.
   // **아이 로그인은 가입이 아니므로 세지 않는다** — 퍼널이 어긋난다.

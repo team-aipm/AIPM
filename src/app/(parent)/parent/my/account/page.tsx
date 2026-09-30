@@ -1,43 +1,42 @@
 /**
  * MY-008 계정 관리 · `/parent/my/account` (DEV-002)
+ *
+ * Figma 에는 따로 없는 화면이다 — 로그아웃 · 회원 탈퇴가 설정(MY-001)
+ * 목록에 바로 붙어 있다. 주소로 들어오는 사람을 위해 남겨 두고, 생김새만
+ * 설정 목록과 맞춘다.
  */
 
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { signOutAccount } from '../_actions';
+import { currentUser } from '@/lib/supabase/server';
+import { MyTopBar } from '../_components/MyTopBar';
+import { SettingsCard } from '../_components/SettingsGroup';
+import { LogoutRow } from '../_components/LogoutRow';
 
 export const metadata = { title: '계정 관리 · 메티' };
 
 export default async function AccountPage() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-  if (data.user === null) redirect('/login');
+  const user = await currentUser();
+  if (user === null) redirect('/login');
 
   return (
-    <main className="flex flex-1 flex-col gap-4 px-5 py-8">
-      <header className="flex flex-col gap-1">
-        <Link href="/parent/my" className="text-[13px] font-semibold text-meti-sub">
-          ‹ 마이페이지
-        </Link>
-        <h1 className="text-xl font-extrabold text-meti-ink">계정 관리</h1>
-      </header>
+    <main className="flex flex-1 flex-col">
+      <MyTopBar title="계정 관리" back="/parent/my" backLabel="설정으로" />
 
-      <form action={signOutAccount}>
-        <button
-          type="submit"
-          className="w-full rounded-2xl bg-white p-4 text-left text-[15px] font-bold text-meti-ink shadow-sm"
-        >
-          로그아웃
-        </button>
-      </form>
+      <div className="flex flex-col gap-3 px-5 pb-5 pt-3">
+        <SettingsCard>
+          <LogoutRow />
+        </SettingsCard>
 
-      <Link
-        href="/parent/my/account/withdraw"
-        className="text-center text-[13px] font-semibold text-meti-sub underline"
-      >
-        회원탈퇴
-      </Link>
+        <div className="flex justify-end">
+          <Link
+            href="/parent/my/account/withdraw"
+            className="py-3 text-[14px] leading-5 text-text-secondary"
+          >
+            회원 탈퇴
+          </Link>
+        </div>
+      </div>
     </main>
   );
 }
