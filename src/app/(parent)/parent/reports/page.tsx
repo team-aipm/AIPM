@@ -19,8 +19,14 @@ import { formatMonday, formatPeriod, thisWeek } from './_components/period';
 
 export const metadata = { title: '주간 리포트 · 메티' };
 
-/** 목록 한 줄 설명. 07 이 쓴 `weekly_summary` 를 그대로 쓴다 */
+/**
+ * 목록 한 줄 설명. 07 이 쓴 `weekly_summary` 를 그대로 쓴다.
+ * 미션이 0개인 주는 07 을 부르지 않았으므로 사실 한 줄만 적는다(COM-003 §4.9).
+ */
 function headline(summary: unknown): string | null {
+  if ((summary as { empty_week?: unknown } | null)?.empty_week === true) {
+    return '이번 주는 학습한 날이 없어요';
+  }
   const report = (summary as { report?: { weekly_summary?: unknown } } | null)?.report;
   const value = report?.weekly_summary;
   return typeof value === 'string' && value.trim() !== '' ? value : null;

@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 
   const { data: students, error: studentError } = await supabase
     .from('student')
-    .select('student_id, grade')
+    .select('student_id, grade, created_at')
     .eq('student_status', 'active');
 
   if (studentError !== null) {
@@ -111,10 +111,35 @@ export async function GET(request: NextRequest) {
       .order('period_start', { ascending: true });
 
     const days = dailies ?? [];
-    // 한 주 동안 하루도 마치지 못했으면 리포트를 만들지 않는다.
-    // 없는 것을 그럴듯하게 채우지 않는다(RPT-001 「데이터 부족」 State).
+    /**
+     * **미션이 0개인 주도 리포트는 만든다** (COM-003 §4.9).
+     *
+     * 전에는 건너뛰었다. 그러면 부모 화면에서 그 주가 통째로 비어, 아이가
+     * 한 주 쉬었다는 것을 부모가 알 길이 없다.
+     *
+     * 대신 **모델을 부르지 않는다.** 근거가 없는 정답률 · 취약 개념 · AI
+     * 분석을 그럴듯하게 지어내지 않도록, 학습일 0일이라는 사실만 남긴다.
+     * 화면은 `empty_week` 를 보고 그 사실과 「알림 설정 확인하기」 만 그린다.
+     *
+     * 그 주가 끝난 뒤에 등록된 아이는 그 주에 할 수 없었으므로 만들지 않는다.
+     */
     if (days.length === 0) {
-      skipped += 1;
+      if (student.created_at.slice(0, 10) > end) {
+        skipped += 1;
+        continue;
+      }
+      const { error: emptyError } = await supabase.from('learning_report').insert({
+        student_id: student.student_id,
+        report_type: 'weekly_parent',
+        period_start: start,
+        period_end: end,
+        summary_data: { empty_week: true, learning_days: 0 },
+      });
+      if (emptyError !== null) {
+        console.error(`[weekly-report] ${student.student_id} 빈 주 저장 실패: ${emptyError.message}`);
+        continue;
+      }
+      made += 1;
       continue;
     }
 
