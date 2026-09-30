@@ -7,7 +7,7 @@
  *   52px · radius 8 · Label/Large 16/24 SemiBold
  *   brand    bg #206B7C  글자 흰색
  *   neutral  bg #F7FAFB  border #E2E8EB
- *   못 누름  bg #C8DADD  글자 #B5BDC2
+ *   못 누름  bg #E2E8EB  글자 #5B6A72  (2026-09-30 Figma 02 · Components)
  * ```
  *
  * **기다리는 동안 도는 표시가 들어간다.** Figma 의 `Loading Indicator` 가
@@ -18,16 +18,47 @@
 import type { ReactNode } from 'react';
 
 const BASE =
-  'flex h-[52px] w-full items-center justify-center gap-2 rounded-lg px-5 text-[16px] font-semibold leading-6';
+  'flex w-full items-center justify-center rounded-lg font-semibold transition-colors disabled:cursor-not-allowed';
 
+/**
+ * Figma 의 세 크기. Small 부터 글자가 14 로 내려간다.
+ *
+ * ```text
+ *   md  52px  padding 20  gap 8  Label/Large 16/24
+ *   sm  44px  padding 16  gap 6  14/20
+ *   xs  36px  padding 12  gap 4  14/20
+ * ```
+ */
+const SIZE = {
+  md: 'h-[52px] gap-2 px-5 text-[16px] leading-6',
+  sm: 'h-[44px] gap-1.5 px-4 text-[14px] leading-5',
+  xs: 'h-[36px] gap-1 px-3 text-[14px] leading-5',
+} as const;
+
+/**
+ * Hover · Pressed · Focused · Disabled 는 Figma 의 State 그대로다.
+ * Focused 는 키보드로 왔을 때만 보이게 `focus-visible` 에 건다.
+ */
 const TONE = {
-  brand: 'bg-meti text-white disabled:bg-meti-off-bg disabled:text-meti-off',
+  brand:
+    'bg-button-primary text-white hover:enabled:bg-button-hover active:enabled:bg-button-pressed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-button-primary',
   neutral:
-    'border border-meti-line bg-meti-page text-meti-ink disabled:border-meti-line disabled:bg-meti-page disabled:text-meti-off',
+    'border border-meti-line bg-surface-primary text-text-primary hover:enabled:bg-background-primary active:enabled:bg-background-primary focus-visible:border-2 focus-visible:border-button-pressed focus-visible:outline-none',
+} as const;
+
+/**
+ * 못 누름 색은 **정말 못 누를 때만** 입힌다. 기다리는 동안(`pending`)에도
+ * 버튼은 잠기지만 Figma 의 `State=Loading` 은 원래 색 그대로다 — 회색이
+ * 되면 「눌렀는데 안 됐다」로 읽힌다.
+ */
+const OFF = {
+  brand: 'bg-disabled-bg text-disabled-text',
+  neutral: 'bg-background-primary text-disabled-text',
 } as const;
 
 export function BrandButton({
   tone = 'brand',
+  size = 'md',
   pending = false,
   disabled = false,
   type = 'submit',
@@ -35,6 +66,7 @@ export function BrandButton({
   children,
 }: {
   tone?: keyof typeof TONE;
+  size?: keyof typeof SIZE;
   pending?: boolean;
   disabled?: boolean;
   type?: 'submit' | 'button';
@@ -47,7 +79,7 @@ export function BrandButton({
       onClick={onClick}
       disabled={disabled || pending}
       aria-busy={pending}
-      className={`${BASE} ${TONE[tone]}`}
+      className={`${BASE} ${SIZE[size]} ${disabled ? OFF[tone] : TONE[tone]}`}
     >
       {pending && <Spinner />}
       {children}
