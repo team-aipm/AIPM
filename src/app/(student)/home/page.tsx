@@ -19,7 +19,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requireChild } from '@/lib/services/viewer';
 import { getStudent } from '@/lib/services/student';
-import { findTodaySession, hasEarlierSession, today } from '@/lib/services/learning-session';
+import { findTodaySession, hasEarlierSession, listPastSessions, today } from '@/lib/services/learning-session';
 import { rewardBoard, weekStamps } from '@/lib/services/reward';
 import { PARTNER_NAME, TERMS } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
@@ -76,12 +76,14 @@ export default async function HomePage() {
    */
   const date = today();
   const week = weekdaysOf(date);
-  const [student, session, hasEarlier, board, stamped] = await Promise.all([
+  const [student, session, hasEarlier, board, stamped, past] = await Promise.all([
     getStudent(supabase, studentId),
     findTodaySession(supabase, studentId),
     hasEarlierSession(supabase, studentId),
     rewardBoard(supabase, studentId),
     weekStamps(supabase, studentId, week[0], week[4]),
+    // 지난 미션 줄 하나를 그리는 데만 쓴다. 못 불러와도 홈은 연다.
+    listPastSessions(supabase, studentId).catch(() => ({ open: [], expired: [] })),
   ]);
   if (student === null) redirect('/students');
 
@@ -184,8 +186,23 @@ export default async function HomePage() {
           </form>
         )}
 
-        {/* Figma 에서 「지난 미션」 줄이 있는 자리. 지난 미션 목록이 생기기 전까지 오늘의 기록으로 간다 */}
-        {!finished && session !== null && (
+        {/*
+          Figma 392:138 「9월 25일 미션도 남아 있어」. **오늘 미션을 끝낸 아이에게는
+          보이지 않는다** — 끝낸 뒤 더 하라고 하는 것은 압박이다(COM-001 §11-2).
+          아이가 직접 눌렀을 때만 지난 미션으로 간다.
+        */}
+        {!finished && past.open.length > 0 ? (
+          <Link
+            href="/missions/past"
+            className="flex items-center gap-2 rounded-xl bg-surface-primary py-3 pr-2.5 pl-3.5"
+          >
+            <span className="flex-1 text-[14px] leading-5 text-text-primary">
+              {Number(past.open[0].session_date.slice(5, 7))}월 {Number(past.open[0].session_date.slice(8, 10))}일
+              미션도 남아 있어
+            </span>
+            <Image src="/icons/chevron-right.svg" alt="" width={20} height={20} />
+          </Link>
+        ) : !finished && session !== null && (
           <Link
             href="/home/today"
             className="flex items-center gap-2 rounded-xl bg-surface-primary py-3 pr-2.5 pl-3.5"

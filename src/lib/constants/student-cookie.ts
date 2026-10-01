@@ -9,3 +9,12 @@
  * 돌려주므로 화면에는 아무것도 안 나온다. "누구를 보고 있는가" 일 뿐이다.
  */
 export const STUDENT_COOKIE = 'aipm_student';
+
+/**
+ * 지난 미션을 이어 하는 중일 때 그 세션 id (COM-001 §11-2).
+ *
+ * 미션 화면과 서버 액션은 이 쿠키가 있으면 오늘 세션 대신 그 세션을 쓴다.
+ * **이 쿠키도 권한이 아니다.** 읽는 쪽(`findPastSession`)이 본인 것인지 ·
+ * 7일 안인지 · 아직 안 끝났는지를 매번 다시 본다. 아니면 오늘 세션으로 돌아간다.
+ */
+export const PAST_SESSION_COOKIE = 'aipm_past_session';

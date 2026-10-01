@@ -13,9 +13,9 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { endSession } from '@/lib/supabase/sign-out';
 import { getStudent } from '@/lib/services/student';
-import { openTodaySession, hasEarlierSession } from '@/lib/services/learning-session';
+import { openTodaySession, hasEarlierSession, findPastSession } from '@/lib/services/learning-session';
 import { EVENT, record } from '@/lib/analytics/events';
-import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import { PAST_SESSION_COOKIE, STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 
 export async function startMission(): Promise<void> {
   const supabase = await createClient();
@@ -26,6 +26,10 @@ export async function startMission(): Promise<void> {
   const studentId = jar.get(STUDENT_COOKIE)?.value ?? '';
   const student = studentId === '' ? null : await getStudent(supabase, studentId);
   if (student === null) redirect('/students');
+
+  // 오늘 미션을 고른 것이다. 이어 하던 지난 미션 표시를 지운다 — 남아 있으면
+  // 미션 화면이 지난 세션을 연다(`mission/_session.ts`).
+  jar.delete(PAST_SESSION_COOKIE);
 
   const everBefore = await hasEarlierSession(supabase, student.student_id);
   const { session, resumed } = await openTodaySession(supabase, student.student_id);
@@ -39,6 +43,33 @@ export async function startMission(): Promise<void> {
     await record(supabase, EVENT.firstLearningStarted, who);
   }
 
+  redirect('/mission');
+}
+
+/**
+ * STU-006 지난 미션 · 이어하기 (COM-001 §11-2).
+ *
+ * 고른 세션을 쿠키에 적고 미션 화면으로 보낸다. 적기 전에 **이어 할 수 있는
+ * 것인지 본다** — 본인 것 · 7일 안 · 아직 안 끝남. 아니면 지난 미션 목록으로
+ * 돌려보낸다(만료 상태가 그려진다).
+ */
+export async function continuePastMission(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth.user === null) redirect('/login');
+
+  const jar = await cookies();
+  const studentId = jar.get(STUDENT_COOKIE)?.value ?? '';
+  const student = studentId === '' ? null : await getStudent(supabase, studentId);
+  if (student === null) redirect('/students');
+
+  const sessionId = String(formData.get('session_id') ?? '');
+  const past = await findPastSession(supabase, student.student_id, sessionId);
+  if (past === null) redirect(`/missions/past?expired=${encodeURIComponent(sessionId)}`);
+
+  // 브라우저를 닫으면 사라진다. 다음에 들어오면 오늘 미션부터다.
+  jar.set(PAST_SESSION_COOKIE, past.session_id, { httpOnly: true, sameSite: 'lax', path: '/' });
+  await record(supabase, EVENT.sessionResumed, { studentId: student.student_id, sessionId: past.session_id });
   redirect('/mission');
 }
 

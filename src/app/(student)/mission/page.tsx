@@ -10,7 +10,6 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requireChild } from '@/lib/services/viewer';
 import { getStudent } from '@/lib/services/student';
-import { findTodaySession } from '@/lib/services/learning-session';
 import { findActiveProblem } from '@/lib/services/problem';
 import { listMessages } from '@/lib/services/message';
 import { PARTNER_NAME } from '@/lib/constants/copy';
@@ -18,6 +17,7 @@ import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 import { PartnerFace } from '@/components/ui/PartnerFace';
 import { ExitButton } from './_components/ExitButton';
 import { MissionChat, type Initial } from './_components/MissionChat';
+import { missionSession } from './_session';
 
 export const metadata = { title: '미션 · 메티' };
 
@@ -37,12 +37,19 @@ export default async function MissionPage() {
   if (studentId === '') redirect('/students');
 
   // 둘은 서로 기다릴 필요가 없다. 남의 학생 id 면 RLS 가 둘 다 비워 돌려준다.
-  const [student, session] = await Promise.all([
+  // 세션은 오늘 것이거나, 이어 하기로 고른 지난 것이다(`_session.ts`).
+  const [student, picked] = await Promise.all([
     getStudent(supabase, studentId),
-    findTodaySession(supabase, studentId),
+    missionSession(supabase, studentId),
   ]);
   if (student === null) redirect('/students');
-  if (session === null) redirect('/home');
+  if (picked === null) redirect('/home');
+  const session = picked.session;
+  /** 지난 미션이면 「9월 29일」. 머리글과 끝난 뒤 안내가 오늘 것과 달라진다 */
+  const pastLabel =
+    picked.kind === 'past'
+      ? `${Number(session.session_date.slice(5, 7))}월 ${Number(session.session_date.slice(8, 10))}일`
+      : null;
 
   const partner = PARTNER_NAME[student.persona_type];
 
@@ -77,12 +84,13 @@ export default async function MissionPage() {
         <div className="flex flex-col">
           <p className="text-[16px] font-semibold leading-6 text-text-primary">{partner}</p>
           <p className="text-[12px] leading-[18px] text-button-primary">
-            오늘의 미션 · {session.completed_problem_count} / {session.target_problem_count}
+            {pastLabel === null ? '오늘의 미션' : `${pastLabel} 미션`} · {session.completed_problem_count} /{' '}
+            {session.target_problem_count}
           </p>
         </div>
       </header>
 
-      <MissionChat partner={partner} persona={student.persona_type} initial={initial} />
+      <MissionChat partner={partner} persona={student.persona_type} initial={initial} pastLabel={pastLabel} />
     </div>
   );
 }
