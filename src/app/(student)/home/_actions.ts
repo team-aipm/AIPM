@@ -34,6 +34,13 @@ export async function startMission(): Promise<void> {
   const everBefore = await hasEarlierSession(supabase, student.student_id);
   const { session, resumed } = await openTodaySession(supabase, student.student_id);
 
+  // **오늘 몫을 다 했으면 미션으로 보내지 않는다** (COM-001 §11-2). 하단 Nav 의
+  // 「학습하기」도 이 액션을 부른다 — 홈 카드 버튼은 끝나면 「오늘의 기록」으로
+  // 바뀌지만 Nav 는 그대로라, 여기를 안 막으면 끝낸 세션에 문제가 더 생긴다.
+  if (session.session_status === 'completed' || session.completed_problem_count >= session.target_problem_count) {
+    redirect('/home/today');
+  }
+
   const who = { studentId: student.student_id, sessionId: session.session_id };
 
   if (resumed) {
