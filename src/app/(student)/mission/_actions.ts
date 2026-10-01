@@ -480,10 +480,25 @@ async function context() {
  * 01 이 `next_module = "MODE_A"` 를 냈을 때 부른다. 여기서 `problem` 행이
  * 생기고, 그때부터 대화가 `message` 에 남는다.
  */
+/**
+ * **오늘 몫을 다 했으면 문제를 더 내지 않는다** (COM-001 §11-2).
+ *
+ * 2026-10-01, 10개를 끝낸 세션에서 하단 Nav 의 「학습하기」를 누르자 문제가
+ * 새로 생겨 11/10 이 됐다. 화면의 길은 막았지만(`startMission` · 미션 화면)
+ * 요청은 직접 보낼 수도 있으므로 문제를 만드는 액션마다 여기서 다시 본다.
+ * 코인 하루 100 도 이 검사가 지킨다.
+ */
+function isSessionFull(session: { session_status: string; completed_problem_count: number; target_problem_count: number }): boolean {
+  return session.session_status === 'completed' || session.completed_problem_count >= session.target_problem_count;
+}
+
+const FULL_MESSAGE = '오늘 미션은 다 끝냈어! 내일 또 만나.';
+
 export async function startProblem(): Promise<ProblemReply> {
   const ctx = await context();
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
   const { supabase, student, session } = ctx;
+  if (isSessionFull(session)) return { ok: false, message: FULL_MESSAGE };
 
   // **이미 풀던 문제가 있으면 그것을 돌려준다.** 확인하지 않으면 누를 때마다
   // 새 문제가 생긴다 — 2026-09-10 에 한 학생에게 진행 중인 문제가 넷이
@@ -1306,6 +1321,7 @@ export async function offerSourceProblem(text: string): Promise<SourceStep> {
   const ctx = await context();
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
   const { student, session } = ctx;
+  if (isSessionFull(session)) return { ok: false, message: FULL_MESSAGE };
 
   const input = buildModeBInput({
     studentId: student.student_id,
@@ -1370,6 +1386,7 @@ export async function confirmSourceProblem(
   const ctx = await context();
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
   const { supabase, student, session } = ctx;
+  if (isSessionFull(session)) return { ok: false, message: FULL_MESSAGE };
 
   const problemNumber = session.completed_problem_count + 1;
   const picked = await pickConcept(supabase, student.student_id, problemNumber);
@@ -1508,6 +1525,8 @@ export async function readPhotoProblem(formData: FormData): Promise<SourceStep> 
   const ctx = await context();
   if (ctx === null) return { ok: false, message: '다시 들어와줄래?' };
   const { supabase, student, session } = ctx;
+  // 사진을 올리기 전에 본다. 끝낸 세션이면 올릴 이유가 없다.
+  if (isSessionFull(session)) return { ok: false, message: FULL_MESSAGE };
 
   const path = `${student.student_id}/${crypto.randomUUID()}.${extOf(file.type)}`;
   const bytes = new Uint8Array(await file.arrayBuffer());

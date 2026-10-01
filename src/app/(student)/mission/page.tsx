@@ -56,6 +56,17 @@ export default async function MissionPage() {
   // 풀던 문제가 있으면 그 자리에서 이어 붙인다. 대화가 `message` 에 남아
   // 있으므로 새로고침해도 사라지지 않는다 — 01 의 대화만 못 남긴다.
   const active = await findActiveProblem(supabase, session.session_id);
+
+  // **오늘 몫을 다 했고 풀던 문제도 없으면 미션을 열지 않는다** (COM-001 §11-2).
+  // 열면 첫 인사가 곧바로 새 문제를 내서 11/10 이 된다(2026-10-01). 서버
+  // 액션도 막지만, 화면이 여기 머무를 이유가 없다.
+  if (
+    active === null &&
+    (session.session_status === 'completed' || session.completed_problem_count >= session.target_problem_count)
+  ) {
+    redirect(picked.kind === 'past' ? '/missions/past' : '/home/today');
+  }
+
   let initial: Initial = { kind: 'host' };
   if (active !== null) {
     const messages = await listMessages(supabase, active.problem_id);
