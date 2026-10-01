@@ -4,10 +4,9 @@
  * Figma `홈 · 01 첫 사용자` · `02 진행 중` · `03 보상 미등록` · `04 오늘 미션
  * 완료` 에 맞췄다. **지금 값을 채울 수 있는 것만** 그린다.
  *
- * 연속 학습 칩 · 이번 주 참여 도장 · 약속한 보상의 진척은 뺐다. 도장 ·
- * 보상은 COM-002 §22 에 있지만 아직 테이블도 service 도 없다. 숫자를
- * 지어내 보여 주면 되는 것처럼 보이고, 나중에 그걸 지우는 일이 더 크다.
- * 보상 카드는 지금 사실인 「보상 미등록」 상태로만 둔다.
+ * 약속한 보상과 이번 주 참여 도장은 `lib/services/reward` 가 읽는다
+ * (COM-002 §22-1 · §22-5). Figma `05 보상 받은 뒤 다시 시작` 도 같은 카드다.
+ * 연속 학습 칩은 아직 뺀다 — `LearningStreak`(§22-2) service 가 없다.
  *
  * 주말(「오늘은 자유롭게 학습해요」)과 지난 미션 링크도 아직 없다 —
  * 평일 · 주말 분기와 지난 미션 목록(STU-006)이 먼저다(COM-001 §11-1 · §11-2).
@@ -20,16 +19,34 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requireChild } from '@/lib/services/viewer';
 import { getStudent } from '@/lib/services/student';
-import { findTodaySession, hasEarlierSession } from '@/lib/services/learning-session';
+import { findTodaySession, hasEarlierSession, today } from '@/lib/services/learning-session';
+import { rewardBoard, weekStamps } from '@/lib/services/reward';
 import { PARTNER_NAME, TERMS } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 import { PartnerFace } from '@/components/ui/PartnerFace';
 import { BrandButton } from '@/components/ui/BrandButton';
 import { PartnerFigure } from '@/components/student/PartnerFigure';
 import { StudentBottomNav } from './_components/StudentBottomNav';
+import { RewardProgress } from './_components/RewardProgress';
+import { WeekStamps } from './_components/WeekStamps';
 import { startMission, leaveApp } from './_actions';
 
 export const metadata = { title: '오늘의 미션 · 메티' };
+
+/**
+ * 그 날이 든 주의 월~금. 날짜 문자열만 보고 계산한다 — 서버 시간대와
+ * 상관없이 `today()` 가 준 한국 날짜 그대로다. 토 · 일이면 막 지난 월~금이다.
+ */
+function weekdaysOf(date: string): string[] {
+  const base = new Date(`${date}T00:00:00Z`);
+  const dow = base.getUTCDay();
+  const toMonday = dow === 0 ? -6 : 1 - dow;
+  return Array.from({ length: 5 }, (_, idx) => {
+    const day = new Date(base);
+    day.setUTCDate(base.getUTCDate() + toMonday + idx);
+    return day.toISOString().slice(0, 10);
+  });
+}
 
 export default async function HomePage() {
   // **아이만 들어온다.** 부모는 부모 홈으로 돌아간다(COM-003 §4.2 의
@@ -57,10 +74,14 @@ export default async function HomePage() {
    * `student` 가 null 이 된다. 고르는 화면으로 돌려보내는 것으로 충분하다 —
    * 무엇이 잘못됐는지 알려 줄 필요가 없다.
    */
-  const [student, session, hasEarlier] = await Promise.all([
+  const date = today();
+  const week = weekdaysOf(date);
+  const [student, session, hasEarlier, board, stamped] = await Promise.all([
     getStudent(supabase, studentId),
     findTodaySession(supabase, studentId),
     hasEarlierSession(supabase, studentId),
+    rewardBoard(supabase, studentId),
+    weekStamps(supabase, studentId, week[0], week[4]),
   ]);
   if (student === null) redirect('/students');
 
@@ -177,19 +198,11 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* 보상 · Figma `03 보상 미등록`. 진척 숫자는 보상 테이블이 생긴 뒤에 */}
-      <section className="rounded-3xl border border-meti-line bg-surface-primary p-5">
-        <div className="flex items-center gap-3 rounded-xl bg-background-primary p-3">
-          <Image src="/icons/reward-diamond.png" alt="" width={28} height={28} />
-          <div className="flex flex-col gap-0.5">
-            <p className="text-[14px] leading-5 font-semibold text-text-primary">
-              부모님과 보상을 정해 봐
-            </p>
-            <p className="text-[12px] leading-[18px] text-text-secondary">
-              오늘 미션 {target}개를 모두 끝내면 보상이 가까워져
-            </p>
-          </div>
-        </div>
+      {/* 약속한 보상 + 이번 주 참여 도장 · Figma 392:138 「이번 주」 카드 */}
+      <section className="flex flex-col gap-4 rounded-3xl border border-meti-line bg-surface-primary p-5">
+        <RewardProgress board={board} persona={student.persona_type} dailyTarget={target} />
+        <hr className="border-meti-line" />
+        <WeekStamps days={week} today={date} stamped={stamped} todayDone={done} />
       </section>
 
       {/*

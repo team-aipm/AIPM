@@ -4,9 +4,9 @@
  * 부모가 보는 설정 목록이다. 여기서 갈라지는 화면들이 MY-002~010 이다.
  * 생김새는 Figma `설정 · 01 설정 (스크롤)` 이다.
  *
- * **Figma 에 있어도 갈 곳이 없는 줄은 두지 않는다.** 보상 관리(RWD) ·
- * 구독 관리(BIL, COM-005 §13) · 비밀번호 변경(MY-011) · 도움말·문의는
- * 아직 Route 가 없다. 눌러서 404 가 나느니 없는 편이 낫다.
+ * **Figma 에 있어도 갈 곳이 없는 줄은 두지 않는다.** 구독 관리(BIL,
+ * COM-005 §13) · 비밀번호 변경(MY-011) · 도움말·문의는 아직 Route 가
+ * 없다. 눌러서 404 가 나느니 없는 편이 낫다.
  *
  * 마케팅 수신 설정은 Figma 대로 알림 설정(MY-007) 안으로 옮겼다.
  * 계정 관리(MY-008)의 두 가지 — 로그아웃 · 회원탈퇴 — 는 이 화면에서
@@ -62,6 +62,7 @@ export default async function MyPage() {
           label="자녀 계정 관리"
           value={`${students.length}명`}
         />
+        <SettingsLinkRow href="/parent/rewards" label="보상 관리" />
       </SettingsCard>
 
       <GroupLabel>알림과 계정</GroupLabel>
