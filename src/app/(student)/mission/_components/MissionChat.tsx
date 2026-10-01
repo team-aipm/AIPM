@@ -335,7 +335,10 @@ ${reply.recognized}
 
     // 머리글의 「오늘의 미션 · n / 10」 은 서버가 그린다. 문제를 마쳤으면
     // 새로 받아 온다. 이 컴포넌트는 그대로 남으므로 대화는 사라지지 않는다.
-    if (reply.finished) router.refresh();
+    //
+    // **마지막 문제는 받아 오지 않는다.** 미션 화면은 다 끝낸 세션이면 오늘의
+    // 기록으로 보내므로, 받아 오는 순간 「오늘 미션 끝!」 을 보기도 전에 넘어간다.
+    if (reply.finished && !reply.sessionFinished) router.refresh();
   }
 
   /** `shown` 은 말풍선에 남는 말, `sent` 는 모델에게 가는 말이다 */
