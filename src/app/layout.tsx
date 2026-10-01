@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { FrameMarker } from "./_components/FrameMarker";
 
 /*
   본문 폰트는 Pretendard 다(`globals.css`). Figma 가 그렇게 그려져 있고,
@@ -23,7 +24,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="ko"
       className={`${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <FrameMarker />
+      </body>
     </html>
   );
 }

@@ -144,3 +144,15 @@ body {
   /* 전에는 Arial 이 박혀 있었다. `--font-sans` 를 정의해 두고 안 쓰고 있었다 */
   font-family: var(--font-sans);
 }
+
+/**
+ * 시연용 휴대폰 틀(`public/demo.html`) 안에서만 스크롤 막대를 숨긴다.
+ * `FrameMarker` 가 틀 안일 때 `in-frame` 을 붙인다. 스크롤은 그대로 된다.
+ */
+.in-frame,
+.in-frame * {
+  scrollbar-width: none;
+}
+.in-frame *::-webkit-scrollbar {
+  display: none;
+}
