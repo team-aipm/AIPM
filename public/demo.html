@@ -1,0 +1,115 @@
+<!doctype html>
+<!--
+  시연용 휴대폰 틀 · /demo.html
+
+  PC · 화면 공유 · 프로젝터에서 서비스를 앱처럼 보여 주려고 둔다. 제품 화면이
+  아니다 — Screen ID 도 route 도 없는 정적 파일이고, 실제 사용자에게는 영향이
+  없다.
+
+  **틀 안은 iframe 이다.** 화면들이 `h-dvh` 와 `fixed` 하단 Nav 를 쓰므로 바깥
+  상자로 폭만 줄이면 Nav 가 PC 화면 맨 아래로 빠져나간다. iframe 안에서는
+  375 × 812 가 진짜 화면 크기가 되어 고칠 것이 없다. 같은 도메인이라 로그인과
+  이동도 그대로다.
+
+  시작 화면은 `?path=/home` 처럼 고른다. 기본은 `/login`.
+  상태바는 Figma 「메티_서비스」 `Status Bar`(478:15749)를 내보낸 것이다.
+-->
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>메티 · 시연</title>
+    <style>
+      :root {
+        /* Figma 01 Foundations 와 같은 값. 이 파일은 Tailwind 를 거치지 않는다 */
+        --page: #ddf4f6;
+        --screen-bg: #f7fafb;
+        --bezel: #1f2933;
+        --w: 375px;
+        --h: 812px;
+        --status: 44px;
+        --edge: 12px;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        background: radial-gradient(circle at 50% 40%, #ffffff 0%, var(--page) 70%);
+        font-family: 'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+      }
+      .phone {
+        position: relative;
+        width: calc(var(--w) + var(--edge) * 2);
+        height: calc(var(--h) + var(--edge) * 2);
+        padding: var(--edge);
+        border-radius: 56px;
+        background: var(--bezel);
+        box-shadow: 0 24px 64px rgb(31 41 51 / 0.28), inset 0 0 0 2px #3a4651;
+        transform-origin: center center;
+      }
+      .screen {
+        position: relative;
+        width: var(--w);
+        height: var(--h);
+        overflow: hidden;
+        border-radius: 44px;
+        background: var(--screen-bg);
+        display: flex;
+        flex-direction: column;
+      }
+      .status {
+        flex: none;
+        height: var(--status);
+        background: var(--screen-bg) url('/demo/status-bar.svg') no-repeat center / var(--w) var(--status);
+      }
+      iframe {
+        flex: 1;
+        width: var(--w);
+        border: 0;
+        display: block;
+        background: var(--screen-bg);
+      }
+      /* 홈 바. Figma 프레임에는 없어 막대 하나로 둔다. 누르는 것을 막지 않는다 */
+      .home {
+        position: absolute;
+        left: 50%;
+        bottom: 8px;
+        width: 134px;
+        height: 5px;
+        border-radius: 3px;
+        background: #1f2933;
+        transform: translateX(-50%);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="phone" id="phone">
+      <div class="screen">
+        <div class="status" aria-hidden="true"></div>
+        <iframe id="app" title="메티"></iframe>
+        <div class="home" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <script>
+      // 시작 화면. 같은 도메인의 경로만 받는다 — 바깥 주소를 틀에 띄우지 않는다.
+      const asked = new URLSearchParams(location.search).get('path') || '/login';
+      const path = asked.startsWith('/') && !asked.startsWith('//') ? asked : '/login';
+      document.getElementById('app').src = path;
+
+      // 프로젝터처럼 세로가 짧은 화면에서도 틀이 다 보이게 줄인다. 키우지는 않는다.
+      const phone = document.getElementById('phone');
+      function fit() {
+        const scale = Math.min(1, (innerHeight - 48) / phone.offsetHeight, (innerWidth - 48) / phone.offsetWidth);
+        phone.style.transform = `scale(${scale})`;
+      }
+      addEventListener('resize', fit);
+      fit();
+    </script>
+  </body>
+</html>
