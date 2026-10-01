@@ -14,17 +14,23 @@
  *
  * 아이가 여럿이면 칩으로 한 명씩 본다(Figma `자녀 선택`). 한 화면에 카드를
  * 다 쌓으면 둘째부터는 스크롤 아래로 밀려 안 보인다.
+ *
+ * 보상 카드는 Figma 404:3365(진행) · 404:3495(보상 도착)다. 도착한 보상은
+ * 부모가 할 일이 있으니 맨 위로 올리고, 진행 중이면 현황 카드 아래에 둔다.
  */
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import { createClient, currentUser } from '@/lib/supabase/server';
 import { listStudents } from '@/lib/services/student';
 import { summarize, type StudentSummary } from '@/lib/services/parent-summary';
+import { rewardBoard, type RewardBoard } from '@/lib/services/reward';
 import { GAP_DEFINITIONS } from '@/lib/ai/taxonomy';
 import { TERMS, problemStatusLabel } from '@/lib/constants/copy';
 import { PartnerFace } from '@/components/ui/PartnerFace';
 import { ChildChips } from './_components/ChildChips';
+import { HomeRewardCard } from './rewards/_components/RewardCards';
 
 export const metadata = { title: '학습 현황 · 메티' };
 
@@ -50,7 +56,7 @@ function level(value: number | null): string {
   return `도움 필요 (${value.toFixed(1)})`;
 }
 
-function StudentOverview({ summary }: { summary: StudentSummary }) {
+function StudentOverview({ summary, reward }: { summary: StudentSummary; reward: ReactNode }) {
   return (
     <>
       <section className={`flex flex-col gap-3 ${CARD}`}>
@@ -88,6 +94,8 @@ function StudentOverview({ summary }: { summary: StudentSummary }) {
           </>
         )}
       </section>
+
+      {reward}
 
       {/*
         Figma 의 「이번 주 눈여겨볼 점」 자리. 주간 리포트 문장을 여기로
@@ -145,6 +153,24 @@ export default async function ParentHomePage({
           persona_type: selected.persona_type,
         });
 
+  /*
+    **보상을 못 불러와도 홈은 뜬다.** 보상은 곁들이는 카드다 — 이것 하나
+    때문에 학습 현황까지 오류 화면이 되면 안 된다.
+  */
+  let board: RewardBoard | null = null;
+  if (selected !== undefined) {
+    try {
+      board = await rewardBoard(supabase, selected.student_id);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+  const rewardCard =
+    board === null || selected === undefined ? null : (
+      <HomeRewardCard board={board} studentId={selected.student_id} />
+    );
+  const arrived = board !== null && board.achieved.length > 0;
+
   return (
     <main className="flex flex-1 flex-col gap-4 px-5 pt-3 pb-5">
       {/*
@@ -188,7 +214,9 @@ export default async function ParentHomePage({
             selectedId={selected.student_id}
           />
 
-          <StudentOverview summary={summary} />
+          {arrived && rewardCard}
+
+          <StudentOverview summary={summary} reward={arrived ? null : rewardCard} />
 
           {/*
             **아이가 이미 있어도 등록할 자리를 둔다.** 로그인하면 바로 여기로

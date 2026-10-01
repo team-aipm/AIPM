@@ -25,6 +25,7 @@ import { requireChild } from '@/lib/services/viewer';
 import { getStudent } from '@/lib/services/student';
 import { findTodaySession, today } from '@/lib/services/learning-session';
 import { listTodayProblems } from '@/lib/services/problem-list';
+import { stampedOn } from '@/lib/services/reward';
 import { findDailyReport } from '@/lib/services/learning-report';
 import { problemStatusLabel, learningModeLabel, PARTNER_NAME, TERMS } from '@/lib/constants/copy';
 import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
@@ -38,12 +39,6 @@ function endSummaryOf(summary: unknown): string | null {
   if (typeof summary !== 'object' || summary === null) return null;
   const value = (summary as Record<string, unknown>).student_end_summary;
   return typeof value === 'string' && value.trim() !== '' ? value : null;
-}
-
-/** 도장은 월~금에만 나온다(COM-001 §11-1). 날짜 문자열만 보고 요일을 판단한다 */
-function isWeekday(date: string): boolean {
-  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-  return day >= 1 && day <= 5;
 }
 
 const BUTTON =
@@ -66,10 +61,12 @@ export default async function TodayPage() {
 
   // 서로 기다릴 필요가 없는 셋은 한꺼번에 보낸다(학생 HOME 과 같은 이유).
   // 남의 학생 id 면 RLS 가 모두 비워 돌려주고 `student` 가 null 이 된다.
-  const [student, session, report] = await Promise.all([
+  const date = today();
+  const [student, session, report, stampedToday] = await Promise.all([
     getStudent(supabase, studentId),
     findTodaySession(supabase, studentId),
-    findDailyReport(supabase, studentId, today()),
+    findDailyReport(supabase, studentId, date),
+    stampedOn(supabase, studentId, date),
   ]);
   if (student === null) redirect('/students');
 
@@ -89,7 +86,11 @@ export default async function TodayPage() {
   const finishedCount = session?.completed_problem_count ?? 0;
   const coins = Math.min(finishedCount, target) * 10;
   const finished = session?.session_status === 'completed';
-  const stamped = finished && session !== null && isWeekday(session.session_date);
+  /*
+    「도장 1개」 는 **실제로 받았을 때만** 보여 준다. 주말이거나 지급이 아직
+    안 됐으면 숨긴다 — 받지 않은 도장을 받았다고 말하지 않는다(COM-002 §22-1).
+  */
+  const stamped = finished && stampedToday;
 
   return (
     <main className="flex flex-1 flex-col bg-surface-primary">
