@@ -15,7 +15,8 @@ import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { Constants, type Database } from '@/types/database';
 import { getStudent } from '@/lib/services/student';
-import { findTodaySession, countCompleted, today } from '@/lib/services/learning-session';
+import { countCompleted, today } from '@/lib/services/learning-session';
+import { missionSession } from './_session';
 import { awardStamp } from '@/lib/services/reward';
 import { findDailyReport, saveDailyReport } from '@/lib/services/learning-report';
 import {
@@ -38,7 +39,7 @@ import { appendMessage, listMessages } from '@/lib/services/message';
 import { pickConcept } from '@/lib/services/concept';
 import { EVENT, record } from '@/lib/analytics/events';
 import { saveEvaluation, saveLogicGaps } from '@/lib/services/evaluation';
-import { STUDENT_COOKIE } from '@/lib/constants/student-cookie';
+import { PAST_SESSION_COOKIE, STUDENT_COOKIE } from '@/lib/constants/student-cookie';
 import { labSeat } from '@/lib/lab/seat';
 import { runStage, stageOf } from '@/lib/ai/pipeline/run';
 import { getPath, parsePath, setPath } from '@/lib/ai/pipeline/paths';
@@ -233,7 +234,8 @@ export async function talkToHost(text: string | null, turns: Turn[]): Promise<Ho
   const student = seat?.student ?? (studentId === '' ? null : await getStudent(supabase, studentId));
   if (student === null) return { ok: false, message: '누구로 할지 먼저 골라줘.' };
 
-  const session = seat?.session ?? (await findTodaySession(supabase, student.student_id));
+  // 지난 미션을 이어 하는 중이면 그 세션이다(`_session.ts`). 화면과 같은 규칙.
+  const session = seat?.session ?? (await missionSession(supabase, student.student_id))?.session ?? null;
   if (session === null) return { ok: false, message: '오늘 미션을 먼저 시작해줘.' };
 
   /**
@@ -465,10 +467,11 @@ async function context() {
   const student = studentId === '' ? null : await getStudent(supabase, studentId);
   if (student === null) return null;
 
-  const session = await findTodaySession(supabase, student.student_id);
-  if (session === null) return null;
+  // 오늘 세션이거나, 이어 하기로 고른 지난 세션이다(`_session.ts`).
+  const picked = await missionSession(supabase, student.student_id);
+  if (picked === null) return null;
 
-  return { supabase, student, session };
+  return { supabase, student, session: picked.session };
 }
 
 /**
@@ -821,9 +824,13 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
       },
       session: {
         session_id: session.session_id,
+        session_date: session.session_date,
         target_problem_count: session.target_problem_count,
       },
     });
+
+    // 지난 미션을 다 끝냈으면 이어 하기 표시를 지운다. 다음 미션은 오늘 것이다.
+    if (session.session_date !== today()) (await cookies()).delete(PAST_SESSION_COOKIE);
   }
 
   return {
@@ -1049,10 +1056,12 @@ async function summarizeDay(
   supabase: Awaited<ReturnType<typeof createClient>>,
   args: {
     student: { student_id: string; grade: number; persona_type: 'friend' | 'villain' };
-    session: { session_id: string; target_problem_count: number };
+    session: { session_id: string; session_date: string; target_problem_count: number };
   },
 ): Promise<void> {
-  const date = today();
+  // **세션의 날짜로 남긴다.** 지난 미션을 오늘 마저 끝내도 그 총평은 그날의
+  // 것이다 — `today()` 로 적으면 오늘의 기록을 지난 미션이 차지한다.
+  const date = args.session.session_date;
 
   try {
     const already = await findDailyReport(supabase, args.student.student_id, date);

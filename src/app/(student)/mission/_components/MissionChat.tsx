@@ -59,9 +59,15 @@ type Props = {
   partner: string;
   persona: Database['public']['Enums']['persona_type'];
   initial: Initial;
+  /**
+   * 지난 미션을 이어 하는 중이면 「9월 29일」. 오늘 미션이면 `null`.
+   * 다 끝낸 뒤 「오늘의 기록」 대신 홈으로 보낸다 — 지난 미션은 오늘의 기록 ·
+   * 도장 · 코인에 들어가지 않는다(COM-001 §11-2).
+   */
+  pastLabel?: string | null;
 };
 
-export function MissionChat({ partner, persona, initial }: Props) {
+export function MissionChat({ partner, persona, initial, pastLabel = null }: Props) {
   const router = useRouter();
   const [turns, setTurns] = useState<Turn[]>(
     initial.kind === 'problem' ? initial.turns : [],
@@ -515,7 +521,19 @@ ${reply.recognized}
 
         {finished ? (
           <div className="flex flex-col gap-3 px-5 pt-3">
-            {sessionDone ? (
+            {sessionDone && pastLabel !== null ? (
+              <>
+                <p className="text-center text-[16px] font-semibold leading-6 text-text-primary">
+                  {pastLabel} 미션 끝! 정말 잘했어
+                </p>
+                <a
+                  href="/home"
+                  className="flex h-[52px] w-full items-center justify-center rounded-lg bg-button-primary text-[16px] font-semibold leading-6 text-white transition-colors hover:bg-button-hover active:bg-button-pressed"
+                >
+                  홈으로
+                </a>
+              </>
+            ) : sessionDone ? (
               <>
                 <p className="text-center text-[16px] font-semibold leading-6 text-text-primary">
                   오늘 미션 끝! 정말 잘했어
