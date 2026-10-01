@@ -16,6 +16,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Constants, type Database } from '@/types/database';
 import { getStudent } from '@/lib/services/student';
 import { findTodaySession, countCompleted, today } from '@/lib/services/learning-session';
+import { awardStamp } from '@/lib/services/reward';
 import { findDailyReport, saveDailyReport } from '@/lib/services/learning-report';
 import {
   createProblem,
@@ -809,6 +810,9 @@ export async function answerProblem(text: string): Promise<ProblemReply> {
   const { sessionCompleted } = await countCompleted(supabase, session);
   if (sessionCompleted) {
     await record(supabase, EVENT.sessionCompleted, who);
+    // 평일 10개를 마쳤으면 참여 도장 1개(COM-001 §16). 평일인지 · 10개인지는
+    // DB 함수가 다시 본다. 실패해도 미션 완료는 그대로다.
+    await awardStamp(supabase, session.session_id);
     await summarizeDay(supabase, {
       student: {
         student_id: student.student_id,
