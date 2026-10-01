@@ -1,6 +1,6 @@
 # DEV-003 · 인프라 설정 및 연동 (GitHub · Vercel · Supabase)
 
-> **Version:** 1.2 · **Updated:** 2026-08-31 · **Owner:** 세팅 담당\
+> **Version:** 1.3 · **Updated:** 2026-10-01 · **Owner:** 세팅 담당\
 > **Status:** 확정\
 > **Changelog:** 문서 최하단 참조
 
@@ -222,9 +222,18 @@ Settings → Deployment Protection을 조정한다.
 
 ### 5-5. 실행 리전
 
-현재 기본값은 `iad1`(미국 워싱턴)이다. 사용자가 국내이므로
-Settings → Functions에서 **`icn1`(서울)**로 변경하는 것을 검토한다.
-정적 페이지에는 영향이 없고 Server Action·API Route의 응답 속도에 영향을 준다.
+**`icn1`(서울)로 정했다** (2026-10-01). `vercel.json` 의 `regions` 에 적는다 —
+대시보드 설정이 아니라 저장소에 두어야 바뀌어도 흔적이 남는다.
+
+전에는 기본값 `iad1`(미국 워싱턴)에서 돌았다. Supabase 는 서울이라 DB 를
+한 번 부를 때마다 태평양을 왕복했고(약 180ms), 화면 하나가 DB 를 4~6번
+차례로 부르므로 그것만으로 1초 가까이 쓰였다.
+
+확인은 배포 상세의 `regions` 로 한다. 응답 머리글 `X-Vercel-Id` 의 앞부분
+(`icn1::`)은 요청을 받은 엣지라 함수 위치가 아니다 — 뒷부분이 함수다.
+
+Gemini 호출은 미국 쪽이라 한 번에 0.1~0.2초 늘 수 있다. AI 호출은 한 턴에
+한 번이고 DB 호출은 화면마다 여러 번이라 전체로는 이득이다.
 
 ### 5-6. Vercel ↔ Supabase 연동은 수동으로
 
@@ -444,3 +453,4 @@ Hobby 플랜이 GitHub Organization 소유의 private 저장소를 배포할 수
 | 1.0 | 2026-08-31 | 최초 작성. GitHub Organization 전환 및 Vercel·Supabase가 별도 계정에 위치하는 구성 반영 | — |
 | 1.1 | 2026-08-31 | **Vercel을 운영 PM의 기존 Pro 팀으로 확정.** Hobby는 조직 private 저장소를 배포할 수 없어 저장소 공개 대신 Pro 활용을 택함. 프로젝트 생성 완료 상태 및 담당 분담 반영 | — |
 | 1.2 | 2026-08-31 | §12 세팅 담당 인계 절 추가. Vercel 프로젝트가 개인 계정에 있어 세팅 종료 전 결정이 필요함을 명시 | — |
+| 1.3 | 2026-10-01 | §5-5 함수 실행 리전을 **`icn1`(서울)로 확정**. `vercel.json` 의 `regions` 에 적었다. 기본값 `iad1` 에서 서울 Supabase 를 왕복하던 지연을 없앤다 | — |
