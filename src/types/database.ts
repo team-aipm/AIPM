@@ -504,6 +504,45 @@ export type Database = {
           },
         ]
       }
+      participation_stamp: {
+        Row: {
+          created_at: string
+          stamp_date: string
+          stamp_id: string
+          student_id: string
+          trigger_problem_id: string
+        }
+        Insert: {
+          created_at?: string
+          stamp_date: string
+          stamp_id?: string
+          student_id: string
+          trigger_problem_id: string
+        }
+        Update: {
+          created_at?: string
+          stamp_date?: string
+          stamp_id?: string
+          student_id?: string
+          trigger_problem_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "participation_stamp_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "student"
+            referencedColumns: ["student_id"]
+          },
+          {
+            foreignKeyName: "participation_stamp_trigger_problem_id_fkey"
+            columns: ["trigger_problem_id"]
+            isOneToOne: false
+            referencedRelation: "problem"
+            referencedColumns: ["problem_id"]
+          },
+        ]
+      }
       payment: {
         Row: {
           account_id: string
@@ -633,6 +672,60 @@ export type Database = {
           },
           {
             foreignKeyName: "problem_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "student"
+            referencedColumns: ["student_id"]
+          },
+        ]
+      }
+      reward_goal: {
+        Row: {
+          account_id: string
+          achieved_at: string | null
+          activated_at: string | null
+          created_at: string
+          delivered_at: string | null
+          reward_goal_id: string
+          reward_name: string
+          reward_status: string
+          student_id: string
+          target_stamp_count: number
+        }
+        Insert: {
+          account_id: string
+          achieved_at?: string | null
+          activated_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          reward_goal_id?: string
+          reward_name: string
+          reward_status?: string
+          student_id: string
+          target_stamp_count: number
+        }
+        Update: {
+          account_id?: string
+          achieved_at?: string | null
+          activated_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          reward_goal_id?: string
+          reward_name?: string
+          reward_status?: string
+          student_id?: string
+          target_stamp_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reward_goal_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "account"
+            referencedColumns: ["account_id"]
+          },
+          {
+            foreignKeyName: "reward_goal_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "student"
@@ -820,6 +913,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      award_participation_stamp: { Args: { p_session_id: string }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
       owns_student: { Args: { p_student_id: string }; Returns: boolean }
       parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
