@@ -1,6 +1,6 @@
 # Logic Auditor — AI 프롬프트 원문
 
-> **Version:** 3.2 · **Updated:** 2026-10-02 · **Owner:** AI 코어 트랙\
+> **Version:** 3.3 · **Updated:** 2026-10-02 · **Owner:** AI 코어 트랙\
 > **Status:** 확정 — Issue #28 의 결정 9건 반영 완료\
 > **Changelog:** 문서 최하단 참조
 
@@ -1965,7 +1965,7 @@ Student Memory를 수정하지 않는다.
 - 반복해서 어려움을 보인 부분
 - 스스로 오류를 고친 변화
 - Hint나 도움 없이 해결하는 정도
-- MODE A와 MODE B에서 나타난 차이
+- AI 출제와 학생 출제에서 나타난 차이
 - 다음 주에 중점적으로 확인할 내용
 한두 문제의 결과만으로
 학생의 능력을 단정하지 않는다.
@@ -1976,6 +1976,17 @@ rule_gap
 → "규칙을 알고 있지만 적용 과정에서 혼동하는 모습"
 monitoring_gap
 → "자신의 풀이에서 잘못된 부분을 스스로 찾는 데 도움이 필요한 모습"
+
+**학습 방식의 이름을 그대로 쓰지 않는다.** 입력의 MODE A · MODE B ·
+mode_a · mode_b 는 부모 화면에서 이렇게 부른다(copy.ts 와 같은 말).
+MODE A → "AI 출제" · AI가 낸 문제를 아이가 푸는 방식
+MODE B → "학생 출제" · 아이가 가져온 문제를 AI가 일부러 틀리게 풀고,
+         아이가 그 틀린 곳을 찾아 설명하는 방식
+처음 나올 때 한 번은 무엇인지 풀어 쓴다.
+예: "AI가 낸 문제를 푸는 'AI 출제'에서는 …"
+    "직접 가져온 문제로 AI의 실수를 찾는 '학생 출제'에서는 …"
+Hint · Support Level · Logic Gap 같은 영어 이름도 쓰지 않는다.
+"힌트" · "도움" · "자주 막힌 부분"으로 쓴다.
 ## OUTPUT JSON
 {
   "module": "WEEKLY_REPORT",
@@ -2082,6 +2093,7 @@ COM-001 · COM-002 변경은 **PM 전원 합의**가 필요하다. 프롬프트 
 
 | Version | Date | 변경 내용 | 작성 |
 |---|---|---|---|
+| 3.3 | 2026-10-02 | **07 주간 리포트가 학습 방식 이름을 부모 용어로 쓴다.** 부모 리포트에 「단계별 학습 모드(MODE A)」가 그대로 나왔다 — 프롬프트가 넣을 항목을 「MODE A와 MODE B에서 나타난 차이」로 적어 두고 바꿔 쓸 말을 주지 않았다. 항목을 「AI 출제와 학생 출제에서 나타난 차이」로 바꾸고, MODE A → 「AI 출제」 · MODE B → 「학생 출제」(copy.ts 와 같은 말)와 처음 나올 때 풀어 쓰는 예, Hint · Support Level · Logic Gap 영어 이름 금지를 REPORT RULES 에 더했다. 실호출 3/3 문장 속 내부 용어 없음 | — |
 | 3.2 | 2026-10-02 | **VILLAIN(헤티) 말투 블록 보강.** 실호출에서 힌트를 청한 아이에게 「벌써 막힌 거야?」, 첫 인사에서 「네 실력이 어느 정도인지 확인해 주지」가 나왔다. 「도전은 문제를 향한다 · 아이의 실력을 향하지 않는다」, 「실력」이라는 말과 「지지 마」 같은 승패 말 금지, 「힌트를 달라는 아이를 놀리지 않는다 — 막힌 것을 문제 탓으로 돌린다」를 더했다. 문서의 VILLAIN 블록이 실행 파일(`variables.ts`)보다 오래돼 있던 것도 맞췄다. 06 예시 문장의 「메티」를 캐릭터와 상관없는 말로 바꿨다. 전/후 실호출: 힌트 3/3 · 첫 인사 7/8 깨끗 | — |
 | 3.1 | 2026-09-30 | **05 · 06 에 빠져 있던 기준을 채웠다.** 05 EVALUATION 에 `initial_accuracy` · `self_correction` 의 판정 기준을 추가(첫 답이 무엇인지 · 응용 질문의 답은 첫 답이 아님 · MODE B 는 첫 지적 · 답을 냈으면 null 금지). 05 OUTPUT JSON 의 `"true | false | null"` 예시를 `null` 로 바꾸고 따옴표 없이 쓰라고 적었다 — 모델이 글자 `"true"` 로 답해 `null` 로 저장되고 있었다. 06 에 `## STUDENT END SUMMARY` 추가 — 학생이 읽는 한 문장이라 반말 · 30자 안팎 · 평가 용어와 지시 금지. 01 START 를 바꿨다 — 학습 방식을 묻지 않고 인사 뒤 곧바로 `MODE_A` 로 넘긴다(`mode_choices = []`). COM-001 §6.3(2026-09-30)을 따른 것이다. 자기 문제는 문제를 마친 뒤 화면의 「사진으로 가져오기」 · 「내 문제 적기」 로 가져온다. 실호출로 전/후를 비교해 확인했다 | — |
 | 3.0 | 2026-09-09 | **`LOGIC AUDITOR prompt.docx` v3.0으로 전면 개정.** 모듈 6개 → 7개(SESSION HOST · MODE A · MODE B · HINT · EVALUATOR · DAILY ANALYZER · WEEKLY REPORT). Issue #28의 결정 9건 반영 — `gap_type` 소문자 · `initial_accuracy` NULL 허용 · `UNOBSERVED` → `null` · 완료 상태 변환표 · `hint_level` 삭제 · `support_level` 0\~4 정의 · 최종값은 최대값 · "5회"를 학생 응답 기준으로 · `turns_remaining`을 서버가 계산. LOGIC GAP · SUPPORT LEVEL · FOUR CHOICES · ACTION을 COMMON SYSTEM으로 모으고 `taxonomy.ts`에서 조립. `{{persona_block}}` 이름 분리 | — |
