@@ -8,6 +8,7 @@
  */
 
 import { ABILITIES, type WeekGrowth } from '@/lib/services/child-progress';
+import { MAX_LEVEL } from '@/lib/services/difficulty';
 
 function delta(now: number, before: number, unit: string): string | null {
   const diff = now - before;
@@ -40,6 +41,85 @@ function trend(now: number | null, before: number | null): string {
   if (now > before) return '▲ 한 단계 올랐어요';
   if (now === before) return '유지';
   return '다시 다지는 중';
+}
+
+/**
+ * 학년과 레벨을 한 줄로 세운다. 레벨은 학년 안의 1~5 다(COM-002 §6) —
+ * 5학년 레벨 5 다음이 6학년 레벨 1 이다.
+ */
+const rank = (level: { grade: number; difficulty: number }) => (level.grade - 1) * MAX_LEVEL + level.difficulty;
+
+/**
+ * 문제 수준 · 4주 흐름 (COM-003 PAR-003 · v1.6).
+ *
+ * 내려간 주를 실패처럼 그리지 않는다. 난이도는 서버가 최근 평가로 맞추는
+ * 값이라 내려간 것은 「알맞은 수준을 찾는 중」이다. 문제가 없는 주는 비워
+ * 둔다 — 앞 주 값을 끌어와 이어 그리면 그 주에도 그 수준이었던 것처럼 보인다.
+ */
+function LevelTrend({ weeks }: { weeks: WeekGrowth[] }) {
+  const seen = weeks.filter((week) => week.level !== null);
+  if (seen.length === 0) {
+    return (
+      <div className="flex flex-col gap-1">
+        <p className="text-[14px] leading-5 font-semibold text-text-primary">문제 수준</p>
+        <p className="text-[14px] leading-5 text-text-secondary">아직 기록이 적어요</p>
+      </div>
+    );
+  }
+
+  const ranks = seen.map((week) => rank(week.level!));
+  const low = Math.min(...ranks);
+  const high = Math.max(...ranks);
+  const first = seen[0].level!;
+  const last = seen.at(-1)!.level!;
+  const moved = rank(last) - rank(first);
+  const summary =
+    seen.length < 2
+      ? '다음 주부터 흐름을 보여드려요'
+      : moved > 0
+        ? '▲ 수준이 올랐어요'
+        : moved < 0
+          ? '알맞은 수준을 찾는 중이에요'
+          : '같은 수준을 다지는 중이에요';
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[14px] leading-5 font-semibold text-text-primary">문제 수준</p>
+        <span className={`text-[12px] leading-[18px] ${moved > 0 && seen.length >= 2 ? 'text-button-primary' : 'text-text-secondary'}`}>
+          {summary}
+        </span>
+      </div>
+      <div className="flex items-end justify-between gap-2 px-1" aria-label="최근 4주 문제 수준">
+        {weeks.map((week, idx) => {
+          const isNow = idx === weeks.length - 1;
+          // 가장 낮은 주도 막대가 보이게 바닥을 둔다. 다 같으면 모두 가운데 높이다.
+          const height =
+            week.level === null ? 0 : high === low ? 32 : 12 + Math.round(((rank(week.level) - low) / (high - low)) * 40);
+          return (
+            <div key={week.monday} className="flex flex-1 flex-col items-center gap-1">
+              <span className="text-center text-[12px] leading-[18px] text-text-primary">
+                {week.level === null ? '—' : `${week.level.grade}학년`}
+                {week.level !== null && (
+                  <>
+                    <br />
+                    레벨 {week.level.difficulty}
+                  </>
+                )}
+              </span>
+              <span
+                className={`w-full max-w-10 rounded-t-md ${week.level === null ? 'bg-transparent' : isNow ? 'bg-button-primary' : 'bg-surface-brand'}`}
+                style={{ height: `${height}px` }}
+              />
+              <span className="text-[12px] leading-[18px] text-meti-hint">
+                {isNow ? '이번 주' : `${Number(week.monday.slice(5, 7))}/${Number(week.monday.slice(8, 10))}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function GrowthCard({ weeks }: { weeks: WeekGrowth[] }) {
@@ -140,19 +220,11 @@ export function GrowthCard({ weeks }: { weeks: WeekGrowth[] }) {
                 <span className="text-button-primary"> · 지난주보다 도움이 줄었어요</span>
               )}
             </dd>
-
-            <dt className="text-text-secondary">문제 수준</dt>
-            <dd className="text-text-primary">
-              {current.level === null ? '—' : `${current.level.grade}학년 레벨 ${current.level.difficulty}`}
-              {current.level !== null && previous?.level != null &&
-                (previous.level.grade !== current.level.grade || previous.level.difficulty !== current.level.difficulty) && (
-                  <span className="text-text-secondary">
-                    {' '}
-                    (지난주 {previous.level.grade}학년 레벨 {previous.level.difficulty})
-                  </span>
-                )}
-            </dd>
           </dl>
+
+          <hr className="border-meti-line" />
+
+          <LevelTrend weeks={weeks} />
         </>
       )}
     </section>
