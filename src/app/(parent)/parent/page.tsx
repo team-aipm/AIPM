@@ -19,6 +19,7 @@
  * 부모가 할 일이 있으니 맨 위로 올리고, 진행 중이면 현황 카드 아래에 둔다.
  */
 
+import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
@@ -93,6 +94,15 @@ function StudentOverview({ summary, reward }: { summary: StudentSummary; reward:
             </div>
           </>
         )}
+
+        {/* 아이 카드는 PAR-003 으로 간다. 학생 화면으로 넘어가지 않는다(COM-003) */}
+        <Link
+          href={`/parent/students/${summary.studentId}`}
+          className="flex items-center justify-between border-t border-meti-line pt-3 text-[14px] leading-5 font-semibold text-button-primary"
+        >
+          학습 상세 · 성장 추이 보기
+          <Image src="/icons/chevron-right.svg" alt="" width={20} height={20} />
+        </Link>
       </section>
 
       {reward}
